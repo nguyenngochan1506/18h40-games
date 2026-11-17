@@ -1,1 +1,4 @@
 specs/
+target/
+node_modules/
+dist/
