@@ -2,3 +2,11 @@
 name = "bang"
 version = "0.1.0"
 edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+rand = { version = "0.9.5", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+rand_chacha = "0.9.0"
+serde_json.workspace = true
