@@ -488,3 +488,40 @@ async fn leaving_a_game_defaults_the_reserved_seat_immediately_and_invalidates_i
     }
     assert!(seen_again);
 }
+
+#[tokio::test]
+async fn ping_barrier_follows_the_same_connections_action_update_or_error() {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        let mut table = Table::new(4, 42).await;
+        let host = table.clients[0].as_mut().unwrap();
+        host.send(json!({"type":"host_skip"})).await;
+        host.send(json!({"type":"ping","nonce":41})).await;
+        let mut saw_update = false;
+        loop {
+            let message = host.receive().await;
+            match message["type"].as_str().unwrap() {
+                "game_update" => {
+                    assert_eq!(message["seq"], 1);
+                    saw_update = true;
+                }
+                "pong" => {
+                    assert_eq!(message["nonce"], 41);
+                    assert!(saw_update, "The pong must follow the action's update");
+                    break;
+                }
+                "room_state" => {}
+                other => panic!("Unexpected message: {other}"),
+            }
+        }
+        host.send(json!({"type":"game_action","action":{"type":"respond","pending_id":4294967295_u32,"card":null}})).await;
+        host.send(json!({"type":"ping","nonce":42})).await;
+        let error = host.receive().await;
+        assert_eq!(error["type"], "error");
+        assert_eq!(error["code"], "illegal_action");
+        let barrier = host.receive().await;
+        assert_eq!(barrier["type"], "pong");
+        assert_eq!(barrier["nonce"], 42);
+    })
+    .await
+    .expect("The action/pong barrier timed out");
+}
