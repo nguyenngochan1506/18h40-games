@@ -35,3 +35,8 @@ export const roleFiles = {
 export const backFiles = { card: 'backface/main_deck.webp', role: 'backface/role.webp' };
 export const assetFiles = [...Object.values(cardFiles), ...Object.values(characterFiles), ...Object.values(roleFiles), ...Object.values(backFiles)];
 export const assetUrl = (file: string) => `/bang/${file}`;
+
+export const sceneFiles = {
+  background: '/scene/saloon-bg.webp', table: '/scene/table.webp',
+  cowboy: '/scene/cowboy.webp', ghost: '/scene/ghost.webp',
+} as const;

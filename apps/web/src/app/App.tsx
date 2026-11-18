@@ -167,12 +167,12 @@ export default function App() {
 
   const disabled = inputLocked({ connected: status === 'Đã kết nối', pending, restoring, desynced: gameState.desynced });
   return (
-    <main className={`mx-auto min-h-svh ${game ? 'max-w-[1400px] px-4 py-6 sm:px-7' : 'max-w-2xl px-6 py-10 sm:py-16'}`}>
-      <p className="text-sm font-medium uppercase tracking-widest text-stone-500">18h40 games</p>
-      <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{room ? 'Phòng của bạn' : restoring ? 'Đang vào lại phòng' : 'Hẹn nhau một ván'}</h1>
-      <p className="mt-3 text-sm text-stone-600" role="status" aria-live="polite">{status}</p>
-      {gameState.desynced && <p className="mt-5 border-l-2 border-amber-700 pl-3 text-sm text-amber-900" role="alert">Bàn chơi đang mất đồng bộ. Đang kết nối lại để lấy trạng thái mới; tạm khóa thao tác.</p>}
-      {error && <p className="mt-5 border-l-2 border-red-700 pl-3 text-sm text-red-800" role="alert">{error}</p>}
+    <main className={`mx-auto min-h-svh ${game ? 'game-app' : 'max-w-2xl px-6 py-10 sm:py-16'}`}>
+      <p className="app-brand text-sm font-medium uppercase tracking-widest text-stone-500">18h40 games</p>
+      <h1 className="app-title mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{room ? 'Phòng của bạn' : restoring ? 'Đang vào lại phòng' : 'Hẹn nhau một ván'}</h1>
+      <p className="connection-status mt-3 text-sm text-stone-600" role="status" aria-live="polite">{status}</p>
+      {gameState.desynced && <p className="connection-alert mt-5 border-l-2 border-amber-700 pl-3 text-sm text-amber-900" role="alert">Bàn chơi đang mất đồng bộ. Đang kết nối lại để lấy trạng thái mới; tạm khóa thao tác.</p>}
+      {error && <p className="connection-alert mt-5 border-l-2 border-red-700 pl-3 text-sm text-red-800" role="alert">{error}</p>}
       {room ? <Room room={room} game={game} log={gameState.log} viewer={gameState.viewer} disabled={disabled} send={send} /> : restoring ? <p className="mt-8 text-stone-600">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p> : <Lobby disabled={disabled} send={send} />}
     </main>
   );

@@ -1,18 +1,28 @@
 import { useState } from 'react';
 import type { ClientMessage, EventKind, GameSnapshot } from '../../generated/protocol';
 import GameBoard from './GameBoard';
-import { demoGame, demoRoom } from './demo';
+import { demoGame, demoRoom as baseDemoRoom } from './demo';
 import { demoEvents } from './demoEvents';
 import { eventsToLog } from './log';
 import { selectGameView } from './state';
 
 export default function GameDemo() {
-  const [mode, setMode] = useState('turn');
+  const [mode, setMode] = useState(() => new URLSearchParams(window.location.search).get('mode') ?? 'turn');
+  const [count, setCount] = useState(() => { const n = Number(new URLSearchParams(window.location.search).get('players')); return [4, 5, 6, 7].includes(n) ? n : 5; });
   const [sent, setSent] = useState<ClientMessage | null>(null);
   const spectator = new URLSearchParams(window.location.search).get('view') === 'spectator';
   const game: GameSnapshot = structuredClone(demoGame);
   if (game.view.perspective === 'player') {
     const table = game.view.view.table;
+    if (count === 4) { game.seats = game.seats.slice(0, 4); table.players = table.players.slice(0, 4); }
+    if (count >= 6) {
+      game.seats.push({ player_id: 5, member_id: '6', nickname: 'Vy' });
+      table.players.push({ id: 5, character: 'willy_the_kid', health: 4, max_health: 4, alive: true, hand_count: 3, in_play: [66], weapon_range: 1, role: null });
+    }
+    if (count === 7) {
+      game.seats.push({ player_id: 6, member_id: '7', nickname: 'Khang' });
+      table.players.push({ id: 6, character: 'paul_regret', health: 2, max_health: 3, alive: true, hand_count: 2, in_play: [79], weapon_range: 5, role: null });
+    }
     if (['turn', 'store', 'jesse', 'pedro', 'kit', 'kit_short', 'lucky_jail', 'lucky_dynamite'].includes(mode)) table.turn.player = 0;
     if (mode === 'sid') table.turn.player = 2;
     if (mode === 'turn') { table.turn.player = 0; table.waiting = { player: 0, pending_id: null, kind: { type: 'turn' } }; }
@@ -30,18 +40,19 @@ export default function GameDemo() {
     table.winner = mode === 'end_sheriff' ? 'sheriff_and_deputies' : mode === 'end_outlaw' ? 'outlaws' : { renegade: { player: 2 } };
     table.waiting = null;
     for (const player of table.players) {
-      player.role = demoEvents.game_ended.roles[player.id];
+      player.role = demoEvents.game_ended.roles[player.id] ?? 'outlaw';
       player.alive = mode === 'end_sheriff' ? player.id < 2 : mode === 'end_outlaw' ? player.id === 2 || player.id === 4 : player.id === 2;
       player.health = player.alive ? Math.max(1, player.health) : 0;
     }
   }
-  const events: EventKind[] = mode === 'log' || final ? Object.values(demoEvents).filter((event) => event.type !== 'game_ended' && (!spectator || !['choice_offered', 'cards_received', 'stolen_cards', 'hand_card_affected'].includes(event.type))) : [];
+  const events: EventKind[] = mode === 'log' || final ? Object.values(demoEvents).filter((event) => event.type !== 'game_ended' && (!spectator || !['choice_offered', 'cards_received', 'stolen_cards', 'hand_card_affected'].includes(event.type))) : [demoEvents.game_started, demoEvents.turn_started, demoEvents.cards_drawn];
   if (final && game.view.perspective === 'player') events.push({ ...demoEvents.game_ended, winner: game.view.view.table.winner! });
   const log = eventsToLog(events, { seats: game.seats, you: spectator ? null : 0 }).map((text, id) => ({ id, text }));
   if (spectator) game.view = { perspective: 'spectator', view: selectGameView(game.view).table };
-  return <main className="demo-shell"><nav className="demo-nav"><span>18h40 games · Bàn mẫu</span><a href="/">Về phòng</a></nav>
-    <div className="demo-toolbar"><label htmlFor="demo-mode">Tình huống demo</label><select id="demo-mode" value={mode} onChange={(event) => { setMode(event.target.value); setSent(null); }}><option value="turn">Lượt chơi / bỏ bài thừa</option><option value="attack">BANG! cần hai Missed!</option><option value="duel">Đáp Duel</option><option value="dying">Cứu mạng bằng Beer</option><option value="store">General Store</option><option value="jesse">Jesse Jones · nguồn rút</option><option value="pedro">Pedro Ramirez · nguồn rút</option><option value="kit">Kit Carlson · giữ bài</option><option value="kit_short">Kit Carlson · chỉ còn 1 lá</option><option value="lucky">Lucky Duke · Barrel</option><option value="lucky_jail">Lucky Duke · Jail</option><option value="lucky_dynamite">Lucky Duke · Dynamite</option><option value="sid">Sid Ketchum · ngoài lượt</option><option value="sid_dying">Sid Ketchum · cứu mạng</option><option value="log">Nhật ký mẫu</option><option value="end_sheriff">Cảnh sát trưởng và Phó cảnh sát thắng</option><option value="end_outlaw">Tội phạm thắng</option><option value="end_renegade">Kẻ phản bội thắng</option></select></div>
-    <GameBoard key={mode} game={game} room={demoRoom} log={log} viewer={spectator ? null : 0} sendAction={(action) => setSent({ v: 1, type: 'game_action', action })} endGame={() => setSent({ v: 1, type: 'end_game' })} />
+  const room = { ...baseDemoRoom, members: game.seats.map(seat => baseDemoRoom.members.find(member => member.id === seat.member_id) ?? { id: seat.member_id, nickname: seat.nickname, role: 'player' as const, online: true }) };
+  return <main className="demo-shell"><details className="demo-tools"><summary>Thử tình huống</summary><nav className="demo-nav"><span>18h40 games · Bàn mẫu</span><a href="/">Về phòng</a></nav>
+    <div className="demo-toolbar"><label htmlFor="demo-count">Số người</label><select id="demo-count" value={count} onChange={(event) => setCount(Number(event.target.value))}><option value="4">4 người</option><option value="5">5 người</option><option value="6">6 người</option><option value="7">7 người</option></select><label htmlFor="demo-mode">Tình huống demo</label><select id="demo-mode" value={mode} onChange={(event) => { setMode(event.target.value); setSent(null); }}><option value="turn">Lượt chơi / bỏ bài thừa</option><option value="attack">BANG! cần hai Missed!</option><option value="duel">Đáp Duel</option><option value="dying">Cứu mạng bằng Beer</option><option value="store">General Store</option><option value="jesse">Jesse Jones · nguồn rút</option><option value="pedro">Pedro Ramirez · nguồn rút</option><option value="kit">Kit Carlson · giữ bài</option><option value="kit_short">Kit Carlson · chỉ còn 1 lá</option><option value="lucky">Lucky Duke · Barrel</option><option value="lucky_jail">Lucky Duke · Jail</option><option value="lucky_dynamite">Lucky Duke · Dynamite</option><option value="sid">Sid Ketchum · ngoài lượt</option><option value="sid_dying">Sid Ketchum · cứu mạng</option><option value="log">Nhật ký mẫu</option><option value="end_sheriff">Cảnh sát trưởng và Phó cảnh sát thắng</option><option value="end_outlaw">Tội phạm thắng</option><option value="end_renegade">Kẻ phản bội thắng</option></select></div></details>
+    <GameBoard key={`${mode}:${count}`} game={game} room={room} log={log} viewer={spectator ? null : 0} sendAction={(action) => setSent({ v: 1, type: 'game_action', action })} endGame={() => setSent({ v: 1, type: 'end_game' })} />
     {sent && <output className="demo-action-log" aria-label="Hành động thử">{JSON.stringify(sent, null, 2)}</output>}
   </main>;
 }
