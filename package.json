@@ -6,6 +6,7 @@
     "dev:server": "cargo run -p server",
     "dev:web": "pnpm --filter web dev",
     "gen:types": "sh scripts/gen-types.sh",
-    "check": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace && pnpm --filter web test && pnpm --filter web typecheck && pnpm --filter web build"
+    "check": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace && pnpm --filter web test && pnpm --filter web typecheck && pnpm --filter web build",
+    "assets": "node scripts/fetch-assets.mjs"
   }
 }
