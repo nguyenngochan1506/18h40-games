@@ -40,3 +40,8 @@ export const sceneFiles = {
   background: '/scene/saloon-bg.webp', table: '/scene/table.webp',
   cowboy: '/scene/cowboy.webp', ghost: '/scene/ghost.webp',
 } as const;
+
+export const landscapeScenes = {
+  4: '/scene/scene4-landscape.webp', 5: '/scene/scene5-landscape.webp',
+  6: '/scene/scene6-landscape.webp', 7: '/scene/scene-landscape.webp',
+} as const;
