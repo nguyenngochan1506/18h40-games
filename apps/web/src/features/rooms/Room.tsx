@@ -1,9 +1,10 @@
-import type { ClientMessage, RoomView } from '../../generated/protocol';
+import type { ClientMessage, GameSnapshot, RoomView } from '../../generated/protocol';
 import { PROTOCOL_VERSION } from '../../generated/protocol';
+import GameBoard from '../game/GameBoard';
 
-type Props = { room: RoomView; disabled: boolean; send: (message: ClientMessage) => void };
+type Props = { room: RoomView; game: GameSnapshot | null; disabled: boolean; send: (message: ClientMessage) => void };
 
-export default function Room({ room, disabled, send }: Props) {
+export default function Room({ room, game, disabled, send }: Props) {
   const players = room.members.filter((member) => member.role === 'player').length;
   const you = room.members.find((member) => member.id === room.you);
   const host = room.host === room.you;
@@ -15,6 +16,7 @@ export default function Room({ room, disabled, send }: Props) {
         <div><h2 className="text-sm text-stone-600">Mã phòng</h2><p className="mt-1 text-3xl font-semibold tracking-widest">{room.code}</p></div>
         <div role="status" aria-live="polite"><p className="font-medium">{waiting ? 'Đang chờ' : 'Đang chơi'}</p><p className="mt-1 text-sm text-stone-600">{players} người chơi · cần {room.min_players}–{room.max_players}</p></div>
       </div>
+      {game && !waiting && <GameBoard game={game} room={room} />}
       <h3 className="mt-6 font-medium">Thành viên ({room.members.length})</h3>
       <ul className="mt-2 divide-y divide-stone-200" aria-live="polite">
         {room.members.map((member) => (
@@ -33,7 +35,7 @@ export default function Room({ room, disabled, send }: Props) {
       <div className="mt-3 space-y-1 text-sm text-stone-600">
         {waiting && missing > 0 && <p>Cần thêm {missing} người chơi để bắt đầu.</p>}
         {waiting && you?.role === 'spectator' && players >= room.max_players && <p>Đã đủ ghế chơi. Hãy chờ một ghế trống.</p>}
-        {!waiting && <p>Ván M1 chỉ kiểm tra trạng thái phòng. Chưa có luật chơi BANG!.</p>}
+        {!waiting && !game && <p>Đang nhận bàn chơi từ máy chủ.</p>}
         {disabled && <p>Hãy chờ kết nối hoặc yêu cầu hiện tại hoàn tất.</p>}
       </div>
     </section>

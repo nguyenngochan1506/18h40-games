@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { PROTOCOL_VERSION } from '../generated/protocol';
-import type { ClientMessage, RoomView, ServerMessage } from '../generated/protocol';
+import type { ClientMessage, GameSnapshot, RoomView, ServerMessage } from '../generated/protocol';
 import Lobby from '../features/lobby/Lobby';
 import Room from '../features/rooms/Room';
+import { receiveGame } from '../features/game/state';
 import { errorMessages } from '../shared/lib/errors';
 import { connectSocket } from '../shared/lib/socket';
 import { loadSession, retryDelay, saveSession } from '../shared/lib/session';
@@ -14,6 +15,7 @@ export default function App() {
   const session = useRef(initialSession);
   const socket = useRef<WebSocket | null>(null);
   const [room, setRoom] = useState<RoomView | null>(null);
+  const [game, setGame] = useState<GameSnapshot | null>(null);
   const [restoring, setRestoring] = useState(Boolean(initialSession));
   const [status, setStatus] = useState<ConnectionStatus>(initialSession ? 'Đang kết nối lại…' : 'Đang kết nối');
   const [pending, setPending] = useState(false);
@@ -38,8 +40,10 @@ export default function App() {
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         try {
+          if (socket.current !== connection) return;
           const message: ServerMessage = JSON.parse(event.data);
           if (message.v !== PROTOCOL_VERSION) throw new Error('Unsupported protocol version');
+          setGame((current) => receiveGame(current, message));
           switch (message.type) {
             case 'joined':
               session.current = { roomCode: message.room_code, token: message.token };
@@ -69,6 +73,7 @@ export default function App() {
                 session.current = null;
                 saveSession(null);
                 setRoom(null);
+                setGame(null);
                 setRestoring(false);
                 setStatus('Đã kết nối');
               }
@@ -129,12 +134,12 @@ export default function App() {
 
   const disabled = status !== 'Đã kết nối' || pending || restoring;
   return (
-    <main className="mx-auto min-h-svh max-w-2xl px-6 py-10 sm:py-16">
+    <main className={`mx-auto min-h-svh ${game ? 'max-w-[1400px] px-4 py-6 sm:px-7' : 'max-w-2xl px-6 py-10 sm:py-16'}`}>
       <p className="text-sm font-medium uppercase tracking-widest text-stone-500">18h40 games</p>
       <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{room ? 'Phòng của bạn' : restoring ? 'Đang vào lại phòng' : 'Hẹn nhau một ván'}</h1>
       <p className="mt-3 text-sm text-stone-600" role="status" aria-live="polite">{status}</p>
       {error && <p className="mt-5 border-l-2 border-red-700 pl-3 text-sm text-red-800" role="alert">{error}</p>}
-      {room ? <Room room={room} disabled={disabled} send={send} /> : restoring ? <p className="mt-8 text-stone-600">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p> : <Lobby disabled={disabled} send={send} />}
+      {room ? <Room room={room} game={game} disabled={disabled} send={send} /> : restoring ? <p className="mt-8 text-stone-600">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p> : <Lobby disabled={disabled} send={send} />}
     </main>
   );
 }

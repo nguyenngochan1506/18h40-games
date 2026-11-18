@@ -1,12 +1,13 @@
 # 18h40 games
 
-Nền tảng phòng chơi M1: server Rust/Axum, web React/TypeScript/Tailwind, WebSocket JSON có version và type TypeScript sinh từ Rust. Ván chỉ có trạng thái chờ/đang chơi; `crates/bang` chưa có engine.
+Nền tảng phòng chơi: server Rust/Axum, engine BANG! bộ gốc, web React/TypeScript/Tailwind và WebSocket JSON có version. Bàn BANG! hiện chỉ để xem; chưa có thao tác đánh bài trên web. Type TypeScript sinh từ Rust.
 
 Cần Rust hỗ trợ edition 2024, Node.js 26 và pnpm 10.34.9.
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm gen:types
+pnpm assets # tải 44 ảnh bộ gốc theo commit ghim; có thể bỏ qua để dùng khung chữ
 ```
 
 Chạy ở hai terminal:
@@ -18,7 +19,7 @@ pnpm dev:web
 
 Mở URL Vite in ra (mặc định `http://localhost:5173`). Nhập tên và bấm **Tạo phòng**, rồi mở một trình duyệt hoặc cửa sổ ẩn danh khác, nhập tên khác cùng mã phòng và bấm **Vào phòng**. Dùng cửa sổ riêng để mỗi người có localStorage riêng. Tải lại trang sẽ vào lại bằng token; ngắt mạng rồi nối lại để thử backoff. Nếu cùng phiên được mở ở nơi khác, kết nối cũ dừng tự nối lại để hai tab không giành phiên qua lại.
 
-BANG! tạm dùng 4–7 ghế. Người vào khi đủ ghế hoặc đang chơi là khán giả. Chủ phòng bắt đầu khi đủ người, kết thúc để mọi người trở về khán giả và tự bấm **Tham gia ván** cho ván kế tiếp. Chưa có luật chơi hoặc bài.
+BANG! tạm dùng 4–7 ghế. Người vào khi đủ ghế hoặc đang chơi là khán giả. Chủ phòng bắt đầu khi đủ người, kết thúc để mọi người trở về khán giả và tự bấm **Tham gia ván** cho ván kế tiếp. Bàn hiển thị view của người chơi/khán giả từ server; khi ván kết thúc, chủ phòng bấm Kết thúc ván để về phòng chờ.
 
 ## Cấu hình server
 
@@ -40,7 +41,7 @@ curl http://127.0.0.1:3000/healthz # ok
 pnpm check
 ```
 
-`pnpm check` chạy fmt, Clippy không warning, test Rust, hai test Node cho phiên/backoff, typecheck và build web. Test thời hạn phòng dùng thời gian ảo Tokio và WebSocket thật, không đợi 60 giây/10 phút.
+`pnpm check` chạy fmt, Clippy không warning, test Rust, các test Node cho phiên/backoff, dữ liệu bài và trạng thái bàn chơi, typecheck và build web. Test thời hạn phòng dùng thời gian ảo Tokio và WebSocket thật, không đợi 60 giây/10 phút.
 
 ```sh
 cargo build --workspace
@@ -48,3 +49,11 @@ pnpm --filter web build
 ```
 
 Web build ra `apps/web/dist/`; web chạy qua Vite, server chưa phục vụ file tĩnh. Sau khi đổi protocol Rust, chạy `pnpm gen:types` và đưa `apps/web/src/generated/protocol.ts` vào cùng thay đổi. Script dùng ts-rs, sinh cả hằng version và type; chạy lại không đổi nội dung nếu Rust không đổi. `ping`/`pong` vẫn hỗ trợ, ví dụ `{"v":1,"type":"ping","nonce":42}`.
+
+## Media và bàn mẫu BANG!
+
+`pnpm assets` chỉ tải 44 WebP bộ gốc từ commit `dc7c29abffc566629ab0fae3bb3386280a7ae52c` của bang-cards vào `assets/bang/` (gitignored). Script kiểm tra header/kích thước, bỏ qua file hợp lệ và tải lại file thiếu/hỏng. Vite dùng `assets/` làm publicDir: ảnh phục vụ tại `/bang/` khi dev và được chép vào `dist/bang/` khi build. Chạy `pnpm assets` trước build nếu muốn bản dựng có ảnh; thiếu ảnh vẫn có khung chữ. Không đưa art vào git.
+
+Khi chạy Vite dev, mở `/?demo=bang` để xem bàn mẫu 5 người mà không cần server; `/?demo=bang&view=spectator` xem góc khán giả. Demo không được bật trong production build. Chạm/hover/focus một lá bài để đọc hiệu ứng. Tên lá và nhân vật giữ nguyên tiếng Anh, các mô tả theo bảng dịch đã duyệt. Bộ mặt bài CardId được kiểm thử khớp với DECK trong Rust.
+
+Client chỉ nhận update có seq kế tiếp; bỏ gói cũ, trùng hoặc nhảy mốc. Snapshot joined khi vào lại là nguồn đồng bộ đầy đủ; batch setup seq0 không cần cập nhật lại view đã nhận trong game_started. Bước này chưa dựng animation hay nhật ký event.

@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
-    "build": "vite build",
-    "test": "node --test src/shared/lib/session.test.ts"
+    "build": "vite build && node ../../scripts/check-web-build.mjs",
+    "test": "node --test src/shared/lib/session.test.ts src/features/game/*.test.ts"
   },
   "dependencies": {
     "react": "^19.3.1",
