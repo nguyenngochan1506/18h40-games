@@ -2,8 +2,16 @@
 
 export const PROTOCOL_VERSION = 1;
 
-export type ErrorCode = "unsupported_version" | "invalid_message";
+export type ErrorCode = "unsupported_version" | "invalid_message" | "room_not_found" | "nickname_taken" | "invalid_nickname" | "invalid_token" | "already_in_room" | "not_in_room" | "not_host" | "wrong_phase" | "not_enough_players" | "no_free_seat" | "server_busy";
 
-export type ClientMessage = { "type": "ping", v: number, nonce: number, };
+export type Phase = "waiting" | "playing";
 
-export type ServerMessage = { "type": "pong", v: number, nonce: number, } | { "type": "error", v: number, code: ErrorCode, message: string, };
+export type Role = "player" | "spectator";
+
+export type Member = { id: string, nickname: string, role: Role, online: boolean, };
+
+export type RoomView = { code: string, phase: Phase, host: string, you: string, min_players: number, max_players: number, members: Array<Member>, };
+
+export type ClientMessage = { "type": "ping", v: number, nonce: number, } | { "type": "create_room", v: number, nickname: string, } | { "type": "join_room", v: number, room_code: string, nickname: string, } | { "type": "rejoin_room", v: number, room_code: string, token: string, } | { "type": "leave_room", v: number, } | { "type": "take_seat", v: number, } | { "type": "start_game", v: number, } | { "type": "end_game", v: number, };
+
+export type ServerMessage = { "type": "joined", v: number, room_code: string, token: string, room: RoomView, } | { "type": "room_state", v: number, room: RoomView, } | { "type": "left", v: number, } | { "type": "pong", v: number, nonce: number, } | { "type": "error", v: number, code: ErrorCode, message: string, };
