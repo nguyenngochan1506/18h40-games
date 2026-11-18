@@ -5,6 +5,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PublicPlayer {
     pub id: PlayerId,
@@ -18,6 +19,7 @@ pub struct PublicPlayer {
     pub role: Option<Role>,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpectatorView {
     pub players: Vec<PublicPlayer>,
@@ -30,6 +32,7 @@ pub struct SpectatorView {
     pub store_pool: Vec<CardId>,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerView {
     pub you: PlayerId,

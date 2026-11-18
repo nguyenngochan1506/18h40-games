@@ -1,5 +1,6 @@
 use protocol::{
-    ClientMessage, ErrorCode, Member, PROTOCOL_VERSION, Phase, Role, RoomView, ServerMessage,
+    ClientMessage, ErrorCode, GameEvents, GameSeat, GameSnapshot, GameView, Member,
+    PROTOCOL_VERSION, Phase, Role, RoomView, ServerMessage,
 };
 use std::{fs, path::Path};
 use ts_rs::TS;
@@ -10,6 +11,29 @@ fn main() -> std::io::Result<()> {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/web/src/generated/protocol.ts");
     fs::create_dir_all(output.parent().unwrap())?;
     let declarations = [
+        bang::PlayerId::decl(&config),
+        bang::CardId::decl(&config),
+        bang::CardKind::decl(&config),
+        bang::Role::decl(&config),
+        bang::Character::decl(&config),
+        bang::CardSelection::decl(&config),
+        bang::DrawSource::decl(&config),
+        bang::Action::decl(&config),
+        bang::TurnStep::decl(&config),
+        bang::TurnState::decl(&config),
+        bang::PendingId::decl(&config),
+        bang::AttackKind::decl(&config),
+        bang::Winner::decl(&config),
+        bang::DecisionKind::decl(&config),
+        bang::Decision::decl(&config),
+        bang::view::PublicPlayer::decl(&config),
+        bang::SpectatorView::decl(&config),
+        bang::PlayerView::decl(&config),
+        bang::EventKind::decl(&config),
+        GameView::decl(&config),
+        GameSeat::decl(&config),
+        GameSnapshot::decl(&config),
+        GameEvents::decl(&config),
         ErrorCode::decl(&config),
         Phase::decl(&config),
         Role::decl(&config),
@@ -24,5 +48,13 @@ fn main() -> std::io::Result<()> {
     for declaration in declarations {
         source.push_str(&format!("\nexport {declaration}\n"));
     }
-    fs::write(output, source)
+    fs::write(
+        output,
+        source
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n",
+    )
 }

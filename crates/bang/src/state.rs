@@ -12,6 +12,7 @@ pub struct Player {
     pub in_play: Vec<CardId>,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TurnStep {
@@ -21,6 +22,7 @@ pub enum TurnStep {
     Play,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TurnState {
     pub player: PlayerId,
@@ -28,9 +30,11 @@ pub struct TurnState {
     pub bangs_played: u32,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PendingId(pub u64);
+pub struct PendingId(#[cfg_attr(feature = "ts", ts(type = "number"))] pub u64);
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AttackKind {
@@ -135,6 +139,7 @@ impl Pending {
     }
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Winner {
@@ -143,6 +148,7 @@ pub enum Winner {
     Renegade { player: PlayerId },
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DecisionKind {
@@ -156,6 +162,7 @@ pub enum DecisionKind {
     Dying { needed: u16 },
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Decision {
     pub player: PlayerId,

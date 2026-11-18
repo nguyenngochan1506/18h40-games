@@ -73,6 +73,9 @@ export default function App() {
                 setStatus('Đã kết nối');
               }
               break;
+            case 'game_started':
+            case 'game_update':
+            case 'game_over':
             case 'pong': break;
             default: throw new Error('Invalid server message');
           }

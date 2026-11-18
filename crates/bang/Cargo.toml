@@ -3,7 +3,11 @@ name = "bang"
 version = "0.1.0"
 edition.workspace = true
 
+[features]
+ts = ["dep:ts-rs"]
+
 [dependencies]
+ts-rs = { version = "12.0.1", optional = true }
 serde.workspace = true
 rand = { version = "0.9.5", default-features = false, features = ["std"] }
 

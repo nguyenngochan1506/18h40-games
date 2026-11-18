@@ -2,7 +2,61 @@
 
 export const PROTOCOL_VERSION = 1;
 
-export type ErrorCode = "unsupported_version" | "invalid_message" | "room_not_found" | "nickname_taken" | "invalid_nickname" | "invalid_token" | "already_in_room" | "not_in_room" | "not_host" | "wrong_phase" | "not_enough_players" | "no_free_seat" | "server_busy";
+export type PlayerId = number;
+
+export type CardId = number;
+
+export type CardKind = "bang" | "missed" | "beer" | "panic" | "cat_balou" | "duel" | "indians" | "general_store" | "gatling" | "saloon" | "stagecoach" | "wells_fargo" | "barrel" | "dynamite" | "jail" | "mustang" | "scope" | "volcanic" | "schofield" | "remington" | "rev_carabine" | "winchester";
+
+export type BangRole = "sheriff" | "deputy" | "outlaw" | "renegade";
+
+export type Character = "bart_cassidy" | "black_jack" | "calamity_janet" | "el_gringo" | "jesse_jones" | "jourdonnais" | "kit_carlson" | "lucky_duke" | "paul_regret" | "pedro_ramirez" | "rose_doolan" | "sid_ketchum" | "slab_the_killer" | "suzy_lafayette" | "vulture_sam" | "willy_the_kid";
+
+export type CardSelection = "hand" | { "in_play": CardId };
+
+export type DrawSource = "deck" | "discard" | { "player": PlayerId };
+
+export type Action = { "type": "choose_draw_source", pending_id: PendingId, source: DrawSource, } | { "type": "keep_cards", pending_id: PendingId, cards: Array<CardId>, } | { "type": "choose_draw_result", pending_id: PendingId, card: CardId, } | { "type": "sid_heal",
+/**
+ * The current own Dying id; None when healing outside that window.
+ */
+pending_id: PendingId | null, discard: [CardId, CardId], } | { "type": "play", card: CardId, target: PlayerId | null, } | { "type": "affect_card", card: CardId, target: PlayerId, selection: CardSelection, } | { "type": "choose_card", pending_id: PendingId, card: CardId, } | { "type": "respond", pending_id: PendingId, card: CardId | null, } | { "type": "end_turn", discard: Array<CardId>, };
+
+export type TurnStep = "dynamite" | "jail" | "draw" | "play";
+
+export type TurnState = { player: PlayerId, step: TurnStep, bangs_played: number, };
+
+export type PendingId = number;
+
+export type AttackKind = "bang" | "gatling" | "indians";
+
+export type Winner = "sheriff_and_deputies" | "outlaws" | { "renegade": { player: PlayerId, } };
+
+export type DecisionKind = { "type": "turn" } | { "type": "attack_response", kind: AttackKind, remaining: number, } | { "type": "duel" } | { "type": "general_store" } | { "type": "draw_choice" } | { "type": "keep_cards", keep: number, } | { "type": "choose_draw_result", reason: CardKind, } | { "type": "dying", needed: number, };
+
+export type Decision = { player: PlayerId, pending_id: PendingId | null, kind: DecisionKind, };
+
+export type PublicPlayer = { id: PlayerId, character: Character, health: number, max_health: number, alive: boolean, hand_count: number, in_play: Array<CardId>, weapon_range: number, role: BangRole | null, };
+
+export type SpectatorView = { players: Array<PublicPlayer>, turn: TurnState, waiting: Decision | null, draw_count: number, discard_count: number, discard_top: CardId | null, winner: Winner | null, store_pool: Array<CardId>, };
+
+export type PlayerView = { you: PlayerId, hand: Array<CardId>,
+/**
+ * The top private Kit/Lucky pool, visible only to its owner.
+ */
+choices: Array<CardId>, table: SpectatorView, };
+
+export type EventKind = { "type": "skill_activated", player: PlayerId, character: Character, } | { "type": "choice_offered", player: PlayerId, cards: Array<CardId>, } | { "type": "card_shown", player: PlayerId, card: CardId, } | { "type": "cards_stolen", source: PlayerId, target: PlayerId, count: number, } | { "type": "stolen_cards", source: PlayerId, target: PlayerId, cards: Array<CardId>, } | { "type": "cards_inherited", player: PlayerId, victim: PlayerId, count: number, } | { "type": "private_pool_discarded", count: number, } | { "type": "game_started", sheriff: PlayerId, } | { "type": "turn_started", player: PlayerId, } | { "type": "cards_drawn", player: PlayerId, count: number, } | { "type": "cards_received", player: PlayerId, cards: Array<CardId>, } | { "type": "deck_reshuffled", count: number, } | { "type": "card_played", player: PlayerId, card: CardId, target: PlayerId | null, } | { "type": "card_discarded", player: PlayerId, card: CardId, } | { "type": "health_changed", player: PlayerId, source: PlayerId | null, delta: number, health: number, } | { "type": "player_eliminated", player: PlayerId, role: BangRole, } | { "type": "decision_changed", decision: Decision | null, } | { "type": "card_equipped", player: PlayerId, card: CardId, } | { "type": "card_passed", source: PlayerId, target: PlayerId, card: CardId, } | { "type": "hand_affected", source: PlayerId, target: PlayerId, kind: CardKind, count: number, } | { "type": "hand_card_affected", source: PlayerId, target: PlayerId, kind: CardKind, card: CardId, } | { "type": "in_play_card_affected", source: PlayerId, target: PlayerId, kind: CardKind, card: CardId, } | { "type": "draw_revealed", player: PlayerId, reason: CardKind, card: CardId, } | { "type": "store_opened", pool: Array<CardId>, } | { "type": "store_card_claimed", player: PlayerId, card: CardId, } | { "type": "pool_discarded", cards: Array<CardId>, } | { "type": "bounty_awarded", player: PlayerId, victim: PlayerId, } | { "type": "sheriff_penalized", player: PlayerId, victim: PlayerId, } | { "type": "game_ended", winner: Winner, roles: Array<BangRole>, };
+
+export type GameView = { "perspective": "player", "view": PlayerView } | { "perspective": "spectator", "view": SpectatorView };
+
+export type GameSeat = { player_id: PlayerId, member_id: string, nickname: string, };
+
+export type GameSnapshot = { seq: number, seats: Array<GameSeat>, view: GameView, };
+
+export type GameEvents = Array<EventKind>;
+
+export type ErrorCode = "unsupported_version" | "invalid_message" | "room_not_found" | "nickname_taken" | "invalid_nickname" | "invalid_token" | "already_in_room" | "not_in_room" | "not_host" | "wrong_phase" | "not_enough_players" | "no_free_seat" | "server_busy" | "illegal_action";
 
 export type Phase = "waiting" | "playing";
 
@@ -12,6 +66,6 @@ export type Member = { id: string, nickname: string, role: Role, online: boolean
 
 export type RoomView = { code: string, phase: Phase, host: string, you: string, min_players: number, max_players: number, members: Array<Member>, };
 
-export type ClientMessage = { "type": "ping", v: number, nonce: number, } | { "type": "create_room", v: number, nickname: string, } | { "type": "join_room", v: number, room_code: string, nickname: string, } | { "type": "rejoin_room", v: number, room_code: string, token: string, } | { "type": "leave_room", v: number, } | { "type": "take_seat", v: number, } | { "type": "start_game", v: number, } | { "type": "end_game", v: number, };
+export type ClientMessage = { "type": "ping", v: number, nonce: number, } | { "type": "create_room", v: number, nickname: string, } | { "type": "join_room", v: number, room_code: string, nickname: string, } | { "type": "rejoin_room", v: number, room_code: string, token: string, } | { "type": "leave_room", v: number, } | { "type": "take_seat", v: number, } | { "type": "start_game", v: number, } | { "type": "game_action", v: number, action: Action, } | { "type": "host_skip", v: number, } | { "type": "end_game", v: number, };
 
-export type ServerMessage = { "type": "joined", v: number, room_code: string, token: string, room: RoomView, } | { "type": "room_state", v: number, room: RoomView, } | { "type": "left", v: number, } | { "type": "pong", v: number, nonce: number, } | { "type": "error", v: number, code: ErrorCode, message: string, };
+export type ServerMessage = { "type": "game_started", v: number, seq: number, seats: Array<GameSeat>, view: GameView, } | { "type": "game_update", v: number, seq: number, events: GameEvents, view: GameView, } | { "type": "game_over", v: number, seq: number, events: GameEvents, view: GameView, } | { "type": "joined", v: number, room_code: string, token: string, room: RoomView, game: GameSnapshot | null, } | { "type": "room_state", v: number, room: RoomView, } | { "type": "left", v: number, } | { "type": "pong", v: number, nonce: number, } | { "type": "error", v: number, code: ErrorCode, message: string, };

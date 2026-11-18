@@ -33,6 +33,13 @@ pub enum ClientMessage {
     StartGame {
         v: u32,
     },
+    GameAction {
+        v: u32,
+        action: bang::Action,
+    },
+    HostSkip {
+        v: u32,
+    },
     EndGame {
         v: u32,
     },
@@ -41,11 +48,30 @@ pub enum ClientMessage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMessage {
+    GameStarted {
+        v: u32,
+        seq: u32,
+        seats: Vec<GameSeat>,
+        view: GameView,
+    },
+    GameUpdate {
+        v: u32,
+        seq: u32,
+        events: GameEvents,
+        view: GameView,
+    },
+    GameOver {
+        v: u32,
+        seq: u32,
+        events: GameEvents,
+        view: GameView,
+    },
     Joined {
         v: u32,
         room_code: String,
         token: String,
         room: RoomView,
+        game: Option<GameSnapshot>,
     },
     RoomState {
         v: u32,
@@ -65,6 +91,53 @@ pub enum ServerMessage {
     },
 }
 
+/// Public identity fixed at start_game, including members who later leave.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct GameSeat {
+    pub player_id: bang::PlayerId,
+    pub member_id: String,
+    pub nickname: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct GameSnapshot {
+    pub seq: u32,
+    pub seats: Vec<GameSeat>,
+    pub view: GameView,
+}
+
+/// Wire snapshots have no variant accepting a raw GameState.
+///
+/// ```compile_fail
+/// fn outgoing(state: bang::GameState) -> protocol::GameView { state.into() }
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "perspective", content = "view", rename_all = "snake_case")]
+pub enum GameView {
+    Player(bang::PlayerView),
+    Spectator(bang::SpectatorView),
+}
+
+/// Only filtered event kinds can be constructed for outgoing messages.
+///
+/// ```compile_fail
+/// let raw: Vec<bang::Event> = vec![];
+/// let outgoing: protocol::GameEvents = raw.into();
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct GameEvents(Vec<bang::EventKind>);
+
+impl GameEvents {
+    pub fn for_recipient(events: &[bang::Event], player: Option<bang::PlayerId>) -> Self {
+        Self(
+            bang::filter_events(events, player)
+                .into_iter()
+                .map(|event| event.kind)
+                .collect(),
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
@@ -81,6 +154,7 @@ pub enum ErrorCode {
     NotEnoughPlayers,
     NoFreeSeat,
     ServerBusy,
+    IllegalAction,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -146,7 +220,7 @@ mod tests {
         }
         let room = json!({"code":"ABCDE","phase":"waiting","host":"1","you":"1","min_players":4,"max_players":7,"members":[{"id":"1","nickname":"Hân","role":"player","online":true}]});
         for value in [
-            json!({"v":1,"type":"joined","room_code":"ABCDE","token":"secret","room":room}),
+            json!({"v":1,"type":"joined","room_code":"ABCDE","token":"secret","room":room,"game":null}),
             json!({"v":1,"type":"room_state","room":room}),
             json!({"v":1,"type":"left"}),
         ] {
@@ -155,7 +229,12 @@ mod tests {
             let mut invalid = value.clone();
             invalid.as_object_mut().unwrap().remove("v");
             assert!(serde_json::from_value::<ServerMessage>(invalid).is_err());
-            for field in value.as_object().unwrap().keys() {
+            for field in value
+                .as_object()
+                .unwrap()
+                .keys()
+                .filter(|field| *field != "game")
+            {
                 let mut invalid = value.clone();
                 invalid[field] = Value::Null;
                 assert!(serde_json::from_value::<ServerMessage>(invalid).is_err());
@@ -240,5 +319,136 @@ mod tests {
         ] {
             assert!(serde_json::from_value::<ServerMessage>(value).is_err());
         }
+    }
+    #[test]
+    fn game_messages_round_trip_require_version_and_filter_private_events() {
+        let table = bang::SpectatorView {
+            players: vec![],
+            turn: bang::TurnState {
+                player: bang::PlayerId(0),
+                step: bang::TurnStep::Play,
+                bangs_played: 0,
+            },
+            waiting: None,
+            draw_count: 80,
+            discard_count: 0,
+            discard_top: None,
+            winner: None,
+            store_pool: vec![],
+        };
+        let player = GameView::Player(bang::PlayerView {
+            you: bang::PlayerId(0),
+            hand: vec![bang::CardId(0)],
+            choices: vec![],
+            table: table.clone(),
+        });
+        let public = GameView::Spectator(table);
+        let raw = vec![
+            bang::Event {
+                visibility: bang::Visibility::Public,
+                kind: bang::EventKind::CardsDrawn {
+                    player: bang::PlayerId(0),
+                    count: 1,
+                },
+            },
+            bang::Event {
+                visibility: bang::Visibility::Player(bang::PlayerId(0)),
+                kind: bang::EventKind::CardsReceived {
+                    player: bang::PlayerId(0),
+                    cards: vec![bang::CardId(0)],
+                },
+            },
+        ];
+        let hidden = GameEvents::for_recipient(&raw, None);
+        assert_eq!(
+            serde_json::to_value(&hidden)
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            serde_json::to_value(GameEvents::for_recipient(&raw, Some(bang::PlayerId(0))))
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        let seats = vec![GameSeat {
+            player_id: bang::PlayerId(0),
+            member_id: "1".into(),
+            nickname: "Hân".into(),
+        }];
+        for message in [
+            ServerMessage::GameStarted {
+                v: 1,
+                seq: 0,
+                seats: seats.clone(),
+                view: player.clone(),
+            },
+            ServerMessage::GameUpdate {
+                v: 1,
+                seq: 1,
+                events: hidden.clone(),
+                view: public.clone(),
+            },
+            ServerMessage::GameOver {
+                v: 1,
+                seq: 2,
+                events: hidden,
+                view: public,
+            },
+        ] {
+            let value = serde_json::to_value(&message).unwrap();
+            assert_eq!(
+                serde_json::from_value::<ServerMessage>(value.clone()).unwrap(),
+                message
+            );
+            for field in value.as_object().unwrap().keys() {
+                let mut missing = value.clone();
+                missing.as_object_mut().unwrap().remove(field);
+                assert!(
+                    serde_json::from_value::<ServerMessage>(missing).is_err(),
+                    "Missing {field} must fail"
+                );
+            }
+        }
+        for message in [
+            ClientMessage::HostSkip { v: 1 },
+            ClientMessage::GameAction {
+                v: 1,
+                action: bang::Action::EndTurn { discard: vec![] },
+            },
+        ] {
+            let value = serde_json::to_value(&message).unwrap();
+            assert_eq!(
+                serde_json::from_value::<ClientMessage>(value.clone()).unwrap(),
+                message
+            );
+            let mut missing = value;
+            missing.as_object_mut().unwrap().remove("v");
+            assert!(serde_json::from_value::<ClientMessage>(missing).is_err());
+        }
+        let joined = ServerMessage::Joined { v: 1, room_code: "ABCDE".into(), token: "secret".into(), game: Some(GameSnapshot { seq: 2, seats, view: player }), room: serde_json::from_value(json!({"code":"ABCDE","phase":"playing","host":"1","you":"1","min_players":4,"max_players":7,"members":[]})).unwrap() };
+        for field in ["seq", "seats", "view"] {
+            let mut value = serde_json::to_value(&joined).unwrap();
+            value["game"].as_object_mut().unwrap().remove(field);
+            assert!(serde_json::from_value::<ServerMessage>(value).is_err());
+        }
+        for field in ["player_id", "member_id", "nickname"] {
+            let mut value = serde_json::to_value(&joined).unwrap();
+            value["game"]["seats"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove(field);
+            assert!(serde_json::from_value::<ServerMessage>(value).is_err());
+        }
+        assert_eq!(
+            serde_json::from_str::<ServerMessage>(&serde_json::to_string(&joined).unwrap())
+                .unwrap(),
+            joined
+        );
     }
 }
