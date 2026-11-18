@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <radialGradient id="smoke"><stop stop-color="#c99b60" stop-opacity=".7"/><stop offset=".55" stop-color="#6d4a31" stop-opacity=".6"/><stop offset="1" stop-color="#241b15" stop-opacity="0"/></radialGradient>
+    <radialGradient id="fire" cx=".44" cy=".43" r=".64"><stop stop-color="#fff4b1"/><stop offset=".35" stop-color="#ffc14d"/><stop offset=".65" stop-color="#e36a24"/><stop offset="1" stop-color="#723423" stop-opacity=".4"/></radialGradient>
+    <linearGradient id="flame" x2=".3" y2="1"><stop stop-color="#fffadc"/><stop offset=".55" stop-color="#ffdc77"/><stop offset="1" stop-color="#ed7a24"/></linearGradient>
+  </defs>
+  <g fill="url(#smoke)"><ellipse cx="62" cy="63" rx="53" ry="55"/><ellipse cx="147" cy="76" rx="53" ry="59"/><ellipse cx="83" cy="146" rx="78" ry="52"/></g>
+  <path fill="url(#fire)" d="M27 134C6 115 22 88 39 81C19 54 51 36 68 49C68 22 91 11 110 32C131 9 154 37 145 58C174 35 196 68 177 84C204 101 185 125 171 132C186 159 153 183 130 170C113 195 80 182 75 168C43 191 13 163 27 134Z"/>
+  <path fill="url(#flame)" d="M62 146C36 120 55 99 71 88C64 64 87 58 95 32C116 53 102 72 120 84C128 68 137 70 148 61C136 84 162 100 151 123C160 145 137 165 115 156C94 176 70 164 62 146Z"/>
+  <path fill="#fff5cd" d="M81 141C62 123 82 110 91 95C92 111 105 108 107 89C123 105 134 117 124 134C114 151 96 157 81 141Z"/>
+  <g fill="#ffdf85"><path d="M20 38L31 48L26 51Z"/><path d="M160 19L155 37L151 33Z"/><path d="M179 148L191 155L177 154Z"/><path d="M34 169L40 156L43 163Z"/><circle cx="17" cy="93" r="2"/><circle cx="128" cy="17" r="2"/><circle cx="180" cy="61" r="2"/></g>
+</svg>

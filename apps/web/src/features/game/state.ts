@@ -1,4 +1,5 @@
 import { eventsToLog, LOG_LIMIT } from './log.ts';
+import type { FxBatch } from './fx.ts';
 import type { LogEntry } from './log.ts';
 import type { GameSnapshot, GameView, ServerMessage } from '../../generated/protocol.ts';
 
@@ -28,8 +29,8 @@ export function receiveGame(current: GameSnapshot | null, message: ServerMessage
   }
 }
 
-export type GameSyncState = { game: GameSnapshot | null; desynced: boolean; log: LogEntry[]; nextLogId: number; setupPending: boolean; viewer: number | null };
-export const initialGameState: GameSyncState = { game: null, desynced: false, log: [], nextLogId: 0, setupPending: false, viewer: null };
+export type GameSyncState = { game: GameSnapshot | null; desynced: boolean; log: LogEntry[]; nextLogId: number; setupPending: boolean; viewer: number | null; fxBatch: FxBatch | null };
+export const initialGameState: GameSyncState = { game: null, desynced: false, log: [], nextLogId: 0, setupPending: false, viewer: null, fxBatch: null };
 
 export function receiveGameState(current: GameSyncState, message: ServerMessage): GameSyncState {
   if (message.type === 'joined') return {
@@ -39,7 +40,7 @@ export function receiveGameState(current: GameSyncState, message: ServerMessage)
   };
   if (message.type === 'left' || (message.type === 'room_state' && message.room.phase === 'waiting')) return initialGameState;
   if (current.desynced) return current;
-  if ((message.type === 'game_update' || message.type === 'game_over') && current.game && message.seq > current.game.seq + 1) return { ...current, desynced: true };
+  if ((message.type === 'game_update' || message.type === 'game_over') && current.game && message.seq > current.game.seq + 1) return { ...current, desynced: true, fxBatch: null };
   const game = receiveGame(current.game, message);
   if (message.type === 'game_started' && game !== current.game && game) return { ...initialGameState, game, setupPending: true, viewer: game.view.perspective === 'player' ? game.view.view.you : null };
   const setup = message.type === 'game_update' && message.seq === 0 && current.game?.seq === 0 && current.setupPending;
@@ -47,7 +48,7 @@ export function receiveGameState(current: GameSyncState, message: ServerMessage)
     const previous = current.game?.view;
     const waiting = previous ? previous.perspective === 'player' ? previous.view.table.waiting : previous.view.waiting : null;
     const text = eventsToLog(message.events, { seats: game.seats, you: current.viewer, waiting });
-    return { ...current, game, setupPending: false, nextLogId: current.nextLogId + text.length, log: [...current.log, ...text.map((text, i) => ({ id: current.nextLogId + i, text }))].slice(-LOG_LIMIT) };
+    return { ...current, game, fxBatch: setup ? null : { id: game.seq, events: message.events, waiting }, setupPending: false, nextLogId: current.nextLogId + text.length, log: [...current.log, ...text.map((text, i) => ({ id: current.nextLogId + i, text }))].slice(-LOG_LIMIT) };
   }
   return current;
 }

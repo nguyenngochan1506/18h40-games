@@ -45,3 +45,20 @@ export const landscapeScenes = {
   4: '/scene/scene4-landscape.webp', 5: '/scene/scene5-landscape.webp',
   6: '/scene/scene6-landscape.webp', 7: '/scene/scene-landscape.webp',
 } as const;
+
+// Optional art is supplied independently; missing files use the original actor or CSS FX.
+export const optionalSceneFiles = {
+  cowboyB: '/scene/cowboy-b.webp', cowboyC: '/scene/cowboy-c.webp', cowboyD: '/scene/cowboy-d.webp', cowboyE: '/scene/cowboy-e.webp', cowboyF: '/scene/cowboy-f.webp',
+  dynamite: '/scene/fx/fx-dynamite.webp',
+} as const;
+
+export const fxFiles = {
+  muzzle: '/scene/fx/fx-muzzle-flash.webp', smokeA: '/scene/fx/fx-smoke-a.webp', smokeB: '/scene/fx/fx-smoke-b.webp', bullet: '/scene/fx/fx-bullet.webp', impact: '/scene/fx/fx-impact.webp', explosion: '/scene/fx/fx-explosion.webp', jail: '/scene/fx/fx-jail-bars.webp', sparkle: '/scene/fx/fx-sparkle.webp',
+} as const;
+declare const __SCENE_FILES__: string[];
+export const availableSceneFiles: readonly string[] = typeof __SCENE_FILES__ === 'undefined' ? [] : __SCENE_FILES__;
+export const cowboyVariants = [sceneFiles.cowboy, optionalSceneFiles.cowboyB, optionalSceneFiles.cowboyC, optionalSceneFiles.cowboyD, optionalSceneFiles.cowboyE, optionalSceneFiles.cowboyF];
+export function cowboyFile(playerId: number, available: readonly string[] = availableSceneFiles) {
+  const variant = cowboyVariants[Math.abs(Math.trunc(playerId)) % cowboyVariants.length];
+  return available.includes(variant) ? variant : sceneFiles.cowboy;
+}

@@ -1,0 +1,103 @@
+/* Game VFX deliberately use longer lifetimes than UI chrome; transform/opacity only. */
+.cinematic .fx-layer, .cinematic .fx-persistent-layer, .cinematic .scene-atmosphere { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.cinematic .fx-layer *, .cinematic .fx-persistent-layer *, .cinematic .scene-atmosphere * { pointer-events: none !important; }
+.cinematic .fx-layer { z-index: 45; contain: layout style; }
+.cinematic .fx-persistent-layer { z-index: 3; }
+.cinematic .scene-atmosphere { z-index: 0; }
+.fx-cue, .fx-persistent { position: absolute; width: 1px; height: 1px; }
+.fx-sprite { position: absolute; display: block; width: 110px; height: 110px; transform: translate(-50%, -50%); }
+.fx-sprite img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.fx-sprite.has-art > .fx-fallback { display: none; }
+.fx-fallback { display: block; width: 100%; height: 100%; }
+.fx-muzzle { left: 0; top: 0; width: calc(180px * var(--fx-source-scale, 1)); height: calc(180px * var(--fx-source-scale, 1)); transform: none; transform-origin: 0 0; }
+.fx-muzzle .fx-fallback { background: radial-gradient(ellipse at 25% 50%, #fffbd6 0 9%, #ffd452 15%, #f18b17 35%, transparent 67%); clip-path: polygon(0 44%, 32% 29%, 25% 0, 49% 31%, 100% 14%, 70% 46%, 100% 68%, 54% 64%, 28% 100%, 25% 65%, 0 57%); filter: drop-shadow(0 0 10px #ff8d26); }
+.fx-smokeA, .fx-smokeB { width: calc(190px * var(--fx-source-scale, 1)); height: calc(190px * var(--fx-source-scale, 1)); opacity: .45; }
+.fx-smokeA .fx-fallback, .fx-smokeB .fx-fallback { background: radial-gradient(ellipse, #efdfbc99, #c8c5bb66 40%, transparent 70%); }
+.fx-trail { display: block; position: absolute; height: calc(72px * var(--fx-source-scale, 1)); top: calc(-36px * var(--fx-source-scale, 1)); transform-origin: 0 50%; background: linear-gradient(transparent 43%, #efddb778 50%, transparent 57%); mask-image: linear-gradient(90deg, transparent, #000 12% 85%, transparent); }
+.fx-projectile { display: block; position: absolute; width: 1px; height: 1px; }
+.fx-bullet { left: 0; top: 0; width: calc(110px * var(--fx-source-scale, 1)); height: calc(110px / 3 * var(--fx-source-scale, 1)); transform: none; transform-origin: 0 0; filter: drop-shadow(0 0 3px #ffbb4980); }
+.fx-bullet .fx-fallback { background: linear-gradient(#fff5b7, #b98025 48%, #ffe49b 64%, #74481c); border: 1px solid #dca651; border-radius: 2px 70% 70% 2px; box-shadow: -12px 0 10px #e5b75480; }
+.fx-impact { width: calc(130px * var(--fx-target-scale, 1)); height: calc(130px * var(--fx-target-scale, 1)); }
+.fx-impact .fx-fallback { background: repeating-conic-gradient(transparent 0deg 19deg, #ffdf7e 20deg 24deg, transparent 25deg 40deg); mask-image: radial-gradient(transparent 12%, #000 25%, transparent 65%); }
+.fx-label { position: absolute; display: block; top: -74px; left: 0; transform: translateX(-50%); width: max-content; max-width: 340px; padding: 5px 10px; border: 1px solid #c59b51; border-radius: 2px; color: #ffe1a1; background: #21130de6; text-align: center; font: 700 clamp(14px, 1.2vw, 23px)/1.2 Georgia, serif; text-shadow: 0 2px 2px #170b04; animation: fx-label-rise 900ms ease-out both; }
+.fx-card { display: block; width: clamp(46px, calc(var(--scene-width) * .045), 88px); aspect-ratio: .643; position: relative; padding: 2px; border: 2px solid #d4b473; border-radius: 4px; background: #eee1b8; box-shadow: 4px 10px 10px #130a0599; }
+.fx-card > img { width: 100%; height: 100%; object-fit: contain; }
+.fx-card-rank { position: absolute; top: 2px; left: 2px; z-index: 1; padding: 1px 3px; background: #fff7de; color: #6c2917; font: 700 12px/1.2 Georgia, serif; }
+.fx-cue-reveal .fx-card { animation: fx-flip 750ms ease-out both; }
+.fx-cue-explosion > .fx-explosion { width: calc(300px * var(--fx-target-scale, 1)); height: calc(300px * var(--fx-target-scale, 1)); animation: fx-burst 1200ms ease-out both; filter: brightness(1.08) saturate(1.05); }
+.fx-explosion .fx-fallback { background: url("./fxExplosion.svg") center / contain no-repeat; }
+.fx-cue-explosion > .fx-smokeA { width: calc(230px * var(--fx-target-scale, 1)); height: calc(230px * var(--fx-target-scale, 1)); animation: fx-explosion-smoke 1200ms ease-out both; }
+
+.fx-cue-explosion .fx-label { top: -110px; }
+.fx-jail { width: calc(var(--fx-jail-height, 150px) * .825); height: calc(var(--fx-jail-height, 150px) * 1.1); transform: translate(-50%, -35%); }
+.fx-jail .fx-fallback { border: 5px solid #665c49; background: repeating-linear-gradient(90deg, transparent 0 14px, #282723 15px, #a7a089 18px, #39372f 21px, transparent 24px 28px); box-shadow: inset 0 0 0 2px #b4aa8e, 0 5px 8px #050403; }
+.fx-cue-jail .fx-jail { animation: fx-jail-drop 900ms ease-out both; }
+.fx-cue-escape .fx-jail { animation: fx-jail-out 900ms ease-in both; }
+.fx-persistent-jail .fx-jail { opacity: .68; }
+.fx-dynamite { width: 72px; height: 80px; }
+.fx-dynamite .fx-fallback { background: repeating-linear-gradient(90deg, #772216 0 10px, #db5333 12px 17px, #5a241b 19px 22px); border: 3px solid #4d2918; width: 58px; height: 42px; transform: rotate(-12deg); border-radius: 8px; box-shadow: 0 4px 5px #120905; }
+.fx-dynamite::after { content: '✦'; position: absolute; color: #ffe698; font-size: 20px; left: 75%; top: 0; text-shadow: 0 0 7px #f5791f; animation: fx-fuse 1s steps(2, end) infinite alternate; }
+.fx-cue-heal .fx-sparkle { width: calc(70px * var(--fx-target-scale, 1)); height: calc(70px * var(--fx-target-scale, 1)); --angle: calc(var(--i) * 120deg); rotate: var(--angle); animation: fx-heal 900ms ease-out both; }
+.fx-sparkle .fx-fallback { color: #ffdc79; font: 40px/1 Georgia, serif; text-shadow: 0 0 12px #ffbe35; }
+.fx-health-glow { position: absolute; width: 86px; height: 24px; border-radius: 50%; background: radial-gradient(#ffe079c9, transparent 70%); transform: translate(-50%,-50%); animation: fx-health 900ms ease-out both; }
+.fx-red-flash { position: absolute; width: 120px; height: 100px; background: radial-gradient(#b3352980, transparent 70%); transform: translate(-50%,-50%); }
+.fx-lost-bullet { position: absolute; display: block; width: 7px; height: 18px; border-radius: 60% 60% 2px 2px; background: linear-gradient(90deg, #7b4f20, #ffdb82, #9b6528); animation: fx-lost-bullet 900ms ease-out both; }
+.fx-cue-damage .fx-label { color: #ffd3b3; }
+.fx-cue-deflect .fx-bullet { animation: fx-ricochet 900ms ease-out both; }
+.fx-cue-deflect .fx-impact { animation: fx-burst 600ms ease-out both; }
+.fx-rising-ghost, .fx-fading-cowboy { position: absolute; width: var(--fx-actor-width, calc(var(--scene-height) * .16)); height: var(--fx-actor-height, calc(var(--scene-height) * .23)); object-fit: contain; transform: translate(-50%,-35%); mask-image: linear-gradient(#000 70%, transparent); }
+.fx-rising-ghost { animation: fx-ghost 1200ms ease-out both; }
+.fx-fading-cowboy { animation: fx-cowboy-out 600ms ease-out both; }
+.fx-cue-eliminate .fx-label { top: -74px; color: #cbf5e9; }
+.fx-turn-ring { position: absolute; width: 100px; height: 100px; border: 2px solid #e4b459; border-radius: 50%; box-shadow: 0 0 25px #f8c86680, inset 0 0 20px #e1a54070; animation: fx-turn 900ms ease-out both; }
+.fx-cue-duel .fx-label, .fx-cue-indians .fx-label { font-size: clamp(24px, 3vw, 48px); color: #ffd18c; top: -28px; }
+.fx-cue-indians .fx-label::before { content: '➶ '; }
+.fx-confetti { position: absolute; width: 7px; height: 12px; background: #dfb754; rotate: calc(var(--i) * 41deg); animation: fx-confetti 1200ms ease-out both; }
+.fx-confetti:nth-child(3n) { background: #a63d24; }
+.fx-confetti:nth-child(3n + 1) { background: #e8d2a0; }
+/* Ambient steps align on 500ms boundaries to avoid a continuous compositor redraw. */
+.fx-lantern-light { position: absolute; inset: 0; background: radial-gradient(ellipse at 8% 14%, #ef9a1c38, transparent 12%), radial-gradient(ellipse at 92% 14%, #ef9a1c38, transparent 12%); animation: fx-lantern 4s steps(8, end) infinite alternate; }
+.fx-haze { position: absolute; left: 15%; top: 3%; width: 70%; height: 16%; background: radial-gradient(ellipse, #c0b6a314, transparent 70%); animation: fx-haze 18s steps(36, end) infinite alternate; }
+.fx-table-glint { position: absolute; left: 25%; top: 35%; width: 50%; height: 35%; background: radial-gradient(ellipse, #ffcf6810, transparent 70%); animation: fx-lantern 7s steps(14, end) infinite alternate; }
+.fx-dust { position: absolute; left: calc(18% + var(--i) * 9%); top: calc(18% + var(--i) * 4%); width: 3px; height: 3px; border-radius: 50%; background: #f5d5a4; animation: fx-dust 12s steps(24, end) infinite; animation-delay: calc(var(--i) * -1.5s); }
+.scene-atmosphere[data-running="false"] *, .scene-atmosphere[data-running="false"] { animation: none !important; opacity: 0; }
+@keyframes fx-label-rise { from { opacity: 0; transform: translate(-50%,8px); } 25%, 70% { opacity: 1; } to { opacity: 0; transform: translate(-50%,-14px); } }
+@keyframes fx-flip { from { transform: rotateY(90deg); } 40%, to { transform: rotateY(0); } }
+@keyframes fx-burst { from { opacity: 0; transform: translate(-50%,-50%) scale(.2); } 18% { opacity: 1; transform: translate(-50%,-50%) scale(.95); } 55% { opacity: .8; transform: translate(-50%,-50%) scale(1.15); } to { opacity: 0; transform: translate(-50%,-50%) scale(1.4); } }
+@keyframes fx-explosion-smoke { from { opacity: 0; transform: translate(-50%,-30%) scale(.4); } 35% { opacity: .6; } to { opacity: 0; transform: translate(-50%,-90%) scale(1.4); } }
+@keyframes fx-jail-drop { from { opacity: 0; transform: translate(-50%,-200%); } 40%, 75% { opacity: .9; transform: translate(-50%,-35%); } to { opacity: 0; transform: translate(-50%,-35%); } }
+@keyframes fx-jail-out { from { opacity: .8; transform: translate(-50%,-35%); } to { opacity: 0; transform: translate(-50%,30%); } }
+@keyframes fx-fuse { from { opacity: .45; transform: scale(.7); } to { opacity: 1; transform: scale(1.2); } }
+@keyframes fx-heal { from { opacity: 0; transform: translate(-50%,-50%) translateX(12px) scale(.4); } 25% { opacity: 1; } to { opacity: 0; transform: translate(-50%,-50%) translateX(76px) scale(1.1); } }
+@keyframes fx-health { from { opacity: 0; transform: translate(-50%,-50%) scale(.6); } 40% { opacity: .9; } to { opacity: 0; transform: translate(-50%,-50%) scale(1.3); } }
+@keyframes fx-lost-bullet { from { opacity: 1; transform: translate(0,0); } to { opacity: 0; transform: translate(calc(12px + var(--i) * 8px),48px) rotate(85deg); } }
+@keyframes fx-ricochet { from { opacity: 1; transform: translate(-50%,-50%) rotate(-25deg); } to { opacity: 0; transform: translate(110px,-80px) rotate(-55deg); } }
+@keyframes fx-ghost { from { opacity: .9; transform: translate(-50%,-35%); } to { opacity: 0; transform: translate(-50%,-70%); } }
+@keyframes fx-cowboy-out { from { opacity: .8; } to { opacity: 0; } }
+@keyframes fx-turn { from { opacity: 0; transform: translate(-50%,-50%) scale(.4); } 35% { opacity: 1; } to { opacity: 0; transform: translate(-50%,-50%) scale(1.4); } }
+@keyframes fx-confetti { from { opacity: 1; transform: translate(0,-80px); } to { opacity: 0; transform: translate(calc((var(--i) - 8) * 35px),calc(40px + var(--i) * 9px)) rotate(180deg); } }
+@keyframes fx-lantern { from { opacity: .45; } to { opacity: .9; } }
+@keyframes fx-haze { from { transform: translateX(-25px); opacity: .3; } to { transform: translateX(25px); opacity: .65; } }
+@keyframes fx-dust { from { transform: translate(0,50px); opacity: 0; } 35% { opacity: .25; } 65% { opacity: .2; } to { transform: translate(25px,-50px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+ .cinematic .fx-layer, .cinematic .fx-persistent-layer, .cinematic .scene-atmosphere { display: none; }
+ .cinematic .fx-layer *, .cinematic .fx-persistent-layer *, .cinematic .scene-atmosphere * { animation: none !important; }
+}
+
+.demo-fx-controls { display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid #8c6e3c; padding-top: 12px; margin-top: 12px; }
+.demo-fx-controls legend { font: 700 14px/1.4 Georgia, serif; }
+.demo-fx-controls .action { font-size: 12px; padding: 6px 10px; }
+
+.fx-scene-flash { display: block; position: absolute; background: #ffe0a3; opacity: 0; }
+
+/* Calibrated origins in the supplied art: muzzle core (29%,54%), bullet tip (88%,50%). */
+.fx-muzzle img, .fx-bullet img { position: absolute; }
+.fx-muzzle img { left: -29%; top: -54%; }
+.fx-muzzle .fx-fallback { position: absolute; left: -25%; top: -50%; }
+.fx-bullet img { left: -88%; top: -50%; }
+.fx-bullet .fx-fallback { position: absolute; left: -100%; top: -50%; }
+.fx-muzzle.has-art, .fx-bullet.has-art, .fx-impact.has-art, .fx-sparkle.has-art { mix-blend-mode: screen; }
+.fx-muzzle.has-art { filter: brightness(1.15); }
+.fx-trail > .fx-smokeB { inset: 0; width: 100%; height: 100%; transform: none; }
+.fx-trail > .fx-smokeB img { object-fit: fill; }
+.fx-trail:has(.has-art) { background: none; }

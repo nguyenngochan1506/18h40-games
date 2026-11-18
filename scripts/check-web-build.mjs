@@ -14,6 +14,7 @@ let checked = 0;
 for (const entry of await readdir(dist, { recursive: true, withFileTypes: true })) {
   if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
   const source = await readFile(join(entry.parentPath, entry.name), 'utf8');
+  assert.ok(!source.includes('data-demo-fx') && !source.includes('demo-fx-controls'), `Demo FX controls leaked into production: ${entry.name}`);
   assert.ok(!fixture.test(source), `Demo fixture leaked into production: ${entry.name}`);
   checked += 1;
 }

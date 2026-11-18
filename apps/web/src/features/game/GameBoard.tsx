@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import type { Action, CardId, CardKind, GameSnapshot, PublicPlayer, RoomView, SpectatorView } from '../../generated/protocol';
-import { assetUrl, sceneFiles, landscapeScenes, backFiles, cardFiles, characterFiles, roleFiles } from './assetMap';
+import { assetUrl, sceneFiles, landscapeScenes, cowboyFile, backFiles, cardFiles, characterFiles, roleFiles } from './assetMap';
 import { cardFace } from './cardCatalog';
 import { cards, characters, roles } from './i18n';
 import { selectGameView } from './state';
@@ -10,6 +10,8 @@ import type { ActionDraft } from './actions';
 import GameControls from './GameControls';
 import GameLog from './GameLog';
 import GameResult from './GameResult';
+import GameFx from './GameFx';
+import type { FxBatch } from './fx';
 import type { LogEntry } from './log';
 import { Icon } from './TableIcons';
 import { seatLayout } from './layout';
@@ -27,8 +29,8 @@ function Artwork({ file, label }: { file: string; label: string }) {
     : <img src={assetUrl(file)} alt={label} onError={() => setMissing(true)} loading="lazy" />}</span>;
 }
 
-function CowboyPortrait({ player }: { player: PublicPlayer }) {
-  return <img className={`cowboy${!player.alive ? ' ghost' : ''}`} src={player.alive ? sceneFiles.cowboy : sceneFiles.ghost} alt="" decoding="async" style={{ transform: player.id % 2 ? 'scaleX(-1)' : undefined, filter: player.alive ? `brightness(${.88 + player.id % 3 * .06}) hue-rotate(${player.id % 3 * 3}deg)` : undefined }} />;
+function CowboyPortrait({ player, scene = false }: { player: PublicPlayer; scene?: boolean }) {
+  return <img className={`cowboy${!player.alive ? ' ghost' : ''}`} src={player.alive ? scene ? cowboyFile(player.id) : sceneFiles.cowboy : sceneFiles.ghost} onError={(event) => { if (player.alive && event.currentTarget.getAttribute('src') !== sceneFiles.cowboy) event.currentTarget.src = sceneFiles.cowboy; }} alt="" decoding="async" style={scene ? undefined : { transform: player.id % 2 ? 'scaleX(-1)' : undefined, filter: player.alive ? `brightness(${.88 + player.id % 3 * .06}) hue-rotate(${player.id % 3 * 3}deg)` : undefined }} />;
 }
 
 function Card({ id, inspect, pick, picked = false, style }: { id: CardId; inspect: Inspect; pick?: () => void; picked?: boolean; style?: CSSProperties }) {
@@ -64,7 +66,7 @@ function waitText(table: SpectatorView, name: (id: number) => string): string {
 }
 
 function Bullets({ player }: { player: PublicPlayer }) {
-  return <div className="bullets" aria-label={`${player.health} trên ${player.max_health} máu`}>
+  return <div className="bullets" data-animation-region={`health-${player.id}`} aria-label={`${player.health} trên ${player.max_health} máu`}>
     <span className="bullet-icons" aria-hidden="true">{Array.from({ length: player.max_health }, (_, i) => <i key={i} className={i < player.health ? '' : 'spent'} />)}</span><span className="life-count">{Math.max(0, player.health)}/{player.max_health}</span>
   </div>;
 }
@@ -85,11 +87,11 @@ function Seat({ player, nickname, own, turn, waiting, presence, inspect, inspect
       <span className="seat-presence">{!player.alive ? 'Hồn ma' : turn ? 'Đang có lượt' : presence}</span>
       <span className="range-hint" title={`Tầm vũ khí của ${nickname}`}>Tầm bắn: {player.weapon_range}</span>
     </button>
-    <div className="in-play" aria-label={`Bài trước mặt ${nickname}`}>{player.in_play.map((card) => <Card key={card} id={card} inspect={inspect} />)}</div>
+    <div className="in-play" data-animation-region={`equipment-${player.id}`} aria-label={`Bài trước mặt ${nickname}`}>{player.in_play.map((card) => <Card key={card} id={card} inspect={inspect} />)}</div>
   </article>;
 }
 
-export default function GameBoard({ game, room, disabled = false, sendAction, log = [], viewer = game.view.perspective === 'player' ? game.view.view.you : null, endGame, roomMenu }: { game: GameSnapshot; room: RoomView; disabled?: boolean; sendAction?: (action: Action) => void; log?: LogEntry[]; viewer?: number | null; endGame?: () => void; roomMenu?: ReactNode }) {
+export default function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch = null, fxEnabled = true, viewer = game.view.perspective === 'player' ? game.view.view.you : null, endGame, roomMenu }: { game: GameSnapshot; room: RoomView; disabled?: boolean; sendAction?: (action: Action) => void; log?: LogEntry[]; fxBatch?: FxBatch | null; fxEnabled?: boolean; viewer?: number | null; endGame?: () => void; roomMenu?: ReactNode }) {
   const { table, you, hand, choices } = selectGameView(game.view);
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   useEffect(() => {
@@ -100,6 +102,7 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
   const stage = sceneStage(viewport.width, viewport.height);
   const [selected, setSelected] = useState<CardKind | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<number | null>(null);
+  const [effectsEnabled, setEffectsEnabled] = useState(true);
   const [journalOpen, setJournalOpen] = useState(false);
   const journalButton = useRef<HTMLButtonElement>(null);
   const inspectedOrigin = useRef<HTMLButtonElement | null>(null);
@@ -144,11 +147,11 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
     <header className="board-heading"><p className="game-eyebrow">Phòng {room.code} · {table.players.length} người</p><h2>BANG!</h2><span className="view-label">{you === null ? 'Góc nhìn khán giả' : 'Miền Tây chờ bạn'}</span></header>
     {own && <aside className="player-hud" aria-label="Thông tin của bạn"><div className="hud-gun"><Icon name="gun" /><span>{gun ? cards[gun.kind].name : 'Colt .45'}<strong>Tầm bắn: {own.weapon_range}</strong></span></div><div className="hud-health"><span>Máu</span><Bullets player={own} /></div><div className="hud-distance" title={distanceEffects || 'Không có hiệu chỉnh'}><Icon name="horse" /><span>{distanceEffects || 'Không có hiệu chỉnh'}</span></div></aside>}
     <nav className="table-tools" aria-label="Công cụ bàn chơi"><button type="button" className="round-control" title="Mở nhật ký" aria-label="Mở nhật ký" aria-expanded={journalOpen} aria-controls="table-journal" ref={journalButton} onClick={toggleJournal}><Icon name="log" /></button><button type="button" className="round-control" popoverTarget="room-menu" title="Cài đặt phòng" aria-label="Cài đặt phòng"><Icon name="gear" /></button></nav>
-    <div id="room-menu" className="room-menu wood-panel" popover="auto">{roomMenu ?? <><h3>Phòng {room.code}</h3><a className="action secondary" href="/">Về phòng</a></>}</div>
+    <div id="room-menu" className="room-menu wood-panel" popover="auto">{stage && <button type="button" className="action secondary" aria-pressed={effectsEnabled} onClick={() => setEffectsEnabled(!effectsEnabled)}>{effectsEnabled ? 'Tắt hiệu ứng' : 'Bật hiệu ứng'}</button>}{roomMenu ?? <><h3>Phòng {room.code}</h3><a className="action secondary" href="/">Về phòng</a></>}</div>
     {!table.winner && <div className="game-wait" role="status" aria-live="polite" title={stage ? status : undefined}><span aria-hidden="true">✦</span><p>{status}</p></div>}
     <div className="table-stage">
       {!stage && <img className="wooden-table" src={sceneFiles.table} alt="" aria-hidden="true" decoding="async" />}
-      <section className="table-center" aria-label="Bộ rút và chồng bỏ"><span className="map-compass" aria-hidden="true">✥</span><div className="pile-row"><div className="draw-pile"><Artwork file={backFiles.card} label="Bộ rút" /><strong>Bộ rút</strong><span>{table.draw_count} lá</span></div><div className="discard-pile">{table.discard_top !== null ? <Card id={table.discard_top} inspect={inspect} /> : <span className="empty-pile">{table.discard_count ? 'Lá đỉnh giữ kín' : 'Chưa có lá bỏ'}</span>}<strong>Chồng bỏ</strong><span>{table.discard_count} lá</span></div></div></section>
+      <section data-animation-region="table" className="table-center" aria-label="Bộ rút và chồng bỏ"><span className="map-compass" aria-hidden="true">✥</span><div className="pile-row"><div className="draw-pile" data-animation-region="draw"><Artwork file={backFiles.card} label="Bộ rút" /><strong>Bộ rút</strong><span>{table.draw_count} lá</span></div><div className="discard-pile" data-animation-region="discard">{table.discard_top !== null ? <Card id={table.discard_top} inspect={inspect} /> : <span className="empty-pile">{table.discard_count ? 'Lá đỉnh giữ kín' : 'Chưa có lá bỏ'}</span>}<strong>Chồng bỏ</strong><span>{table.discard_count} lá</span></div></div></section>
       <div className="game-arena">
         {table.players.map((player, i) => {
           const seat = game.seats.find((seat) => seat.player_id === player.id);
@@ -169,7 +172,7 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
           const chooseTarget = targetMode && player.alive && (player.id !== you || targetSelf) ? () => { setDraft({ ...draft, target: player.id, selection: null }); setSelected(null); } : undefined;
           const nickname = seat?.nickname ?? `Ghế ${player.id + 1}`;
           return <Fragment key={player.id}>
-            {stage && painted && !ownSeat && <button type="button" className={`scene-actor${turn ? ' has-turn' : ''}${!player.alive ? ' eliminated' : ''}`} data-scene-player={player.id} data-scene-slot={painted.slot} style={{ left: `${painted.x}%`, top: `${painted.y}%`, height: `${painted.actorHeight * 100}%`, width: stage.height * painted.actorHeight * .75 }} aria-label={chooseTarget ? `Nhắm tới ${nickname} trên ghế` : `Xem nhân vật ${nickname} trên ghế`} disabled={!!chooseTarget && locked} onClick={(event) => chooseTarget ? chooseTarget() : inspectPlayer(player, event.currentTarget)}><CowboyPortrait player={player} /><span className="actor-anchor" data-animation-anchor={player.id} aria-hidden="true" />{(waiting || draft.target === player.id) && <span className="crosshair" aria-hidden="true" />}</button>}
+            {stage && painted && !ownSeat && <button type="button" className={`scene-actor${turn ? ' has-turn' : ''}${!player.alive ? ' eliminated' : ''}`} data-scene-player={player.id} data-scene-slot={painted.slot} style={{ left: `${painted.x}%`, top: `${painted.y}%`, height: `${painted.actorHeight * 100}%`, width: stage.height * painted.actorHeight * .75 }} aria-label={chooseTarget ? `Nhắm tới ${nickname} trên ghế` : `Xem nhân vật ${nickname} trên ghế`} disabled={!!chooseTarget && locked} onClick={(event) => chooseTarget ? chooseTarget() : inspectPlayer(player, event.currentTarget)}><CowboyPortrait player={player} scene /><span className="actor-anchor" data-animation-anchor={player.id} aria-hidden="true" />{(waiting || draft.target === player.id) && <span className="crosshair" aria-hidden="true" />}</button>}
             <div className="seat-position" style={style} data-player-id={player.id} data-scene-slot={painted?.slot}><Seat player={player} nickname={nickname} own={ownSeat} turn={turn} waiting={waiting} presence={member ? member.online ? 'Đang kết nối' : 'Mất kết nối' : 'Đã rời phòng'} inspect={inspect} inspectPlayer={inspectPlayer} disabled={locked} targetSelected={draft.target === player.id} chooseTarget={chooseTarget} scene={!!stage} /></div>
           </Fragment>;
 
@@ -178,13 +181,14 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
     </div>
     {own && <aside className="own-identity wood-panel" aria-label="Vai và nhân vật của bạn"><div className="role-medallion"><Icon name="star" /><strong>{own.role ? roles[own.role].name : 'Vai chưa lộ'}</strong></div><div className="identity-copy"><Artwork file={characterFiles[own.character]} label={characters[own.character].name} /><small>BẠN</small><h3>{characters[own.character].name}</h3><Bullets player={own} />{!own.alive && <span>Hồn ma</span>}</div></aside>}
     {you === null && !own && <p className="spectator-plaque wood-panel">Bạn đang xem ván chơi</p>}
-    {you !== null && <section className="own-hand hand-tray wood-panel" aria-label="Bài trên tay của bạn"><div className="section-heading"><h3>Bài trên tay của bạn</h3><span>{hand.length} lá</span></div><div className="hand-cards">{hand.map((id, index) => <Card key={id} id={id} inspect={inspect} style={{ '--fan-angle': `${Math.max(-12, Math.min(12, (index - (hand.length - 1) / 2) * 4))}deg` } as CSSProperties} picked={draft.discarding || draft.healing ? draft.discard.includes(id) : draft.card === id} pick={!locked && (draft.healing || (mode === 'turn' && (draft.discarding || playKind(game, id))) || (mode === 'response' && responseCard(game, id))) ? () => chooseHand(id) : undefined} />)}{!hand.length && <p>Bạn chưa có bài trên tay.</p>}</div></section>}
+    {you !== null && <section className="own-hand hand-tray wood-panel" data-animation-region="hand" aria-label="Bài trên tay của bạn"><div className="section-heading"><h3>Bài trên tay của bạn</h3><span>{hand.length} lá</span></div><div className="hand-cards">{hand.map((id, index) => <Card key={id} id={id} inspect={inspect} style={{ '--fan-angle': `${Math.max(-12, Math.min(12, (index - (hand.length - 1) / 2) * 4))}deg` } as CSSProperties} picked={draft.discarding || draft.healing ? draft.discard.includes(id) : draft.card === id} pick={!locked && (draft.healing || (mode === 'turn' && (draft.discarding || playKind(game, id))) || (mode === 'response' && responseCard(game, id))) ? () => chooseHand(id) : undefined} />)}{!hand.length && <p>Bạn chưa có bài trên tay.</p>}</div></section>}
     {(you !== null || table.store_pool.length > 0) && <div className={`decision-overlay${mode === 'turn' && draft.card === null && !draft.discarding && !draft.healing ? ' quiet-controls' : ''}${mode === 'waiting' && !draft.healing ? ' waiting-controls' : ''}`}>
       {!!table.store_pool.length && <section className="decision-pool" aria-label="General Store"><h3>General Store · Bài công khai</h3><div className="hand-cards">{table.store_pool.map((id) => <Card key={id} id={id} inspect={inspect} picked={mode === 'general_store' && draft.card === id} pick={!locked && !draft.healing && mode === 'general_store' ? () => choosePool(id) : undefined} />)}</div></section>}
       {!!choices.length && <section className="decision-pool" aria-label="Bài đang xem riêng"><h3>Bài đang xem riêng</h3><p>Chỉ bạn thấy các lá này. Chạm để chọn rồi xác nhận.</p><div className="hand-cards">{choices.map((id) => <Card key={id} id={id} inspect={inspect} picked={mode === 'keep_cards' ? draft.kept.includes(id) : draft.card === id} pick={!locked && !draft.healing && (mode === 'keep_cards' || mode === 'choose_draw_result') ? () => choosePool(id) : undefined} />)}</div></section>}
       {you !== null && <div className="game-input"><GameControls game={game} draft={draft} disabled={locked} setDraft={setDraft} sendAction={(action) => { setSelected(null); setSelectedPlayer(null); sendAction?.(action); }} /></div>}
     </div>}
     {(selected || inspectingPlayer) && <aside className="card-detail parchment" aria-label="Chi tiết lá bài"><button type="button" className="detail-close" aria-label="Đóng chi tiết lá" onClick={closeDetail}>×</button>{selected ? <><Artwork key={selected} file={cardFiles[selected]} label={cards[selected].name} /><h3>{cards[selected].name}</h3><p>{cards[selected].effect}</p></> : inspectingPlayer && <><Artwork key={inspectingPlayer.character} file={characterFiles[inspectingPlayer.character]} label={characters[inspectingPlayer.character].name} /><h3>{characters[inspectingPlayer.character].name}</h3><p>{characters[inspectingPlayer.character].ability}</p><p>Tầm bắn: {inspectingPlayer.weapon_range} · {inspectingPlayer.hand_count} lá trên tay</p></>}</aside>}
+    {stage && <GameFx batch={fxBatch} ctx={{ players: table.players, seats: game.seats, you, waiting: table.waiting }} enabled={fxEnabled && effectsEnabled} width={stage.width} height={stage.height} />}
     <div id="table-journal"><GameLog entries={log} expanded={journalOpen} onToggle={toggleJournal} /></div>
     {table.winner && <div className="result-overlay"><GameResult game={game} room={room} viewer={viewer} disabled={disabled} endGame={endGame} /></div>}
     </div>

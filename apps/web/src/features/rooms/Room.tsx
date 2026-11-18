@@ -1,18 +1,19 @@
 import type { ClientMessage, GameSnapshot, RoomView } from '../../generated/protocol';
 import { PROTOCOL_VERSION } from '../../generated/protocol';
 import GameBoard from '../game/GameBoard';
+import type { FxBatch } from '../game/fx';
 import type { LogEntry } from '../game/log';
 import { selectGameView } from '../game/state';
 
-type Props = { room: RoomView; game: GameSnapshot | null; log: LogEntry[]; viewer: number | null; disabled: boolean; send: (message: ClientMessage) => void };
+type Props = { room: RoomView; game: GameSnapshot | null; log: LogEntry[]; fxBatch: FxBatch | null; fxEnabled: boolean; viewer: number | null; disabled: boolean; send: (message: ClientMessage) => void };
 
-export default function Room({ room, game, log, viewer, disabled, send }: Props) {
+export default function Room({ room, game, log, fxBatch, fxEnabled, viewer, disabled, send }: Props) {
   const players = room.members.filter((member) => member.role === 'player').length;
   const you = room.members.find((member) => member.id === room.you);
   const host = room.host === room.you;
   const waiting = room.phase === 'waiting';
   const missing = Math.max(0, room.min_players - players);
-  if (game && !waiting) return <GameBoard game={game} room={room} log={log} viewer={viewer} disabled={disabled}
+  if (game && !waiting) return <GameBoard game={game} room={room} log={log} fxBatch={fxBatch} fxEnabled={fxEnabled} viewer={viewer} disabled={disabled}
     endGame={() => send({ v: PROTOCOL_VERSION, type: 'end_game' })}
     sendAction={(action) => send({ v: PROTOCOL_VERSION, type: 'game_action', action })}
     roomMenu={<><h2 id="room-overview">Phòng {room.code}</h2><p>{players} người chơi · Đang chơi</p><ul className="room-presence">{room.members.map((member) => <li key={member.id}><span>{member.nickname}{member.id === room.you ? ' (bạn)' : ''}</span><span>{member.online ? 'Đang kết nối' : 'Mất kết nối'}</span></li>)}</ul>

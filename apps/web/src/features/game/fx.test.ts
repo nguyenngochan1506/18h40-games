@@ -1,0 +1,138 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { readFile } from 'node:fs/promises';
+import type { EventKind, ServerMessage } from '../../generated/protocol.ts';
+import { eventsToFx, FX_BUDGET, FX_CONCURRENT, FX_BATCH_LIMIT, scheduleFx, shouldPlayFx, shotOrigin } from './fx.ts';
+import { cowboyFile, cowboyVariants, fxFiles, optionalSceneFiles, sceneFiles } from './assetMap.ts';
+import { demoGame, demoRoom } from './demo.ts';
+import { demoFx } from './demoFx.ts';
+import { initialGameState, receiveGameState, selectGameView } from './state.ts';
+
+const ctx = { players: selectGameView(demoGame.view).table.players, seats: demoGame.seats, you: 0 };
+test('BANG and Gatling emit directed shots; response and Barrel deflect without inventing a shot', () => {
+  const bang = eventsToFx(demoFx.shot.events, ctx);
+  assert.deepEqual(bang.find(e => e.kind === 'shot'), { kind: 'shot', from: 1, to: 0 });
+  const targets = eventsToFx(demoFx.gatling.events, ctx).filter(e => e.kind === 'shot');
+  assert.deepEqual(targets.map(e => e.to), [1, 2, 4]);
+  assert.deepEqual(targets.map(e => e.delay), [0, 130, 260]);
+  const missed = eventsToFx(demoFx.missed.events, ctx);
+  assert.equal(missed.filter(e => e.kind === 'deflect').length, 1);
+  assert.equal(missed.some(e => e.kind === 'shot'), false);
+  const barrel = eventsToFx([{ type: 'draw_revealed', player: 1, reason: 'barrel', card: 37 }], ctx);
+  assert.equal(barrel.some(e => e.kind === 'deflect'), true);
+  assert.equal(eventsToFx([{ type: 'draw_revealed', player: 1, reason: 'barrel', card: 0 }], ctx).some(e => e.kind === 'deflect'), false);
+});
+
+test('unknown draws and stolen cards stay face down; private details enrich exactly one public flight', () => {
+  assert.deepEqual(eventsToFx(demoFx.draw.events, ctx).map(e => e.card), [1, 26]);
+  const spectator = { ...ctx, you: null };
+  assert.deepEqual(eventsToFx(demoFx.draw.events, spectator).map(e => e.card), [undefined, undefined]);
+  const stealing: EventKind[] = [{ type: 'cards_stolen', source: 0, target: 1, count: 1 }, { type: 'stolen_cards', source: 0, target: 1, cards: [7] }];
+  assert.deepEqual(eventsToFx(stealing, ctx).map(e => e.card), [7]);
+  assert.deepEqual(eventsToFx(stealing, spectator).map(e => e.card), [undefined]);
+  assert.deepEqual(eventsToFx(stealing, { ...ctx, you: 2 }).map(e => e.card), [undefined]);
+  const affect: EventKind[] = [{ type: 'hand_affected', source: 0, target: 1, kind: 'cat_balou', count: 1 }, { type: 'hand_card_affected', source: 0, target: 1, kind: 'cat_balou', card: 8 }];
+  assert.equal(eventsToFx(affect, ctx)[0].to, 'discard');
+  assert.equal(eventsToFx(affect, spectator)[0].card, undefined);
+  assert.equal(eventsToFx([{ type: 'choice_offered', player: 1, cards: [75] }], ctx).length, 0);
+  const shown = eventsToFx([{ type: 'card_shown', player: 1, card: 75 }], spectator);
+  assert.equal(shown[0].card, 75);
+  const many = eventsToFx([{ type: 'cards_drawn', player: 1, count: 9999 }], ctx);
+  assert.equal(many.length, 3);
+});
+
+test('equipment, inherited cards, Store and dynamite transfer use the correct public route', () => {
+  const equip = eventsToFx(demoFx.jail.events, ctx);
+  assert.equal(equip.filter(e => e.kind === 'card').length, 1);
+  assert.equal(equip[0].from, 'hand'); assert.equal(equip[0].to, 'equipment-1');
+  const transfers = eventsToFx([{ type: 'card_passed', source: 1, target: 2, card: 65 }, { type: 'cards_inherited', player: 0, victim: 3, count: 2 }, { type: 'store_card_claimed', player: 0, card: 37 }], ctx);
+  assert.deepEqual(transfers[0], { kind: 'card', from: 'equipment-1', to: 'equipment-2', card: 65, delay: 0 });
+  assert.equal(transfers[1].from, 3); assert.equal(transfers[1].card, undefined);
+  const inherited = eventsToFx([{ type: 'cards_inherited', player: 0, victim: 3, count: 2 }, { type: 'cards_drawn', player: 0, count: 2 }, { type: 'cards_received', player: 0, cards: [1, 26] }], ctx);
+  assert.equal(inherited.length, 2); assert.deepEqual(inherited.map(e => e.card), [1, 26]);
+  assert.equal(inherited[0].from, 3);
+  assert.equal(transfers.at(-1)!.card, 37); assert.equal(transfers.at(-1)!.to, 'hand');
+});
+
+test('damage, healing, explosion, jail, death, turn, duel and victory map to explicit cues', () => {
+  for (const [key, expected] of [['damage', 'damage'], ['heal', 'heal'], ['explosion', 'explosion'], ['jail', 'jail'], ['duel', 'duel'], ['eliminate', 'eliminate'], ['turn', 'turn'], ['win', 'win']] as const) assert.ok(eventsToFx(demoFx[key].events, ctx).some(e => e.kind === expected), key);
+  assert.equal(eventsToFx(demoFx.damage.events, ctx).some(e => e.kind === 'explosion'), false);
+  assert.ok(eventsToFx([{ type: 'draw_revealed', player: 1, reason: 'jail', card: 37 }], ctx).some(e => e.kind === 'escape' && e.label === 'THOÁT!'));
+  assert.equal(eventsToFx(demoFx.turn.events, ctx).at(-1)?.label, 'Lượt của Linh');
+});
+
+test('batch planner caps work, concurrent intervals and lifetime; congested batches shorten instead of queueing', () => {
+  const cues = Array.from({ length: 200 }, () => ({ kind: 'shot' as const, from: 0 as const, to: 1 as const }));
+  const plan = scheduleFx(cues);
+  assert.ok(plan.length <= FX_BATCH_LIMIT);
+  assert.ok(plan.every(e => e.start + e.duration <= FX_BUDGET));
+  for (const time of plan.flatMap(e => [e.start, e.start + e.duration - .01])) assert.ok(plan.filter(e => e.start <= time && e.start + e.duration > time).length <= FX_CONCURRENT);
+  assert.ok(scheduleFx(cues, true)[0].duration < plan[0].duration);
+  const batch = { id: 3, events: demoFx.shot.events, waiting: null };
+  const ready = { enabled: true, hidden: false, reduced: false };
+  assert.equal(shouldPlayFx(batch, null, ready), true);
+  assert.equal(shouldPlayFx(null, null, ready), false);
+  assert.equal(shouldPlayFx(batch, 3, ready), false);
+  for (const flag of [{ enabled: false }, { hidden: true }, { reduced: true }]) assert.equal(shouldPlayFx(batch, null, { ...ready, ...flag }), false);
+});
+
+test('reducer keeps only fresh filtered events; setup/join/rejoin/gaps never replay FX', () => {
+  let state = receiveGameState(initialGameState, { v: 1, type: 'game_started', seq: 0, seats: demoGame.seats, view: demoGame.view });
+  const update = (seq: number, events: EventKind[] = demoFx.shot.events): ServerMessage => ({ v: 1, type: 'game_update', seq, view: demoGame.view, events });
+  state = receiveGameState(state, update(0)); assert.equal(state.fxBatch, null);
+  state = receiveGameState(state, update(1));
+  assert.equal(state.fxBatch?.id, 1); assert.deepEqual(state.fxBatch?.events, demoFx.shot.events);
+  const first = state.fxBatch;
+  assert.equal(receiveGameState(state, update(1)), state);
+  assert.equal(receiveGameState(state, update(0)), state);
+  assert.equal(receiveGameState(state, { v: 1, type: 'pong', nonce: 1 }).fxBatch, first);
+  state = receiveGameState(state, update(2, demoFx.heal.events));
+  assert.deepEqual(state.fxBatch?.events, demoFx.heal.events);
+  const gap = receiveGameState(state, update(4)); assert.equal(gap.fxBatch, null); assert.equal(gap.desynced, true);
+  const joined: ServerMessage = { v: 1, type: 'joined', room_code: 'ABCDE', token: 'private', room: demoRoom, game: demoGame };
+  state = receiveGameState(gap, joined); assert.equal(state.fxBatch, null);
+  assert.equal(receiveGameState(state, update(17)), state);
+  state = receiveGameState(state, update(18)); assert.equal(state.fxBatch?.id, 18);
+  assert.equal(receiveGameState(state, { v: 1, type: 'left' }).fxBatch, null);
+});
+
+test('cowboy style is stable by id across six variants with a safe original fallback', () => {
+  for (let id = 0; id < 50; id++) {
+    assert.equal(cowboyFile(id, cowboyVariants), cowboyVariants[id % 6]);
+    assert.equal(cowboyFile(id, []), sceneFiles.cowboy);
+  }
+});
+
+test('optional art: validate supplied WebP files and report missing files without failing', async t => {
+  const present: string[] = [], missing: string[] = [];
+  for (const url of Object.values(optionalSceneFiles)) {
+    let data: Buffer;
+    try { data = await readFile(new URL(`../../../../../assets${url}`, import.meta.url)); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; missing.push(url); continue; }
+    assert.equal(data.toString('ascii', 0, 4), 'RIFF', url);
+    assert.equal(data.toString('ascii', 8, 12), 'WEBP', url);
+    assert.ok(data.length > 1024, url); present.push(url);
+  }
+  t.diagnostic(`Optional scene files present (${present.length}): ${present.join(', ') || 'none'}`);
+  t.diagnostic(`Optional scene files missing (${missing.length}), CSS/original fallback: ${missing.join(', ') || 'none'}`);
+});
+
+
+test('eight delivered FX images are required and retain their calibrated dimensions', async () => {
+  assert.equal(Object.keys(fxFiles).length, 8);
+  for (const [kind, url] of Object.entries(fxFiles)) {
+    const data = await readFile(new URL(`../../../../../assets${url}`, import.meta.url));
+    assert.equal(data.toString('ascii', 0, 4), 'RIFF', url);
+    assert.equal(data.toString('ascii', 8, 12), 'WEBP', url);
+    assert.equal(data.toString('ascii', 12, 16), 'VP8X', url);
+    const dimensions = [data.readUIntLE(24, 3) + 1, data.readUIntLE(27, 3) + 1];
+    assert.deepEqual(dimensions, kind === 'bullet' ? [2172, 724] : kind === 'jail' ? [1086, 1448] : [1254, 1254], url);
+  }
+});
+
+test('muzzle origin follows the near hand on either firing direction, preserving the viewer anchor', () => {
+  const actor = { x: 20, y: 30, width: 100, height: 200 }, from = { x: 70, y: 100 };
+  assert.deepEqual(shotOrigin(from, { x: 300, y: 80 }, actor), { x: 92, y: 154 });
+  assert.deepEqual(shotOrigin(from, { x: 0, y: 80 }, actor), { x: 48, y: 154 });
+  assert.equal(shotOrigin(from, { x: 300, y: 80 }), from);
+});
