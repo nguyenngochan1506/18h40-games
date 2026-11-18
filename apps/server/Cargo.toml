@@ -6,13 +6,14 @@ edition.workspace = true
 [dependencies]
 axum = { version = "0.8.9", features = ["ws"] }
 futures-util = { version = "0.3.34", features = ["sink"] }
+getrandom = "0.4.3"
 protocol = { path = "../../crates/protocol" }
 serde.workspace = true
 serde_json.workspace = true
-tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "net"] }
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "net", "sync", "time"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [dev-dependencies]
-tokio = { version = "1.54.1", features = ["time"] }
+tokio = { version = "1.54.1", features = ["test-util"] }
 tokio-tungstenite = "0.30.0"

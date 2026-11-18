@@ -8,8 +8,11 @@ async fn ping_pong_and_errors_keep_the_connection_usable() {
     tokio::time::timeout(Duration::from_secs(10), async {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        let server =
-            tokio::spawn(async move { axum::serve(listener, server::app()).await.unwrap() });
+        let server = tokio::spawn(async move {
+            axum::serve(listener, server::app(server::Config::default()))
+                .await
+                .unwrap()
+        });
         let (mut socket, _) = connect_async(format!("ws://{address}/ws")).await.unwrap();
 
         let invalid_frames = [

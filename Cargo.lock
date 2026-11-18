@@ -645,6 +645,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "futures-util",
+ "getrandom 0.4.3",
  "protocol",
  "serde",
  "serde_json",
