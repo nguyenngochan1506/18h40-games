@@ -9,10 +9,10 @@ pub mod rules;
 pub mod state;
 pub mod view;
 
-pub use actions::{Action, ActionError};
+pub use actions::{Action, ActionError, CardSelection};
 pub use engine::{apply, default_action, setup};
 pub use events::{Event, EventKind, Visibility, filter_events};
 pub use model::*;
-pub use rules::{DistanceModifiers, distance};
+pub use rules::{DistanceModifiers, distance, effective_distance};
 pub use state::*;
 pub use view::{PlayerView, SpectatorView, spectator_view, view};

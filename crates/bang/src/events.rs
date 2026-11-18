@@ -59,6 +59,56 @@ pub enum EventKind {
     DecisionChanged {
         decision: Option<Decision>,
     },
+    CardEquipped {
+        player: PlayerId,
+        card: CardId,
+    },
+    CardPassed {
+        source: PlayerId,
+        target: PlayerId,
+        card: CardId,
+    },
+    HandAffected {
+        source: PlayerId,
+        target: PlayerId,
+        kind: crate::model::CardKind,
+        count: usize,
+    },
+    HandCardAffected {
+        source: PlayerId,
+        target: PlayerId,
+        kind: crate::model::CardKind,
+        card: CardId,
+    },
+    InPlayCardAffected {
+        source: PlayerId,
+        target: PlayerId,
+        kind: crate::model::CardKind,
+        card: CardId,
+    },
+    DrawRevealed {
+        player: PlayerId,
+        reason: crate::model::CardKind,
+        card: CardId,
+    },
+    StoreOpened {
+        pool: Vec<CardId>,
+    },
+    StoreCardClaimed {
+        player: PlayerId,
+        card: CardId,
+    },
+    PoolDiscarded {
+        cards: Vec<CardId>,
+    },
+    BountyAwarded {
+        player: PlayerId,
+        victim: PlayerId,
+    },
+    SheriffPenalized {
+        player: PlayerId,
+        victim: PlayerId,
+    },
     GameEnded {
         winner: Winner,
         roles: Vec<Role>,

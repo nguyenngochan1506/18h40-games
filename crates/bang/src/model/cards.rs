@@ -63,6 +63,27 @@ impl CardKind {
     ];
 }
 
+impl CardKind {
+    pub const fn weapon_range(self) -> Option<u16> {
+        match self {
+            Self::Volcanic => Some(1),
+            Self::Schofield => Some(2),
+            Self::Remington => Some(3),
+            Self::RevCarabine => Some(4),
+            Self::Winchester => Some(5),
+            _ => None,
+        }
+    }
+
+    pub const fn is_equipment(self) -> bool {
+        self.weapon_range().is_some()
+            || matches!(
+                self,
+                Self::Barrel | Self::Dynamite | Self::Jail | Self::Mustang | Self::Scope
+            )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Suit {

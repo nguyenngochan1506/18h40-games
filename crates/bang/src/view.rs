@@ -27,6 +27,7 @@ pub struct SpectatorView {
     pub discard_count: usize,
     pub discard_top: Option<CardId>,
     pub winner: Option<Winner>,
+    pub store_pool: Vec<CardId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,7 +51,7 @@ pub fn spectator_view(state: &GameState) -> SpectatorView {
                 alive: p.alive,
                 hand_count: p.hand.len(),
                 in_play: p.in_play.clone(),
-                weapon_range: 1,
+                weapon_range: p.weapon_range(),
                 role: (p.role == Role::Sheriff || !p.alive || state.winner.is_some())
                     .then_some(p.role),
             })
@@ -59,8 +60,21 @@ pub fn spectator_view(state: &GameState) -> SpectatorView {
         waiting: state.decision(),
         draw_count: state.draw_pile.len(),
         discard_count: state.discard_pile.len(),
-        discard_top: state.discard_pile.last().copied(),
+        discard_top: state
+            .discard_pile
+            .last()
+            .copied()
+            .filter(|card| Some(*card) != state.hidden_discard_top),
         winner: state.winner,
+        store_pool: state
+            .pending
+            .iter()
+            .flat_map(|frame| match &frame.kind {
+                crate::state::PendingKind::GeneralStore { pool, .. } => pool.as_slice(),
+                _ => &[],
+            })
+            .copied()
+            .collect(),
     }
 }
 

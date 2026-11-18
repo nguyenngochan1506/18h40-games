@@ -1,6 +1,6 @@
 use crate::{
     actions::ActionError,
-    model::{PlayerId, Role},
+    model::{CardKind, PlayerId, Role},
     state::{GameState, Winner},
 };
 use serde::{Deserialize, Serialize};
@@ -67,4 +67,26 @@ pub(crate) fn winner(state: &GameState) -> Option<Winner> {
     } else {
         None
     }
+}
+
+pub fn effective_distance(
+    state: &GameState,
+    from: PlayerId,
+    to: PlayerId,
+) -> Result<u16, ActionError> {
+    let source = state
+        .players
+        .get(from.0)
+        .ok_or(ActionError::InvalidTarget)?;
+    let target = state.players.get(to.0).ok_or(ActionError::InvalidTarget)?;
+    distance(
+        state,
+        from,
+        to,
+        DistanceModifiers {
+            target_mustang: u8::from(target.has_in_play(CardKind::Mustang)),
+            source_scope: u8::from(source.has_in_play(CardKind::Scope)),
+            ..DistanceModifiers::default()
+        },
+    )
 }
