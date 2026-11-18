@@ -7,6 +7,9 @@ import { selectGameView } from './state';
 import { actionMode, emptyDraft, needsTarget, playKind, responseCard } from './actions';
 import type { ActionDraft } from './actions';
 import GameControls from './GameControls';
+import GameLog from './GameLog';
+import GameResult from './GameResult';
+import type { LogEntry } from './log';
 import './game.css';
 
 function Artwork({ file, label }: { file: string; label: string }) {
@@ -65,7 +68,7 @@ function Seat({ player, nickname, own, turn, waiting, presence, inspect, chooseT
   </article>;
 }
 
-export default function GameBoard({ game, room, disabled = false, sendAction }: { game: GameSnapshot; room: RoomView; disabled?: boolean; sendAction?: (action: Action) => void }) {
+export default function GameBoard({ game, room, disabled = false, sendAction, log = [], viewer = game.view.perspective === 'player' ? game.view.view.you : null, endGame }: { game: GameSnapshot; room: RoomView; disabled?: boolean; sendAction?: (action: Action) => void; log?: LogEntry[]; viewer?: number | null; endGame?: () => void }) {
   const { table, you, hand, choices } = selectGameView(game.view);
   const [selected, setSelected] = useState<CardKind | null>(null);
   const detail = useRef<HTMLElement>(null);
@@ -94,8 +97,9 @@ export default function GameBoard({ game, room, disabled = false, sendAction }: 
   const name = (id: number) => `${game.seats.find((seat) => seat.player_id === id)?.nickname ?? `Ghế ${id + 1}`}${id === you ? ' (bạn)' : ''}`;
   const status = waitText(table, name);
   return <section className="bang-board" aria-label="Bàn chơi BANG!">
+    <GameResult game={game} room={room} viewer={viewer} disabled={disabled} endGame={endGame} />
     <header className="board-heading"><div><p className="game-eyebrow">Bộ gốc · {table.players.filter((player) => player.alive).length}/{table.players.length} người còn sống</p><h2>BANG!</h2></div><span className="view-label">{you === null ? 'Góc nhìn khán giả' : 'Góc nhìn của bạn'}</span></header>
-    <div className={`game-wait${table.winner ? ' game-finished' : ''}`} role="status" aria-live="polite"><span aria-hidden="true">{table.winner ? '★' : '●'}</span><p>{status}</p></div>
+    {!table.winner && <div className={`game-wait${table.winner ? ' game-finished' : ''}`} role="status" aria-live="polite"><span aria-hidden="true">{table.winner ? '★' : '●'}</span><p>{status}</p></div>}
     <p className="view-only-note">{you === null ? 'Bạn đang xem ván chơi.' : 'Chạm bài trên tay để chọn khi đến lượt; hover hoặc dùng Tab để xem hiệu ứng.'}</p>
     <div className="board-layout"><div className="board-main">
       <div className="game-arena">
@@ -110,6 +114,6 @@ export default function GameBoard({ game, room, disabled = false, sendAction }: 
       {!!table.store_pool.length && <section className="own-hand decision-pool" aria-label="General Store"><h3>General Store · Bài công khai</h3><div className="hand-cards">{table.store_pool.map((id) => <Card key={id} id={id} inspect={inspect} picked={mode === 'general_store' && draft.card === id} pick={!locked && !draft.healing && mode === 'general_store' ? () => choosePool(id) : undefined} />)}</div></section>}
       {!!choices.length && <section className="own-hand decision-pool" aria-label="Bài đang xem riêng"><h3>Bài đang xem riêng</h3><p>Chỉ bạn thấy các lá này. Chạm để chọn rồi xác nhận.</p><div className="hand-cards">{choices.map((id) => <Card key={id} id={id} inspect={inspect} picked={mode === 'keep_cards' ? draft.kept.includes(id) : draft.card === id} pick={!locked && !draft.healing && (mode === 'keep_cards' || mode === 'choose_draw_result') ? () => choosePool(id) : undefined} />)}</div></section>}
       {you !== null && <div className="game-input" ref={controls}><GameControls game={game} draft={draft} disabled={locked} setDraft={setDraft} sendAction={(action) => sendAction?.(action)} /></div>}
-    </div><aside className="card-detail" ref={detail} aria-label="Chi tiết lá bài"><p className="game-eyebrow">Chi tiết lá bài</p>{selected ? <><Artwork key={selected} file={cardFiles[selected]} label={cards[selected].name} /><h3>{cards[selected].name}</h3><p>{cards[selected].effect}</p></> : <><h3>Khám phá các lá bài</h3><p>Chạm, đưa chuột hoặc dùng phím Tab tới một lá bài để đọc hiệu ứng tiếng Việt.</p><span className="detail-mark" aria-hidden="true">♠ ♥ ♣ ♦</span></>}</aside></div>
+    </div><div className="board-sidebar"><aside className="card-detail" ref={detail} aria-label="Chi tiết lá bài"><p className="game-eyebrow">Chi tiết lá bài</p>{selected ? <><Artwork key={selected} file={cardFiles[selected]} label={cards[selected].name} /><h3>{cards[selected].name}</h3><p>{cards[selected].effect}</p></> : <><h3>Khám phá các lá bài</h3><p>Chạm, đưa chuột hoặc dùng phím Tab tới một lá bài để đọc hiệu ứng tiếng Việt.</p><span className="detail-mark" aria-hidden="true">♠ ♥ ♣ ♦</span></>}</aside><GameLog entries={log} /></div></div>
   </section>;
 }

@@ -3,7 +3,7 @@ import { PROTOCOL_VERSION } from '../generated/protocol';
 import type { ClientMessage, RoomView, ServerMessage } from '../generated/protocol';
 import Lobby from '../features/lobby/Lobby';
 import Room from '../features/rooms/Room';
-import { inputLocked, receiveGameState } from '../features/game/state';
+import { initialGameState, inputLocked, receiveGameState } from '../features/game/state';
 import type { GameSyncState } from '../features/game/state';
 import { errorMessages } from '../shared/lib/errors';
 import { connectSocket } from '../shared/lib/socket';
@@ -17,7 +17,7 @@ export default function App() {
   const session = useRef(initialSession);
   const socket = useRef<WebSocket | null>(null);
   const [room, setRoom] = useState<RoomView | null>(null);
-  const [gameState, setGameState] = useState<GameSyncState>({ game: null, desynced: false });
+  const [gameState, setGameState] = useState<GameSyncState>(initialGameState);
   const gameRef = useRef(gameState);
   const game = gameState.game;
   const [restoring, setRestoring] = useState(Boolean(initialSession));
@@ -112,7 +112,7 @@ export default function App() {
                 session.current = null;
                 saveSession(null);
                 setRoom(null);
-                setGameSync({ game: null, desynced: false });
+                setGameSync(initialGameState);
                 setRestoring(false);
                 setStatus('Đã kết nối');
               }
@@ -173,7 +173,7 @@ export default function App() {
       <p className="mt-3 text-sm text-stone-600" role="status" aria-live="polite">{status}</p>
       {gameState.desynced && <p className="mt-5 border-l-2 border-amber-700 pl-3 text-sm text-amber-900" role="alert">Bàn chơi đang mất đồng bộ. Đang kết nối lại để lấy trạng thái mới; tạm khóa thao tác.</p>}
       {error && <p className="mt-5 border-l-2 border-red-700 pl-3 text-sm text-red-800" role="alert">{error}</p>}
-      {room ? <Room room={room} game={game} disabled={disabled} send={send} /> : restoring ? <p className="mt-8 text-stone-600">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p> : <Lobby disabled={disabled} send={send} />}
+      {room ? <Room room={room} game={game} log={gameState.log} viewer={gameState.viewer} disabled={disabled} send={send} /> : restoring ? <p className="mt-8 text-stone-600">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p> : <Lobby disabled={disabled} send={send} />}
     </main>
   );
 }
