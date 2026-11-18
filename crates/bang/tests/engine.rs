@@ -129,14 +129,21 @@ fn setup_deals_roles_health_cards_and_the_first_turn_for_every_player_count() {
                     })
                     .unwrap();
                 assert_eq!(initial, player.health as usize);
-                assert_eq!(
-                    player.hand.len(),
-                    initial + if player.role == Role::Sheriff { 2 } else { 0 }
-                );
+                let received: usize = events
+                    .iter()
+                    .filter_map(|e| match e.kind {
+                        EventKind::CardsDrawn { player, count } if player == id => Some(count),
+                        _ => None,
+                    })
+                    .sum();
+                assert_eq!(player.hand.len(), received);
             }
             assert_eq!(state.players[state.turn.player.0].role, Role::Sheriff);
             assert_eq!(state.turn.step, TurnStep::Play);
-            assert_eq!(state.pending.len(), 0);
+            assert!(state.pending.iter().all(|f| matches!(
+                f.kind,
+                PendingKind::DrawChoice { .. } | PendingKind::KeepCards { .. }
+            )));
         }
     }
     for count in [0, 1, 3, 8, usize::MAX] {
@@ -369,7 +376,7 @@ fn invalid_actions_preserve_state_and_rng() {
 }
 
 #[test]
-fn response_remaining_supports_multiple_missed_without_enabling_character_skills() {
+fn slab_requires_two_missed_and_willy_can_fire_again() {
     let mut game = Scenario::new(4);
     game.state.players[0].character = Character::SlabTheKiller;
     let first = game.give(1, CardKind::Missed);
@@ -377,16 +384,11 @@ fn response_remaining_supports_multiple_missed_without_enabling_character_skills
     game.shoot(0, 1);
     assert!(matches!(
         game.state.pending.last().unwrap().kind,
-        PendingKind::AttackResponse { remaining: 1, .. }
+        PendingKind::AttackResponse { remaining: 2, .. }
     ));
-    if let PendingKind::AttackResponse { remaining, .. } =
-        &mut game.state.pending.last_mut().unwrap().kind
-    {
-        *remaining = 2;
-    }
     let id = game.state.pending.last().unwrap().id;
     game.respond(Some(first));
-    assert_eq!(game.state.pending.last().unwrap().id, id);
+    assert_ne!(game.state.pending.last().unwrap().id, id);
     assert!(matches!(
         game.state.decision().unwrap().kind,
         DecisionKind::AttackResponse { remaining: 1, .. }
@@ -396,13 +398,12 @@ fn response_remaining_supports_multiple_missed_without_enabling_character_skills
     assert_eq!(game.state.players[1].health, 4);
     game.state.players[0].character = Character::WillyTheKid;
     let bang = game.give(0, CardKind::Bang);
-    game.reject(
+    game.act(
         0,
         Action::Play {
             card: bang,
             target: Some(PlayerId(1)),
         },
-        ActionError::BangLimit,
     );
 }
 
@@ -447,7 +448,7 @@ fn beer_heals_only_self_and_never_exceeds_maximum_or_works_with_two_alive() {
     let id = game.state.pending.last().unwrap().id;
     game.respond(Some(beer));
     assert_eq!(game.state.players[1].health, 0);
-    assert_eq!(game.state.pending.last().unwrap().id, id);
+    assert_ne!(game.state.pending.last().unwrap().id, id);
     game.respond(None);
     assert!(!game.state.players[1].alive);
 }
@@ -483,7 +484,7 @@ fn dying_preserves_one_window_for_multiple_beers_and_never_auto_saves() {
         game.respond(Some(beer));
         assert_eq!(game.state.players[1].health, index as i16 - 1);
         if index < 2 {
-            assert_eq!(game.state.pending.last().unwrap().id, id);
+            assert_ne!(game.state.pending.last().unwrap().id, id);
             assert!(
                 matches!(game.state.pending.last().unwrap().kind, PendingKind::Dying { needed, .. } if needed == (2 - index) as u16)
             );
@@ -865,3 +866,6 @@ mod fuzz;
 
 #[path = "engine/cards.rs"]
 mod cards;
+
+#[path = "engine/characters.rs"]
+mod characters;

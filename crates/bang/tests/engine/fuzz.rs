@@ -11,8 +11,11 @@ fn seeded_bots_cover_all_cards_frames_and_outcomes() {
     let mut longest = 0;
     let mut cards = BTreeMap::new();
     let mut frames = BTreeMap::new();
+    let mut appearances = [0usize; 16];
+    let mut skills = [0usize; 16];
     let mut wins = [0usize; 3];
     let mut beer_saves = 0;
+    let mut sid_saves = 0;
     let mut bounties = 0;
     let mut penalties = 0;
     for count in 4..=7 {
@@ -24,6 +27,17 @@ fn seeded_bots_cover_all_cards_frames_and_outcomes() {
             assert_eq!(state, replay);
             assert_eq!(events, replay_events);
             invariant(&state);
+            for player in &state.players {
+                appearances[Character::ALL
+                    .iter()
+                    .position(|c| *c == player.character)
+                    .unwrap()] += 1;
+            }
+            for event in &events {
+                if let EventKind::SkillActivated { character, .. } = event.kind {
+                    skills[Character::ALL.iter().position(|c| *c == character).unwrap()] += 1;
+                }
+            }
             let mut bot = ChaCha8Rng::seed_from_u64(seed + 10000);
             let mut steps = 0;
             while state.winner.is_none() && steps < 4096 {
@@ -44,11 +58,12 @@ fn seeded_bots_cover_all_cards_frames_and_outcomes() {
                     assert_eq!(rng.clone().next_u64(), before_rng.clone().next_u64());
                     invariant(&state);
                 }
-                let player = state.decision().unwrap().player;
+                let actions = legal_actions(&state);
+                let (player, action) = actions[bot.random_range(0..actions.len())].clone();
                 let before_health = state.players[player.0].health;
                 let dying = matches!(state.decision().unwrap().kind, DecisionKind::Dying { .. });
-                let actions = legal_actions(&state);
-                let action = actions[bot.random_range(0..actions.len())].clone();
+                let beer_response = matches!(&action, Action::Respond { card: Some(card), .. } if card.card().is_some_and(|card| card.kind == CardKind::Beer));
+                let sid_heal = matches!(&action, Action::SidHeal { .. });
                 let events = apply(&mut state, player, action.clone(), &mut rng).unwrap();
                 let replay_events = apply(&mut replay, player, action, &mut replay_rng).unwrap();
                 assert_eq!(state, replay);
@@ -57,12 +72,21 @@ fn seeded_bots_cover_all_cards_frames_and_outcomes() {
                 invariant(&state);
                 invariant(&replay);
                 if dying && before_health <= 0 && state.players[player.0].health > 0 {
-                    beer_saves += 1;
+                    if beer_response {
+                        beer_saves += 1;
+                    }
+                    if sid_heal {
+                        sid_saves += 1;
+                    }
                 }
                 for event in &events {
                     match event.kind {
                         EventKind::CardPlayed { card, .. } => {
                             *cards.entry(card.card().unwrap().kind).or_insert(0usize) += 1
+                        }
+                        EventKind::SkillActivated { character, .. } => {
+                            skills[Character::ALL.iter().position(|c| *c == character).unwrap()] +=
+                                1
                         }
                         EventKind::BountyAwarded { .. } => bounties += 1,
                         EventKind::SheriffPenalized { .. } => penalties += 1,
@@ -76,6 +100,9 @@ fn seeded_bots_cover_all_cards_frames_and_outcomes() {
                         PendingKind::Duel { .. } => "duel",
                         PendingKind::ResolveTargets { .. } => "resolve_targets",
                         PendingKind::GeneralStore { .. } => "general_store",
+                        PendingKind::DrawChoice { .. } => "draw_choice",
+                        PendingKind::KeepCards { .. } => "keep_cards",
+                        PendingKind::ChooseDrawResult { .. } => "choose_draw_result",
                     };
                     if !frames.contains_key(name) {
                         let restored: GameState =
@@ -115,15 +142,28 @@ fn seeded_bots_cover_all_cards_frames_and_outcomes() {
         "duel",
         "resolve_targets",
         "general_store",
+        "draw_choice",
+        "keep_cards",
+        "choose_draw_result",
     ] {
         assert!(
             frames.get(name).copied().unwrap_or(0) > 0,
             "Missing frame coverage: {name}"
         );
     }
+    for (i, character) in Character::ALL.iter().enumerate() {
+        assert!(
+            appearances[i] > 0 && skills[i] > 0,
+            "Missing skill coverage: {character:?}"
+        );
+        println!(
+            "Character {character:?}: appearances={}, activations={}",
+            appearances[i], skills[i]
+        );
+    }
     assert!(wins.iter().all(|count| *count > 0));
-    assert!(beer_saves > 0 && bounties > 0 && penalties > 0);
+    assert!(beer_saves > 0 && sid_saves > 0 && bounties > 0 && penalties > 0);
     println!(
-        "Fuzz: {games} games, {total_actions} actions plus replay, longest {longest}, 0 step-limit hits; wins sheriff/outlaw/renegade={wins:?}; beer_saves={beer_saves}, bounties={bounties}, penalties={penalties}; cards={cards:?}; frames={frames:?}"
+        "Fuzz: {games} games, {total_actions} actions plus replay, longest {longest}, 0 step-limit hits; wins sheriff/outlaw/renegade={wins:?}; beer_saves={beer_saves}, sid_saves={sid_saves}, bounties={bounties}, penalties={penalties}; cards={cards:?}; frames={frames:?}"
     );
 }

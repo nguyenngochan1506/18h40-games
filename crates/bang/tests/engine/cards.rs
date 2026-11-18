@@ -879,7 +879,7 @@ fn dynamite_dying_can_use_multiple_beers_then_resume_jail_without_rechecking() {
     for (index, beer) in beers.into_iter().enumerate() {
         let events = game.respond(Some(beer));
         if index < 2 {
-            assert_eq!(game.state.pending.last().unwrap().id, id);
+            assert_ne!(game.state.pending.last().unwrap().id, id);
         } else {
             assert_eq!(revealed(&events), vec![CardKind::Jail]);
         }

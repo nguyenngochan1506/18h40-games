@@ -29,11 +29,18 @@ impl Scenario {
             } else {
                 Role::Outlaw
             };
-            player.character = Character::BartCassidy;
+            player.character = Character::SidKetchum;
             player.max_health = 4 + i16::from(index == 0);
             player.health = player.max_health;
         }
         Self { state, rng }
+    }
+
+    pub fn character(&mut self, player: usize, character: Character) {
+        let own = &mut self.state.players[player];
+        own.character = character;
+        own.max_health = character.health() + i16::from(own.role == Role::Sheriff);
+        own.health = own.max_health;
     }
 
     pub fn give(&mut self, player: usize, kind: CardKind) -> CardId {
@@ -138,6 +145,7 @@ impl Scenario {
                     player: PlayerId(player),
                     source,
                     needed: 1,
+                    duel_initiator: None,
                 },
             })
             .unwrap(),
@@ -164,10 +172,7 @@ pub fn invariant(state: &GameState) {
                 .iter()
                 .flat_map(|p| p.hand.iter().chain(&p.in_play)),
         )
-        .chain(state.pending.iter().flat_map(|frame| match &frame.kind {
-            PendingKind::GeneralStore { pool, .. } => pool.as_slice(),
-            _ => &[],
-        }))
+        .chain(state.pending.iter().flat_map(Pending::cards))
     {
         assert!(card.card().is_some());
         counts[usize::from(card.0)] += 1;
@@ -216,7 +221,7 @@ pub fn invariant(state: &GameState) {
     }
 }
 
-pub fn legal_actions(state: &GameState) -> Vec<Action> {
+fn decision_actions(state: &GameState) -> Vec<Action> {
     let (player, default) = default_action(state).unwrap();
     let own = &state.players[player.0];
     let mut actions = vec![default];
@@ -229,6 +234,47 @@ pub fn legal_actions(state: &GameState) -> Vec<Action> {
             | PendingKind::Duel { .. } => CardKind::Bang,
             PendingKind::AttackResponse { .. } => CardKind::Missed,
             PendingKind::Dying { .. } => CardKind::Beer,
+            PendingKind::DrawChoice { .. } => {
+                if own.character == Character::PedroRamirez && !state.discard_pile.is_empty() {
+                    actions.push(Action::ChooseDrawSource {
+                        pending_id: frame.id,
+                        source: DrawSource::Discard,
+                    });
+                }
+                if own.character == Character::JesseJones {
+                    for (i, target) in state.players.iter().enumerate() {
+                        if i != player.0 && target.alive && !target.hand.is_empty() {
+                            actions.push(Action::ChooseDrawSource {
+                                pending_id: frame.id,
+                                source: DrawSource::Player(PlayerId(i)),
+                            });
+                        }
+                    }
+                }
+                return actions;
+            }
+            PendingKind::KeepCards { pool, keep, .. } => {
+                for start in 0..pool.len() {
+                    actions.push(Action::KeepCards {
+                        pending_id: frame.id,
+                        cards: pool
+                            .iter()
+                            .cycle()
+                            .skip(start)
+                            .take(*keep)
+                            .copied()
+                            .collect(),
+                    });
+                }
+                return actions;
+            }
+            PendingKind::ChooseDrawResult { pool, .. } => {
+                actions.extend(pool.iter().map(|&card| Action::ChooseDrawResult {
+                    pending_id: frame.id,
+                    card,
+                }));
+                return actions;
+            }
             PendingKind::GeneralStore { pool, .. } => {
                 actions.extend(pool.iter().map(|&card| Action::ChooseCard {
                     pending_id: frame.id,
@@ -241,7 +287,7 @@ pub fn legal_actions(state: &GameState) -> Vec<Action> {
         actions.extend(
             own.hand
                 .iter()
-                .filter(|card| card.card().unwrap().kind == kind)
+                .filter(|card| own.accepts_response(card.card().unwrap().kind, kind))
                 .map(|&card| Action::Respond {
                     pending_id: frame.id,
                     card: Some(card),
@@ -249,7 +295,7 @@ pub fn legal_actions(state: &GameState) -> Vec<Action> {
         );
     } else {
         for &card in &own.hand {
-            let kind = card.card().unwrap().kind;
+            let kind = own.play_kind(card.card().unwrap().kind);
             match kind {
                 CardKind::Bang | CardKind::Duel | CardKind::Jail => {
                     for (index, target) in state.players.iter().enumerate() {
@@ -257,8 +303,7 @@ pub fn legal_actions(state: &GameState) -> Vec<Action> {
                             continue;
                         }
                         if kind == CardKind::Bang
-                            && ((state.turn.bangs_played > 0
-                                && !own.has_in_play(CardKind::Volcanic))
+                            && ((state.turn.bangs_played > 0 && !own.unlimited_bangs())
                                 || effective_distance(state, player, PlayerId(index)).unwrap()
                                     > own.weapon_range())
                         {
@@ -301,6 +346,36 @@ pub fn legal_actions(state: &GameState) -> Vec<Action> {
                 _ if kind.is_equipment() && own.has_in_play(kind) => {}
                 _ => actions.push(Action::Play { card, target: None }),
             }
+        }
+    }
+    actions
+}
+
+pub fn legal_actions(state: &GameState) -> Vec<(PlayerId, Action)> {
+    let player = state.decision().unwrap().player;
+    let mut actions: Vec<_> = decision_actions(state)
+        .into_iter()
+        .map(|a| (player, a))
+        .collect();
+    for (i, own) in state.players.iter().enumerate() {
+        if own.alive
+            && own.character == Character::SidKetchum
+            && own.health < own.max_health
+            && own.hand.len() >= 2
+        {
+            let player = PlayerId(i);
+            let pending_id = state
+                .pending
+                .last()
+                .filter(|f| matches!(f.kind, PendingKind::Dying { player: p, .. } if p == player))
+                .map(|f| f.id);
+            actions.push((
+                player,
+                Action::SidHeal {
+                    pending_id,
+                    discard: [own.hand[0], own.hand[1]],
+                },
+            ));
         }
     }
     actions
