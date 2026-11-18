@@ -1,6 +1,6 @@
 mod support;
 use bang::*;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use support::{Scenario, invariant};
@@ -277,7 +277,7 @@ fn bang_missed_and_pass_resume_the_same_turn_without_auto_defense() {
 }
 
 #[test]
-fn invalid_actions_preserve_state_and_rng_including_unsupported_equipment() {
+fn invalid_actions_preserve_state_and_rng() {
     let mut game = Scenario::new(6);
     let bang = game.give(0, CardKind::Bang);
     game.reject(
@@ -320,20 +320,6 @@ fn invalid_actions_preserve_state_and_rng_including_unsupported_equipment() {
         },
         ActionError::WrongAction,
     );
-    for kind in CardKind::ALL {
-        if matches!(kind, CardKind::Bang | CardKind::Missed | CardKind::Beer) {
-            continue;
-        }
-        let card = game.give(0, kind);
-        game.reject(
-            0,
-            Action::Play {
-                card,
-                target: Some(PlayerId(1)),
-            },
-            ActionError::NotImplemented,
-        );
-    }
     let beer = game.give(0, CardKind::Beer);
     game.reject(
         0,
@@ -363,14 +349,14 @@ fn invalid_actions_preserve_state_and_rng_including_unsupported_equipment() {
         },
         ActionError::WrongAction,
     );
-    let unsupported = game.give(1, CardKind::Barrel);
+    let barrel = game.give(1, CardKind::Barrel);
     game.reject(
         1,
         Action::Respond {
             pending_id: id,
-            card: Some(unsupported),
+            card: Some(barrel),
         },
-        ActionError::NotImplemented,
+        ActionError::WrongAction,
     );
     game.reject(
         0,
@@ -403,7 +389,7 @@ fn response_remaining_supports_multiple_missed_without_enabling_character_skills
     assert_eq!(game.state.pending.last().unwrap().id, id);
     assert!(matches!(
         game.state.decision().unwrap().kind,
-        DecisionKind::AttackResponse { remaining: 1 }
+        DecisionKind::AttackResponse { remaining: 1, .. }
     ));
     game.respond(Some(second));
     assert!(game.state.pending.is_empty());
@@ -874,115 +860,8 @@ fn unavailable_draw_cards_do_not_duplicate_or_destroy_owned_cards() {
     assert_eq!(game.state.players[2].hand.len(), 80);
 }
 
-fn legal_actions(state: &GameState) -> Vec<Action> {
-    let (player, default) = default_action(state).unwrap();
-    let mut actions = vec![default];
-    if let Some(frame) = state.pending.last() {
-        let kind = match frame.kind {
-            PendingKind::AttackResponse { .. } => CardKind::Missed,
-            PendingKind::Dying { .. } => CardKind::Beer,
-        };
-        actions.extend(
-            state.players[player.0]
-                .hand
-                .iter()
-                .filter(|card| card.card().unwrap().kind == kind)
-                .map(|&card| Action::Respond {
-                    pending_id: frame.id,
-                    card: Some(card),
-                }),
-        );
-    } else {
-        for &card in &state.players[player.0].hand {
-            match card.card().unwrap().kind {
-                CardKind::Bang if state.turn.bangs_played == 0 => {
-                    for (index, target) in state.players.iter().enumerate() {
-                        if target.alive
-                            && index != player.0
-                            && distance(
-                                state,
-                                player,
-                                PlayerId(index),
-                                DistanceModifiers::default(),
-                            )
-                            .unwrap()
-                                <= 1
-                        {
-                            actions.push(Action::Play {
-                                card,
-                                target: Some(PlayerId(index)),
-                            });
-                        }
-                    }
-                }
-                CardKind::Beer => actions.push(Action::Play { card, target: None }),
-                _ => {}
-            }
-        }
-    }
-    actions
-}
+#[path = "engine/fuzz.rs"]
+mod fuzz;
 
-#[test]
-fn seeded_bots_preserve_invariants_replay_and_finish_512_games() {
-    let mut games = 0;
-    let mut total_actions = 0;
-    let mut longest = 0;
-    for count in 4..=7 {
-        for seed in 0..128 {
-            let mut rng = ChaCha8Rng::seed_from_u64(seed);
-            let mut replay_rng = rng.clone();
-            let (mut state, events) = setup(count, &mut rng).unwrap();
-            let (mut replay, replay_events) = setup(count, &mut replay_rng).unwrap();
-            assert_eq!(state, replay);
-            assert_eq!(events, replay_events);
-            invariant(&state);
-            let mut bot = ChaCha8Rng::seed_from_u64(seed + 10000);
-            let mut steps = 0;
-            while state.winner.is_none() && steps < 4096 {
-                if steps % 7 == 0 {
-                    let before = state.clone();
-                    let before_rng = rng.clone();
-                    assert!(
-                        apply(
-                            &mut state,
-                            PlayerId(usize::MAX),
-                            Action::EndTurn { discard: vec![] },
-                            &mut rng
-                        )
-                        .is_err()
-                    );
-                    assert_eq!(state, before);
-                    assert_eq!(rng.get_word_pos(), before_rng.get_word_pos());
-                    assert_eq!(rng.clone().next_u64(), before_rng.clone().next_u64());
-                    invariant(&state);
-                }
-                let player = state.decision().unwrap().player;
-                let actions = legal_actions(&state);
-                let action = actions[bot.random_range(0..actions.len())].clone();
-                let events = apply(&mut state, player, action.clone(), &mut rng).unwrap();
-                let replay_events = apply(&mut replay, player, action, &mut replay_rng).unwrap();
-                assert_eq!(state, replay);
-                assert_eq!(events, replay_events);
-                assert_eq!(rng.get_word_pos(), replay_rng.get_word_pos());
-                invariant(&state);
-                invariant(&replay);
-                for event in filter_events(&events, None) {
-                    assert_eq!(event.visibility, Visibility::Public);
-                }
-                steps += 1;
-            }
-            assert!(
-                state.winner.is_some(),
-                "Bot game hit step limit: count={count}, seed={seed}"
-            );
-            invariant(&state);
-            games += 1;
-            total_actions += steps;
-            longest = longest.max(steps);
-        }
-    }
-    println!(
-        "Fuzz: {games} games (4-7 players x 128 seeds), {total_actions} valid actions plus deterministic replay, longest {longest} actions, 0 step-limit hits"
-    );
-}
+#[path = "engine/cards.rs"]
+mod cards;

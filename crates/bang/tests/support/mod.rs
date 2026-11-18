@@ -120,9 +120,30 @@ impl Scenario {
 
     pub fn respond(&mut self, card: Option<CardId>) -> Vec<Event> {
         let frame = self.state.pending.last().unwrap();
-        let player = frame.player().0;
+        let player = frame.player().unwrap().0;
         let pending_id = frame.id;
         self.act(player, Action::Respond { pending_id, card })
+    }
+
+    pub fn dying_child(&mut self, player: usize, source: Option<PlayerId>) {
+        // Preserve the private id counter when injecting a child interruption into a fixture.
+        self.state.players[player].health = 0;
+        let mut snapshot = serde_json::to_value(&self.state).unwrap();
+        let id = snapshot["next_pending_id"].as_u64().unwrap();
+        snapshot["next_pending_id"] = (id + 1).into();
+        snapshot["pending"].as_array_mut().unwrap().push(
+            serde_json::to_value(Pending {
+                id: PendingId(id),
+                kind: PendingKind::Dying {
+                    player: PlayerId(player),
+                    source,
+                    needed: 1,
+                },
+            })
+            .unwrap(),
+        );
+        self.state = serde_json::from_value(snapshot).unwrap();
+        invariant(&self.state);
     }
 
     pub fn end(&mut self) -> Vec<Event> {
@@ -133,12 +154,21 @@ impl Scenario {
 
 pub fn invariant(state: &GameState) {
     let mut counts = [0u8; 80];
-    for card in state.draw_pile.iter().chain(&state.discard_pile).chain(
-        state
-            .players
-            .iter()
-            .flat_map(|p| p.hand.iter().chain(&p.in_play)),
-    ) {
+    for card in state
+        .draw_pile
+        .iter()
+        .chain(&state.discard_pile)
+        .chain(
+            state
+                .players
+                .iter()
+                .flat_map(|p| p.hand.iter().chain(&p.in_play)),
+        )
+        .chain(state.pending.iter().flat_map(|frame| match &frame.kind {
+            PendingKind::GeneralStore { pool, .. } => pool.as_slice(),
+            _ => &[],
+        }))
+    {
         assert!(card.card().is_some());
         counts[usize::from(card.0)] += 1;
     }
@@ -152,6 +182,19 @@ pub fn invariant(state: &GameState) {
             player.character.health() + i16::from(player.role == Role::Sheriff)
         );
         assert!(player.health <= player.max_health);
+        let kinds: std::collections::BTreeSet<_> = player
+            .in_play
+            .iter()
+            .map(|card| card.card().unwrap().kind)
+            .collect();
+        assert_eq!(kinds.len(), player.in_play.len());
+        assert!(
+            kinds
+                .iter()
+                .filter(|kind| kind.weapon_range().is_some())
+                .count()
+                <= 1
+        );
         if player.alive && player.health <= 0 {
             assert!(state.pending.iter().any(|frame| matches!(frame.kind, PendingKind::Dying { player, needed, .. } if player == PlayerId(index) && needed == (1 - state.players[index].health) as u16)));
         }
@@ -171,4 +214,94 @@ pub fn invariant(state: &GameState) {
         assert!(state.pending.is_empty());
         assert!(state.decision().is_none());
     }
+}
+
+pub fn legal_actions(state: &GameState) -> Vec<Action> {
+    let (player, default) = default_action(state).unwrap();
+    let own = &state.players[player.0];
+    let mut actions = vec![default];
+    if let Some(frame) = state.pending.last() {
+        let kind = match &frame.kind {
+            PendingKind::AttackResponse {
+                kind: AttackKind::Indians,
+                ..
+            }
+            | PendingKind::Duel { .. } => CardKind::Bang,
+            PendingKind::AttackResponse { .. } => CardKind::Missed,
+            PendingKind::Dying { .. } => CardKind::Beer,
+            PendingKind::GeneralStore { pool, .. } => {
+                actions.extend(pool.iter().map(|&card| Action::ChooseCard {
+                    pending_id: frame.id,
+                    card,
+                }));
+                return actions;
+            }
+            PendingKind::ResolveTargets { .. } => panic!("Automatic frame must not await input"),
+        };
+        actions.extend(
+            own.hand
+                .iter()
+                .filter(|card| card.card().unwrap().kind == kind)
+                .map(|&card| Action::Respond {
+                    pending_id: frame.id,
+                    card: Some(card),
+                }),
+        );
+    } else {
+        for &card in &own.hand {
+            let kind = card.card().unwrap().kind;
+            match kind {
+                CardKind::Bang | CardKind::Duel | CardKind::Jail => {
+                    for (index, target) in state.players.iter().enumerate() {
+                        if !target.alive || index == player.0 {
+                            continue;
+                        }
+                        if kind == CardKind::Bang
+                            && ((state.turn.bangs_played > 0
+                                && !own.has_in_play(CardKind::Volcanic))
+                                || effective_distance(state, player, PlayerId(index)).unwrap()
+                                    > own.weapon_range())
+                        {
+                            continue;
+                        }
+                        if kind == CardKind::Jail
+                            && (target.role == Role::Sheriff || target.has_in_play(kind))
+                        {
+                            continue;
+                        }
+                        actions.push(Action::Play {
+                            card,
+                            target: Some(PlayerId(index)),
+                        });
+                    }
+                }
+                CardKind::Panic | CardKind::CatBalou => {
+                    for (index, target) in state.players.iter().enumerate() {
+                        if !target.alive
+                            || (kind == CardKind::Panic
+                                && effective_distance(state, player, PlayerId(index)).unwrap() > 1)
+                        {
+                            continue;
+                        }
+                        if target.hand.len() > usize::from(index == player.0) {
+                            actions.push(Action::AffectCard {
+                                card,
+                                target: PlayerId(index),
+                                selection: CardSelection::Hand,
+                            });
+                        }
+                        actions.extend(target.in_play.iter().map(|&selected| Action::AffectCard {
+                            card,
+                            target: PlayerId(index),
+                            selection: CardSelection::InPlay(selected),
+                        }));
+                    }
+                }
+                CardKind::Missed => {}
+                _ if kind.is_equipment() && own.has_in_play(kind) => {}
+                _ => actions.push(Action::Play { card, target: None }),
+            }
+        }
+    }
+    actions
 }
