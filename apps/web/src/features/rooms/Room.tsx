@@ -1,6 +1,7 @@
 import type { ClientMessage, GameSnapshot, RoomView } from '../../generated/protocol';
 import { PROTOCOL_VERSION } from '../../generated/protocol';
 import GameBoard from '../game/GameBoard';
+import { selectGameView } from '../game/state';
 
 type Props = { room: RoomView; game: GameSnapshot | null; disabled: boolean; send: (message: ClientMessage) => void };
 
@@ -16,7 +17,10 @@ export default function Room({ room, game, disabled, send }: Props) {
         <div><h2 className="text-sm text-stone-600">Mã phòng</h2><p className="mt-1 text-3xl font-semibold tracking-widest">{room.code}</p></div>
         <div role="status" aria-live="polite"><p className="font-medium">{waiting ? 'Đang chờ' : 'Đang chơi'}</p><p className="mt-1 text-sm text-stone-600">{players} người chơi · cần {room.min_players}–{room.max_players}</p></div>
       </div>
-      {game && !waiting && <GameBoard game={game} room={room} />}
+      {game && !waiting && <>
+        {host && !selectGameView(game.view).table.winner && <div className="mt-4"><button className="action secondary" disabled={disabled} onClick={() => send({ v: PROTOCOL_VERSION, type: 'host_skip' })}>Bỏ qua lượt chờ</button></div>}
+        <GameBoard game={game} room={room} disabled={disabled} sendAction={(action) => send({ v: PROTOCOL_VERSION, type: 'game_action', action })} />
+      </>}
       <h3 className="mt-6 font-medium">Thành viên ({room.members.length})</h3>
       <ul className="mt-2 divide-y divide-stone-200" aria-live="polite">
         {room.members.map((member) => (

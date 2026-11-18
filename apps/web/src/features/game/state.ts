@@ -25,3 +25,17 @@ export function receiveGame(current: GameSnapshot | null, message: ServerMessage
     default: return current;
   }
 }
+
+export type GameSyncState = { game: GameSnapshot | null; desynced: boolean };
+
+export function receiveGameState(current: GameSyncState, message: ServerMessage): GameSyncState {
+  if (message.type === 'joined') return { game: message.game, desynced: false };
+  if (message.type === 'left' || (message.type === 'room_state' && message.room.phase === 'waiting')) return { game: null, desynced: false };
+  if (current.desynced) return current;
+  if ((message.type === 'game_update' || message.type === 'game_over') && current.game && message.seq > current.game.seq + 1) return { ...current, desynced: true };
+  return { game: receiveGame(current.game, message), desynced: false };
+}
+
+export function inputLocked(state: { connected: boolean; pending: boolean; restoring: boolean; desynced: boolean }): boolean {
+  return !state.connected || state.pending || state.restoring || state.desynced;
+}

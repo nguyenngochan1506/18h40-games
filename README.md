@@ -1,6 +1,6 @@
 # 18h40 games
 
-Nền tảng phòng chơi: server Rust/Axum, engine BANG! bộ gốc, web React/TypeScript/Tailwind và WebSocket JSON có version. Bàn BANG! hiện chỉ để xem; chưa có thao tác đánh bài trên web. Type TypeScript sinh từ Rust.
+Nền tảng phòng chơi: server Rust/Axum, engine BANG! bộ gốc, web React/TypeScript/Tailwind và WebSocket JSON có version. Web hỗ trợ đánh bài, phản ứng cơ bản và kết thúc lượt; các lựa chọn kỹ năng phức tạp đang được bổ sung. Type TypeScript sinh từ Rust.
 
 Cần Rust hỗ trợ edition 2024, Node.js 26 và pnpm 10.34.9.
 
@@ -54,6 +54,8 @@ Web build ra `apps/web/dist/`; web chạy qua Vite, server chưa phục vụ fil
 
 `pnpm assets` chỉ tải 44 WebP bộ gốc từ commit `dc7c29abffc566629ab0fae3bb3386280a7ae52c` của bang-cards vào `assets/bang/` (gitignored). Script kiểm tra header/kích thước, bỏ qua file hợp lệ và tải lại file thiếu/hỏng. Vite dùng `assets/` làm publicDir: ảnh phục vụ tại `/bang/` khi dev và được chép vào `dist/bang/` khi build. Chạy `pnpm assets` trước build nếu muốn bản dựng có ảnh; thiếu ảnh vẫn có khung chữ. Không đưa art vào git.
 
-Khi chạy Vite dev, mở `/?demo=bang` để xem bàn mẫu 5 người mà không cần server; `/?demo=bang&view=spectator` xem góc khán giả. Demo không được bật trong production build. Chạm/hover/focus một lá bài để đọc hiệu ứng. Tên lá và nhân vật giữ nguyên tiếng Anh, các mô tả theo bảng dịch đã duyệt. Bộ mặt bài CardId được kiểm thử khớp với DECK trong Rust.
+Khi chạy Vite dev, mở `/?demo=bang` để thử bàn mẫu 5 người với callback giả (action hiện dưới bàn), chuyển tình huống lượt chơi/đỡ đòn/Duel/Beer/khung chờ; `/?demo=bang&view=spectator` xem góc khán giả. Demo không được bật trong production build. Chạm/hover/focus một lá bài để đọc hiệu ứng. Tên lá và nhân vật giữ nguyên tiếng Anh, các mô tả theo bảng dịch đã duyệt. Bộ mặt bài CardId được kiểm thử khớp với DECK trong Rust.
 
-Client chỉ nhận update có seq kế tiếp; bỏ gói cũ, trùng hoặc nhảy mốc. Snapshot joined khi vào lại là nguồn đồng bộ đầy đủ; batch setup seq0 không cần cập nhật lại view đã nhận trong game_started. Bước này chưa dựng animation hay nhật ký event.
+Chạm lá trên tay để chọn, chọn người nhắm tới nếu cần rồi bấm **Chơi**; **Hủy** để chọn lại. Panic!/Cat Balou cho chọn tay ngẫu nhiên hoặc lá công khai trước mặt. Khi được chờ, chọn Missed!/BANG!/Beer để phản ứng hoặc chịu đòn; khi **Kết thúc lượt**, chọn đủ bài thừa so với máu. Server quyết định tính hợp lệ (tầm đánh, giới hạn BANG!, trang bị…), lỗi được hiển thị bằng tiếng Việt. Khán giả/người bị loại chỉ xem. Các lựa chọn General Store/Kit/Lucky/nguồn rút/Sid chưa có UI; chủ phòng có thể **Bỏ qua lượt chờ** để tiếp tục.
+
+Client khóa gửi khi mất kết nối, đang vào lại phòng hoặc đang chờ phản hồi; mỗi yêu cầu gửi kèm ping, chỉ pong đúng nonce trên cùng kết nối mới mở lại thao tác. Update của người khác và lỗi không giải phóng yêu cầu. Sau 15 giây chưa nhận pong, client báo lỗi và đóng kết nối để vào lại lấy snapshot, không tự gửi lại action. Client chỉ nhận update có seq kế tiếp, bỏ gói cũ/trùng; khi seq nhảy mốc, khóa thao tác, báo mất đồng bộ và đóng kết nối để tự rejoin lấy snapshot. Snapshot joined khi vào lại là nguồn đồng bộ đầy đủ; batch setup seq0 không cần cập nhật lại view đã nhận trong game_started. Bước này chưa dựng animation hay nhật ký event.

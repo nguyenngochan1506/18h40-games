@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ServerMessage } from '../../generated/protocol.ts';
 import { demoGame, demoRoom } from './demo.ts';
-import { receiveGame, selectGameView } from './state.ts';
+import { receiveGame, selectGameView, inputLocked } from './state.ts';
 
 const started: ServerMessage = { v: 1, type: 'game_started', seq: 0, seats: demoGame.seats, view: demoGame.view };
 const initial = receiveGame(null, started)!;
@@ -48,4 +48,24 @@ test('authoritative joined snapshots resync any seq; waiting/left clear the boar
   assert.equal(receiveGame(demoGame, { v: 1, type: 'room_state', room: { ...demoRoom, phase: 'waiting' } }), null);
   assert.equal(receiveGame(demoGame, { ...joined, game: null }), null);
   assert.equal(receiveGame(demoGame, { v: 1, type: 'left' }), null);
+});
+
+test('seq gaps lock the board until an authoritative snapshot, while stale packets do not desync', async () => {
+  const { receiveGameState, inputLocked } = await import('./state.ts');
+  const state = { game: initial, desynced: false };
+  assert.equal(receiveGameState(state, update(0)).desynced, false);
+  const gap = receiveGameState(state, update(2));
+  assert.equal(gap.game, initial);
+  assert.equal(gap.desynced, true);
+  assert.equal(inputLocked({ connected: true, pending: false, restoring: false, desynced: gap.desynced }), true);
+  assert.equal(receiveGameState(gap, update(1)), gap);
+  const restored = receiveGameState(gap, { v: 1, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game: demoGame });
+  assert.equal(restored.game, demoGame);
+  assert.equal(restored.desynced, false);
+});
+
+test('input locks while disconnected, awaiting a barrier, restoring or desynced', () => {
+  const ready = { connected: true, pending: false, restoring: false, desynced: false };
+  assert.equal(inputLocked(ready), false);
+  for (const change of [{ connected: false }, { pending: true }, { restoring: true }, { desynced: true }]) assert.equal(inputLocked({ ...ready, ...change }), true);
 });
