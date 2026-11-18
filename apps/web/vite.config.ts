@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  define: { __SCENE_FILES__: JSON.stringify(readdirSync(fileURLToPath(new URL('../../assets/scene/', import.meta.url)), { recursive: true }).filter(file => typeof file === 'string' && file.endsWith('.webp')).map(file => `/scene/${file}`)) },
+  define: { __SOUND_FILES__: JSON.stringify(readdirSync(fileURLToPath(new URL('../../assets/', import.meta.url)), { recursive: true }).filter(file => typeof file === 'string' && file.endsWith('.mp3')).map(file => `/${file}`)), __SCENE_FILES__: JSON.stringify(readdirSync(fileURLToPath(new URL('../../assets/scene/', import.meta.url)), { recursive: true }).filter(file => typeof file === 'string' && file.endsWith('.webp')).map(file => `/scene/${file}`)) },
   publicDir: '../../assets',
   plugins: [react(), tailwindcss()],
   server: {

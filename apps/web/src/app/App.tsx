@@ -6,6 +6,7 @@ import Room from '../features/rooms/Room';
 import { initialGameState, inputLocked, receiveGameState } from '../features/game/state';
 import type { GameSyncState } from '../features/game/state';
 import { errorMessages } from '../shared/lib/errors';
+import { sound } from '../features/game/sound';
 import { connectSocket } from '../shared/lib/socket';
 import { createRequestTracker } from '../shared/lib/request';
 import { loadSession, retryDelay, saveSession } from '../shared/lib/session';
@@ -107,6 +108,7 @@ export default function App() {
               setRestoring(false);
               break;
             case 'error':
+              if (message.code === 'illegal_action' && gameRef.current.game && !gameRef.current.desynced) void sound.play('invalid');
               setError(errorMessages[message.code] ?? 'Không xử lý được yêu cầu. Hãy tải lại trang.');
               if (message.code === 'invalid_token' || message.code === 'room_not_found') {
                 session.current = null;
@@ -173,7 +175,7 @@ export default function App() {
       <p className="connection-status mt-3 text-sm text-stone-600" role="status" aria-live="polite">{status}</p>
       {gameState.desynced && <p className="connection-alert mt-5 border-l-2 border-amber-700 pl-3 text-sm text-amber-900" role="alert">Bàn chơi đang mất đồng bộ. Đang kết nối lại để lấy trạng thái mới; tạm khóa thao tác.</p>}
       {error && <p className="connection-alert mt-5 border-l-2 border-red-700 pl-3 text-sm text-red-800" role="alert">{error}</p>}
-      {room ? <Room room={room} game={game} log={gameState.log} fxBatch={gameState.fxBatch} fxEnabled={status === 'Đã kết nối' && !restoring && !gameState.desynced} viewer={gameState.viewer} disabled={disabled} send={send} /> : restoring ? <p className="mt-8 text-stone-600">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p> : <Lobby disabled={disabled} send={send} />}
+      {room ? <Room room={room} game={game} log={gameState.log} fxBatch={gameState.fxBatch} soundBatch={gameState.soundBatch} fxEnabled={status === 'Đã kết nối' && !restoring && !gameState.desynced} viewer={gameState.viewer} disabled={disabled} send={send} /> : restoring ? <p className="mt-8 text-stone-600">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p> : <Lobby disabled={disabled} send={send} />}
     </main>
   );
 }

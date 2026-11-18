@@ -68,7 +68,7 @@ export function eventsToFx(events: EventKind[], ctx: FxContext): FxCue[] {
       case 'card_equipped': {
         const play = events.find((e): e is Extract<EventKind, { type: 'card_played' }> => e.type === 'card_played' && e.card === event.card);
         fly(hand(play?.player ?? event.player), `equipment-${event.player}`, event.card);
-        cues.push({ kind: cardFace(event.card)?.kind === 'jail' ? 'jail' : 'equip', from: event.player, to: event.player, label: cardFace(event.card)?.kind === 'jail' ? 'JAIL' : 'CẠCH' });
+        cues.push({ kind: cardFace(event.card)?.kind === 'jail' ? 'jail' : 'equip', from: event.player, to: event.player, card: event.card, label: cardFace(event.card)?.kind === 'jail' ? 'JAIL' : 'CẠCH' });
         break;
       }
       case 'draw_revealed': {

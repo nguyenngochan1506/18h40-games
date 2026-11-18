@@ -1,6 +1,9 @@
 import { createRoot } from 'react-dom/client';
 import App from './app/App';
+import { sound } from './features/game/sound';
 import './style.css';
+
+sound.listen();
 
 const root = createRoot(document.getElementById('root')!);
 if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('demo') === 'bang') {
