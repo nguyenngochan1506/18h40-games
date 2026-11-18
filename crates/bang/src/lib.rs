@@ -9,7 +9,7 @@ pub mod rules;
 pub mod state;
 pub mod view;
 
-pub use actions::{Action, ActionError, CardSelection};
+pub use actions::{Action, ActionError, CardSelection, DrawSource};
 pub use engine::{apply, default_action, setup};
 pub use events::{Event, EventKind, Visibility, filter_events};
 pub use model::*;

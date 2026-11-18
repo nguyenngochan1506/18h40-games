@@ -34,6 +34,8 @@ pub struct SpectatorView {
 pub struct PlayerView {
     pub you: PlayerId,
     pub hand: Vec<CardId>,
+    /// The top private Kit/Lucky pool, visible only to its owner.
+    pub choices: Vec<CardId>,
     pub table: SpectatorView,
 }
 
@@ -64,7 +66,7 @@ pub fn spectator_view(state: &GameState) -> SpectatorView {
             .discard_pile
             .last()
             .copied()
-            .filter(|card| Some(*card) != state.hidden_discard_top),
+            .filter(|card| !state.hidden_discards.contains(card)),
         winner: state.winner,
         store_pool: state
             .pending
@@ -88,6 +90,16 @@ pub fn view(state: &GameState, player: PlayerId) -> Result<PlayerView, ActionErr
     Ok(PlayerView {
         you: player,
         hand: own.hand.clone(),
+        choices: state
+            .pending
+            .last()
+            .filter(|frame| frame.player() == Some(player))
+            .map(|frame| match &frame.kind {
+                crate::state::PendingKind::KeepCards { pool, .. }
+                | crate::state::PendingKind::ChooseDrawResult { pool, .. } => pool.clone(),
+                _ => Vec::new(),
+            })
+            .unwrap_or_default(),
         table,
     })
 }

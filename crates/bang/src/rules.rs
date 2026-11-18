@@ -1,6 +1,6 @@
 use crate::{
     actions::ActionError,
-    model::{CardKind, PlayerId, Role},
+    model::{CardKind, Character, PlayerId, Role},
     state::{GameState, Winner},
 };
 use serde::{Deserialize, Serialize};
@@ -86,7 +86,8 @@ pub fn effective_distance(
         DistanceModifiers {
             target_mustang: u8::from(target.has_in_play(CardKind::Mustang)),
             source_scope: u8::from(source.has_in_play(CardKind::Scope)),
-            ..DistanceModifiers::default()
+            target_paul: u8::from(from != to && target.character == Character::PaulRegret),
+            source_rose: u8::from(source.character == Character::RoseDoolan),
         },
     )
 }

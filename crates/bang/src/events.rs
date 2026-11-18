@@ -1,5 +1,5 @@
 use crate::{
-    model::{CardId, PlayerId, Role},
+    model::{CardId, Character, PlayerId, Role},
     state::{Decision, Winner},
 };
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,36 @@ pub struct Event {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventKind {
+    SkillActivated {
+        player: PlayerId,
+        character: Character,
+    },
+    ChoiceOffered {
+        player: PlayerId,
+        cards: Vec<CardId>,
+    },
+    CardShown {
+        player: PlayerId,
+        card: CardId,
+    },
+    CardsStolen {
+        source: PlayerId,
+        target: PlayerId,
+        count: usize,
+    },
+    StolenCards {
+        source: PlayerId,
+        target: PlayerId,
+        cards: Vec<CardId>,
+    },
+    CardsInherited {
+        player: PlayerId,
+        victim: PlayerId,
+        count: usize,
+    },
+    PrivatePoolDiscarded {
+        count: usize,
+    },
     GameStarted {
         sheriff: PlayerId,
     },

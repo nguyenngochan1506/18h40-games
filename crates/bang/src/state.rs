@@ -39,6 +39,23 @@ pub enum AttackKind {
     Indians,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Defense {
+    pub source: PlayerId,
+    pub target: PlayerId,
+    pub kind: AttackKind,
+    pub remaining: u8,
+    pub checks_left: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DrawContinuation {
+    Defense { defense: Defense },
+    Dynamite { player: PlayerId, card: CardId },
+    Jail { player: PlayerId, card: CardId },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pending {
     pub id: PendingId,
@@ -48,6 +65,20 @@ pub struct Pending {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PendingKind {
+    DrawChoice {
+        player: PlayerId,
+    },
+    KeepCards {
+        player: PlayerId,
+        pool: Vec<CardId>,
+        keep: usize,
+    },
+    ChooseDrawResult {
+        player: PlayerId,
+        pool: Vec<CardId>,
+        reason: CardKind,
+        continuation: DrawContinuation,
+    },
     AttackResponse {
         target: PlayerId,
         source: PlayerId,
@@ -75,14 +106,28 @@ pub enum PendingKind {
         player: PlayerId,
         source: Option<PlayerId>,
         needed: u16,
+        #[serde(default)]
+        duel_initiator: Option<PlayerId>,
     },
 }
 
 impl Pending {
+    pub fn cards(&self) -> &[CardId] {
+        match &self.kind {
+            PendingKind::GeneralStore { pool, .. }
+            | PendingKind::KeepCards { pool, .. }
+            | PendingKind::ChooseDrawResult { pool, .. } => pool,
+            _ => &[],
+        }
+    }
+
     pub fn player(&self) -> Option<PlayerId> {
         match &self.kind {
             PendingKind::AttackResponse { target, .. } => Some(*target),
-            PendingKind::Dying { player, .. } => Some(*player),
+            PendingKind::Dying { player, .. }
+            | PendingKind::DrawChoice { player }
+            | PendingKind::KeepCards { player, .. }
+            | PendingKind::ChooseDrawResult { player, .. } => Some(*player),
             PendingKind::Duel { next, .. } => Some(*next),
             PendingKind::GeneralStore { order, cursor, .. } => order.get(*cursor).copied(),
             PendingKind::ResolveTargets { .. } => None,
@@ -105,6 +150,9 @@ pub enum DecisionKind {
     AttackResponse { kind: AttackKind, remaining: u8 },
     Duel,
     GeneralStore,
+    DrawChoice,
+    KeepCards { keep: usize },
+    ChooseDrawResult { reason: CardKind },
     Dying { needed: u16 },
 }
 
@@ -124,7 +172,8 @@ pub struct GameState {
     pub pending: Vec<Pending>,
     pub winner: Option<Winner>,
     pub(crate) next_pending_id: u64,
-    pub(crate) hidden_discard_top: Option<CardId>,
+    // Pedro can uncover an older private discard after taking the public top.
+    pub(crate) hidden_discards: Vec<CardId>,
 }
 
 impl GameState {
@@ -146,6 +195,11 @@ impl GameState {
                     PendingKind::Dying { needed, .. } => DecisionKind::Dying { needed: *needed },
                     PendingKind::Duel { .. } => DecisionKind::Duel,
                     PendingKind::GeneralStore { .. } => DecisionKind::GeneralStore,
+                    PendingKind::DrawChoice { .. } => DecisionKind::DrawChoice,
+                    PendingKind::KeepCards { keep, .. } => DecisionKind::KeepCards { keep: *keep },
+                    PendingKind::ChooseDrawResult { reason, .. } => {
+                        DecisionKind::ChooseDrawResult { reason: *reason }
+                    }
                     PendingKind::ResolveTargets { .. } => return None,
                 },
             })
@@ -161,8 +215,13 @@ impl GameState {
     }
 
     pub(crate) fn discard(&mut self, card: CardId) {
-        self.hidden_discard_top = None;
+        self.hidden_discards.retain(|id| *id != card);
         self.discard_pile.push(card);
+    }
+
+    pub(crate) fn discard_hidden(&mut self, card: CardId) {
+        self.discard(card);
+        self.hidden_discards.push(card);
     }
 
     pub(crate) fn renew_pending_id(&mut self) {
@@ -179,6 +238,27 @@ impl GameState {
 }
 
 impl Player {
+    pub fn unlimited_bangs(&self) -> bool {
+        self.character == Character::WillyTheKid || self.has_in_play(CardKind::Volcanic)
+    }
+
+    pub fn accepts_response(&self, actual: CardKind, required: CardKind) -> bool {
+        actual == required
+            || (self.character == Character::CalamityJanet
+                && matches!(
+                    (actual, required),
+                    (CardKind::Bang, CardKind::Missed) | (CardKind::Missed, CardKind::Bang)
+                ))
+    }
+
+    pub fn play_kind(&self, physical: CardKind) -> CardKind {
+        if physical == CardKind::Missed && self.character == Character::CalamityJanet {
+            CardKind::Bang
+        } else {
+            physical
+        }
+    }
+
     pub fn has_in_play(&self, kind: CardKind) -> bool {
         self.in_play
             .iter()
