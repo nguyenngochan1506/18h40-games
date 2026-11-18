@@ -4,6 +4,9 @@ version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
+bang = { path = "../../crates/bang" }
+rand = { version = "0.9.5", default-features = false, features = ["std"] }
+rand_chacha = "0.9.0"
 axum = { version = "0.8.9", features = ["ws"] }
 futures-util = { version = "0.3.34", features = ["sink"] }
 getrandom = "0.4.3"

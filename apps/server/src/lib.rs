@@ -123,6 +123,7 @@ fn error(code: ErrorCode) -> ServerMessage {
             ErrorCode::WrongPhase => "Action unavailable in this phase",
             ErrorCode::NotEnoughPlayers => "Not enough players",
             ErrorCode::NoFreeSeat => "No free player seat",
+            ErrorCode::IllegalAction => "Action is not allowed",
             ErrorCode::ServerBusy => "Server capacity reached",
         }
         .into(),

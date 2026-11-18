@@ -18,6 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
     let defaults = Config::default();
     let config = Config {
+        game_seed: None,
         offline_timeout: Duration::from_secs(setting(
             "OFFLINE_TIMEOUT_SECS",
             defaults.offline_timeout.as_secs(),

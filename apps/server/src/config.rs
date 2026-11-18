@@ -2,6 +2,7 @@ use std::time::Duration;
 
 #[derive(Clone)]
 pub struct Config {
+    pub game_seed: Option<u64>,
     pub offline_timeout: Duration,
     pub empty_room_timeout: Duration,
     pub max_members: usize,
@@ -13,6 +14,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            game_seed: None,
             offline_timeout: Duration::from_secs(60),
             empty_room_timeout: Duration::from_secs(600),
             max_members: 32,
