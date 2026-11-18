@@ -75,12 +75,17 @@ export default function GameBoard({ game, room, disabled = false, sendAction }: 
   const setDraft = (value: ActionDraft) => setChoice({ seq: game.seq, draft: value });
   const mode = actionMode(game);
   const locked = disabled || !sendAction;
-  const targetMode = !locked && mode === 'turn' && !draft.discarding && draft.card !== null && needsTarget(game, draft.card);
+  const targetMode = !locked && mode === 'turn' && !draft.discarding && !draft.healing && draft.card !== null && needsTarget(game, draft.card);
   const targetSelf = draft.card !== null && ['panic', 'cat_balou'].includes(playKind(game, draft.card) ?? '');
   const chooseHand = (id: CardId) => {
     if (locked) return;
-    if (draft.discarding) setDraft({ ...draft, discard: draft.discard.includes(id) ? draft.discard.filter((card) => card !== id) : [...draft.discard, id] });
+    if (draft.discarding || draft.healing) setDraft({ ...draft, discard: draft.discard.includes(id) ? draft.discard.filter((card) => card !== id) : [...draft.discard, id] });
     else setDraft({ ...emptyDraft, card: draft.card === id ? null : id });
+  };
+  const choosePool = (id: CardId) => {
+    if (locked || draft.healing) return;
+    if (mode === 'keep_cards') setDraft({ ...draft, kept: draft.kept.includes(id) ? draft.kept.filter((card) => card !== id) : [...draft.kept, id] });
+    else setDraft({ ...draft, card: draft.card === id ? null : id });
   };
   const inspect = (kind: CardKind, scroll = false) => {
     setSelected(kind);
@@ -101,9 +106,10 @@ export default function GameBoard({ game, room, disabled = false, sendAction }: 
         })}
         <section className="table-center" aria-label="Bộ rút và chồng bỏ"><p className="game-eyebrow">Giữa bàn</p><div className="pile-row"><div className="draw-pile"><Artwork file={backFiles.card} label="Bộ rút" /><strong>{table.draw_count} lá</strong><span>Bộ rút</span></div><div className="discard-pile">{table.discard_top !== null ? <Card id={table.discard_top} inspect={inspect} /> : <span className="empty-pile">{table.discard_count ? 'Lá đỉnh được giữ kín' : 'Chưa có lá bỏ'}</span>}<strong>{table.discard_count} lá</strong><span>Chồng bỏ</span></div></div></section>
       </div>
-      {you !== null && <section className="own-hand" aria-label="Bài trên tay của bạn"><div className="section-heading"><h3>Bài trên tay của bạn</h3><span>{hand.length} lá</span></div><div className="hand-cards">{hand.map((id) => <Card key={id} id={id} inspect={inspect} picked={draft.discarding ? draft.discard.includes(id) : draft.card === id} pick={!locked && ((mode === 'turn' && (draft.discarding || playKind(game, id))) || (mode === 'response' && responseCard(game, id))) ? () => chooseHand(id) : undefined} />)}{!hand.length && <p>Bạn chưa có bài trên tay.</p>}</div><div ref={controls}><GameControls game={game} draft={draft} disabled={locked} setDraft={setDraft} sendAction={(action) => sendAction?.(action)} /></div></section>}
-      {!!table.store_pool.length && <section className="own-hand"><h3>General Store · Bài công khai</h3><div className="hand-cards">{table.store_pool.map((id) => <Card key={id} id={id} inspect={inspect} />)}</div></section>}
-      {!!choices.length && <section className="own-hand"><h3>Bài đang xem riêng</h3><p>Chỉ bạn thấy các lá này. Bước này chưa hỗ trợ lựa chọn.</p><div className="hand-cards">{choices.map((id) => <Card key={id} id={id} inspect={inspect} />)}</div></section>}
+      {you !== null && <section className="own-hand" aria-label="Bài trên tay của bạn"><div className="section-heading"><h3>Bài trên tay của bạn</h3><span>{hand.length} lá</span></div><div className="hand-cards">{hand.map((id) => <Card key={id} id={id} inspect={inspect} picked={draft.discarding || draft.healing ? draft.discard.includes(id) : draft.card === id} pick={!locked && (draft.healing || (mode === 'turn' && (draft.discarding || playKind(game, id))) || (mode === 'response' && responseCard(game, id))) ? () => chooseHand(id) : undefined} />)}{!hand.length && <p>Bạn chưa có bài trên tay.</p>}</div></section>}
+      {!!table.store_pool.length && <section className="own-hand decision-pool" aria-label="General Store"><h3>General Store · Bài công khai</h3><div className="hand-cards">{table.store_pool.map((id) => <Card key={id} id={id} inspect={inspect} picked={mode === 'general_store' && draft.card === id} pick={!locked && !draft.healing && mode === 'general_store' ? () => choosePool(id) : undefined} />)}</div></section>}
+      {!!choices.length && <section className="own-hand decision-pool" aria-label="Bài đang xem riêng"><h3>Bài đang xem riêng</h3><p>Chỉ bạn thấy các lá này. Chạm để chọn rồi xác nhận.</p><div className="hand-cards">{choices.map((id) => <Card key={id} id={id} inspect={inspect} picked={mode === 'keep_cards' ? draft.kept.includes(id) : draft.card === id} pick={!locked && !draft.healing && (mode === 'keep_cards' || mode === 'choose_draw_result') ? () => choosePool(id) : undefined} />)}</div></section>}
+      {you !== null && <div className="game-input" ref={controls}><GameControls game={game} draft={draft} disabled={locked} setDraft={setDraft} sendAction={(action) => sendAction?.(action)} /></div>}
     </div><aside className="card-detail" ref={detail} aria-label="Chi tiết lá bài"><p className="game-eyebrow">Chi tiết lá bài</p>{selected ? <><Artwork key={selected} file={cardFiles[selected]} label={cards[selected].name} /><h3>{cards[selected].name}</h3><p>{cards[selected].effect}</p></> : <><h3>Khám phá các lá bài</h3><p>Chạm, đưa chuột hoặc dùng phím Tab tới một lá bài để đọc hiệu ứng tiếng Việt.</p><span className="detail-mark" aria-hidden="true">♠ ♥ ♣ ♦</span></>}</aside></div>
   </section>;
 }

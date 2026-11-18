@@ -1,18 +1,18 @@
-import type { Action, CardId, CardKind, CardSelection, GameSnapshot } from '../../generated/protocol.ts';
+import type { Action, CardId, CardKind, CardSelection, DrawSource, GameSnapshot } from '../../generated/protocol.ts';
 import { cardFace } from './cardCatalog.ts';
 import { selectGameView } from './state.ts';
 
-export type ActionDraft = { card: CardId | null; target: number | null; selection: CardSelection | null; discarding: boolean; discard: CardId[] };
-export const emptyDraft: ActionDraft = { card: null, target: null, selection: null, discarding: false, discard: [] };
+export type ActionDraft = { card: CardId | null; target: number | null; selection: CardSelection | null; discarding: boolean; discard: CardId[]; healing: boolean; source: DrawSource; kept: CardId[] };
+export const emptyDraft: ActionDraft = { card: null, target: null, selection: null, discarding: false, discard: [], healing: false, source: 'deck', kept: [] };
 
-export function actionMode(game: GameSnapshot): 'view' | 'waiting' | 'turn' | 'response' | 'unsupported' {
+export function actionMode(game: GameSnapshot): 'view' | 'waiting' | 'turn' | 'response' | 'general_store' | 'draw_choice' | 'keep_cards' | 'choose_draw_result' {
   const { table, you } = selectGameView(game.view);
   if (you === null || table.winner) return 'view';
   if (!table.waiting || table.waiting.player !== you) return 'waiting';
   switch (table.waiting.kind.type) {
     case 'turn': return 'turn';
     case 'attack_response': case 'duel': case 'dying': return 'response';
-    default: return 'unsupported';
+    case 'general_store': case 'draw_choice': case 'keep_cards': case 'choose_draw_result': return table.waiting.kind.type;
   }
 }
 
@@ -84,4 +84,50 @@ export function endTurnAction(game: GameSnapshot, discard: CardId[], locked: boo
   if (locked || actionMode(game) !== 'turn' || discard.length !== discardCount(game)
     || new Set(discard).size !== discard.length || !discard.every((card) => hand.includes(card))) return null;
   return { type: 'end_turn', discard };
+}
+
+export function chooseCardAction(game: GameSnapshot, card: CardId | null, locked: boolean): Action | null {
+  const { table } = selectGameView(game.view);
+  if (locked || actionMode(game) !== 'general_store' || table.waiting?.pending_id == null || card === null || !table.store_pool.includes(card)) return null;
+  return { type: 'choose_card', pending_id: table.waiting.pending_id, card };
+}
+
+export function chooseDrawSourceAction(game: GameSnapshot, source: DrawSource, locked: boolean): Action | null {
+  const { table, you } = selectGameView(game.view);
+  if (locked || actionMode(game) !== 'draw_choice' || table.waiting?.pending_id == null) return null;
+  const own = table.players.find((player) => player.id === you)!;
+  if (source === 'discard' && (own.character !== 'pedro_ramirez' || table.discard_count === 0)) return null;
+  if (typeof source === 'object' && (own.character !== 'jesse_jones' || source.player === you || !table.players.some((player) => player.id === source.player && player.alive && player.hand_count > 0))) return null;
+  return { type: 'choose_draw_source', pending_id: table.waiting.pending_id, source };
+}
+
+export function keepCount(game: GameSnapshot): number {
+  const { table } = selectGameView(game.view);
+  return table.waiting?.kind.type === 'keep_cards' ? table.waiting.kind.keep : 0;
+}
+
+export function keepCardsAction(game: GameSnapshot, cards: CardId[], locked: boolean): Action | null {
+  const { table, choices } = selectGameView(game.view);
+  if (locked || actionMode(game) !== 'keep_cards' || table.waiting?.pending_id == null || cards.length !== keepCount(game)
+    || new Set(cards).size !== cards.length || !cards.every((card) => choices.includes(card))) return null;
+  return { type: 'keep_cards', pending_id: table.waiting.pending_id, cards };
+}
+
+export function chooseDrawResultAction(game: GameSnapshot, card: CardId | null, locked: boolean): Action | null {
+  const { table, choices } = selectGameView(game.view);
+  if (locked || actionMode(game) !== 'choose_draw_result' || table.waiting?.pending_id == null || card === null || !choices.includes(card)) return null;
+  return { type: 'choose_draw_result', pending_id: table.waiting.pending_id, card };
+}
+
+export function isSid(game: GameSnapshot): boolean {
+  const { table, you } = selectGameView(game.view);
+  return !table.winner && you !== null && table.players.some((player) => player.id === you && player.character === 'sid_ketchum');
+}
+
+export function sidHealAction(game: GameSnapshot, discard: CardId[], locked: boolean): Action | null {
+  const { table, you, hand } = selectGameView(game.view);
+  if (locked || !isSid(game) || discard.length !== 2 || discard[0] === discard[1] || !discard.every((card) => hand.includes(card))) return null;
+  const ownDying = table.waiting?.player === you && table.waiting.kind.type === 'dying';
+  if (ownDying && table.waiting!.pending_id === null) return null;
+  return { type: 'sid_heal', pending_id: ownDying ? table.waiting!.pending_id : null, discard: [discard[0], discard[1]] };
 }

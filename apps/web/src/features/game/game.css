@@ -48,3 +48,6 @@
 .affect-options { margin-top: 12px; }.affect-options legend { font-size: 13px; font-weight: 600; }.affect-options label { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px; margin: 0; font-size: 13px; cursor: pointer; }.affect-options input { width: 18px; height: 18px; flex-shrink: 0; accent-color: #234d40; }
 .demo-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 20px; font-size: 14px; }.demo-toolbar label { margin: 0; }.demo-toolbar select { min-height: 44px; border: 1px solid #aaa; border-radius: 4px; padding: 8px; background: white; }.demo-action-log { display: block; white-space: pre-wrap; overflow-wrap: anywhere; padding: 14px; border: 1px solid #ccc; margin-top: 16px; font: 12px/1.5 monospace; }
 @media (max-width: 700px) { .control-buttons .action { flex: 1 1 auto; }.game-controls { padding: 12px; }.demo-toolbar select { max-width: 100%; } }
+
+.decision-pool { order: 3; }.game-input { order: 4; }.sid-controls { background: var(--paper); }
+@media (max-width: 700px) { .decision-pool, .game-input { order: 0; }.decision-pool { margin-top: 0; }.game-input { margin-bottom: 20px; } }

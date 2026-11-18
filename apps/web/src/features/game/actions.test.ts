@@ -86,7 +86,7 @@ test('end turn requires exactly the excess physical owned cards without duplicat
   assert.deepEqual(endTurnAction(game, [], false), { type: 'end_turn', discard: [] });
 });
 
-test('wrong actor, spectator, eliminated player, winner and unsupported choices do not build actions', () => {
+test('wrong actor, spectator, eliminated player, winner and other decision kinds do not build actions', () => {
   for (const mode of ['wrong', 'spectator', 'dead', 'won', 'pool'] as const) {
     const game = fixture();
     if (game.view.perspective === 'player') {
