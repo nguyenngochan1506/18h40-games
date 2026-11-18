@@ -1,95 +1,137 @@
 import { useEffect, useRef, useState } from 'react';
 import { PROTOCOL_VERSION } from '../generated/protocol';
-import type { ClientMessage, ServerMessage } from '../generated/protocol';
+import type { ClientMessage, RoomView, ServerMessage } from '../generated/protocol';
+import Lobby from '../features/lobby/Lobby';
+import Room from '../features/rooms/Room';
+import { errorMessages } from '../shared/lib/errors';
 import { connectSocket } from '../shared/lib/socket';
+import { loadSession, retryDelay, saveSession } from '../shared/lib/session';
 
-type ConnectionStatus = 'Đang kết nối' | 'Đã kết nối' | 'Mất kết nối';
+type ConnectionStatus = 'Đang kết nối' | 'Đã kết nối' | 'Đang kết nối lại…' | 'Mất kết nối';
 
 export default function App() {
+  const [initialSession] = useState(loadSession);
+  const session = useRef(initialSession);
   const socket = useRef<WebSocket | null>(null);
-  const pendingPing = useRef<{ nonce: number; startedAt: number } | null>(null);
-  const nextNonce = useRef(0);
-  const [status, setStatus] = useState<ConnectionStatus>('Đang kết nối');
-  const [waiting, setWaiting] = useState(false);
-  const [latency, setLatency] = useState<number | null>(null);
+  const [room, setRoom] = useState<RoomView | null>(null);
+  const [restoring, setRestoring] = useState(Boolean(initialSession));
+  const [status, setStatus] = useState<ConnectionStatus>(initialSession ? 'Đang kết nối lại…' : 'Đang kết nối');
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const connection = connectSocket();
-    socket.current = connection;
-    connection.onopen = () => setStatus('Đã kết nối');
-    const disconnected = () => {
-      setStatus('Mất kết nối');
-      pendingPing.current = null;
-      setWaiting(false);
-    };
-    connection.onclose = disconnected;
-    connection.onerror = disconnected;
-    connection.onmessage = (event: MessageEvent<string>) => {
-      try {
-        const message: ServerMessage = JSON.parse(event.data);
-        if (message.v !== PROTOCOL_VERSION) {
-          throw new Error('Unsupported protocol version');
+    let stopped = false;
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    function connect() {
+      if (stopped) return;
+      const connection = connectSocket();
+      socket.current = connection;
+      connection.onopen = () => {
+        if (session.current) {
+          setRestoring(true);
+          connection.send(JSON.stringify({ v: PROTOCOL_VERSION, type: 'rejoin_room', room_code: session.current.roomCode, token: session.current.token } satisfies ClientMessage));
+        } else {
+          attempt = 0;
+          setStatus('Đã kết nối');
         }
-        if (message.type === 'pong' && message.nonce === pendingPing.current?.nonce) {
-          setLatency(performance.now() - pendingPing.current.startedAt);
-          pendingPing.current = null;
-          setWaiting(false);
-        } else if (message.type === 'error') {
-          setError(message.code === 'unsupported_version'
-            ? 'Phiên bản kết nối không tương thích. Hãy tải lại trang.'
-            : 'Máy chủ không chấp nhận tin nhắn. Hãy gửi lại ping.');
-          pendingPing.current = null;
-          setWaiting(false);
+      };
+      connection.onmessage = (event: MessageEvent<string>) => {
+        try {
+          const message: ServerMessage = JSON.parse(event.data);
+          if (message.v !== PROTOCOL_VERSION) throw new Error('Unsupported protocol version');
+          switch (message.type) {
+            case 'joined':
+              session.current = { roomCode: message.room_code, token: message.token };
+              saveSession(session.current);
+              setRoom(message.room);
+              setRestoring(false);
+              setStatus('Đã kết nối');
+              setPending(false);
+              setError(null);
+              attempt = 0;
+              break;
+            case 'room_state':
+              setRoom(message.room);
+              setPending(false);
+              break;
+            case 'left':
+              session.current = null;
+              saveSession(null);
+              setRoom(null);
+              setRestoring(false);
+              setPending(false);
+              break;
+            case 'error':
+              setError(errorMessages[message.code] ?? 'Không xử lý được yêu cầu. Hãy tải lại trang.');
+              setPending(false);
+              if (message.code === 'invalid_token' || message.code === 'room_not_found') {
+                session.current = null;
+                saveSession(null);
+                setRoom(null);
+                setRestoring(false);
+                setStatus('Đã kết nối');
+              }
+              break;
+            case 'pong': break;
+            default: throw new Error('Invalid server message');
+          }
+        } catch {
+          setError('Không đọc được phản hồi từ máy chủ. Hãy tải lại trang.');
+          setPending(false);
         }
-      } catch {
-        setError('Không đọc được phản hồi từ máy chủ. Hãy tải lại trang.');
-        pendingPing.current = null;
-        setWaiting(false);
-      }
-    };
+      };
+      connection.onerror = () => connection.close();
+      connection.onclose = (event) => {
+        if (stopped) return;
+        setPending(false);
+        if (event.code === 4001) {
+          setStatus('Mất kết nối');
+          setRestoring(false);
+          setError('Phiên đã được mở ở nơi khác. Tải lại trang nếu muốn vào lại tại đây.');
+          return;
+        }
+        setStatus('Đang kết nối lại…');
+        setRestoring(Boolean(session.current));
+        timer = setTimeout(connect, retryDelay(attempt++));
+      };
+    }
+    connect();
     return () => {
-      connection.onopen = null;
-      connection.onclose = null;
-      connection.onerror = null;
-      connection.onmessage = null;
-      pendingPing.current = null;
+      stopped = true;
+      clearTimeout(timer);
+      const connection = socket.current;
+      if (connection) {
+        connection.onopen = null;
+        connection.onmessage = null;
+        connection.onerror = null;
+        connection.onclose = null;
+        connection.close();
+      }
       socket.current = null;
-      connection.close();
     };
   }, []);
 
-  function sendPing() {
-    if (socket.current?.readyState !== WebSocket.OPEN || pendingPing.current) return;
-    const nonce = nextNonce.current;
-    nextNonce.current = (nonce + 1) >>> 0;
-    const message: ClientMessage = { v: PROTOCOL_VERSION, type: 'ping', nonce };
-    pendingPing.current = { nonce, startedAt: performance.now() };
-    socket.current.send(JSON.stringify(message));
-    setWaiting(true);
-    setError(null);
+  function send(message: ClientMessage) {
+    if (socket.current?.readyState !== WebSocket.OPEN || status !== 'Đã kết nối' || pending) return;
+    try {
+      socket.current.send(JSON.stringify(message));
+      setPending(true);
+      setError(null);
+    } catch {
+      setError('Kết nối vừa gián đoạn. Hãy chờ kết nối lại.');
+      socket.current.close();
+    }
   }
 
+  const disabled = status !== 'Đã kết nối' || pending || restoring;
   return (
-    <main className="mx-auto flex min-h-svh max-w-xl flex-col justify-center px-6 py-12">
-      <p className="mb-3 text-sm font-medium uppercase tracking-widest text-stone-500">18h40 games · M0</p>
-      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Kiểm tra kết nối</h1>
-      <p className="mt-4 leading-relaxed text-stone-600">Gửi ping đến máy chủ để đo thời gian phản hồi.</p>
-      <div className="mt-8 border-y border-stone-300 py-5" role="status" aria-live="polite">
-        <p className="font-medium">{status}</p>
-        <p className="mt-2 text-sm tabular-nums text-stone-600">
-          {waiting ? 'Đang chờ phản hồi…' : latency === null ? 'Chưa có kết quả đo' : `Thời gian phản hồi: ${latency.toFixed(1)} ms`}
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={sendPing}
-        disabled={status !== 'Đã kết nối' || waiting}
-        className="mt-6 min-h-12 self-start rounded-md bg-emerald-800 px-6 py-3 font-medium text-white hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        Gửi ping
-      </button>
-      {error && <p className="mt-4 text-sm text-red-800" role="alert">{error}</p>}
+    <main className="mx-auto min-h-svh max-w-2xl px-6 py-10 sm:py-16">
+      <p className="text-sm font-medium uppercase tracking-widest text-stone-500">18h40 games</p>
+      <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{room ? 'Phòng của bạn' : restoring ? 'Đang vào lại phòng' : 'Hẹn nhau một ván'}</h1>
+      <p className="mt-3 text-sm text-stone-600" role="status" aria-live="polite">{status}</p>
+      {error && <p className="mt-5 border-l-2 border-red-700 pl-3 text-sm text-red-800" role="alert">{error}</p>}
+      {room ? <Room room={room} disabled={disabled} send={send} /> : restoring ? <p className="mt-8 text-stone-600">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p> : <Lobby disabled={disabled} send={send} />}
     </main>
   );
 }

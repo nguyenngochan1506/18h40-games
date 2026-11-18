@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "node --test src/shared/lib/session.test.ts"
   },
   "dependencies": {
     "react": "^19.3.1",
