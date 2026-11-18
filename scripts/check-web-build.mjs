@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { seatActorFiles } from '../apps/web/src/features/game/assetMap.ts';
 import { demoGame } from '../apps/web/src/features/game/demo.ts';
 
 const dist = fileURLToPath(new URL('../apps/web/dist/', import.meta.url));
@@ -20,3 +21,9 @@ for (const entry of await readdir(dist, { recursive: true, withFileTypes: true }
 }
 assert.ok(checked > 0, 'Production JavaScript must exist before checking demo exclusion');
 console.log(`Production demo exclusion: PASS (${checked} JavaScript files checked)`);
+
+for (const url of seatActorFiles) {
+  const source = await readFile(new URL(`../assets${url}`, import.meta.url));
+  assert.deepEqual(await readFile(join(dist, url)), source, `Required seat portrait missing from build: ${url}`);
+}
+console.log(`Required seat portraits: PASS (${seatActorFiles.length} WebP files bundled)`);

@@ -62,3 +62,17 @@ export function cowboyFile(playerId: number, available: readonly string[] = avai
   const variant = cowboyVariants[Math.abs(Math.trunc(playerId)) % cowboyVariants.length];
   return available.includes(variant) ? variant : sceneFiles.cowboy;
 }
+
+export type SeatView = 'front' | 'q3front' | 'side' | 'q3back';
+export const seatViews = ['q3front', 'side', 'q3back'] as const;
+export const seatActorFiles = [
+  ...['a', 'b', 'c', 'd', 'e', 'f'].flatMap(style => seatViews.map(view => `/scene/seat/cowboy-${style}-${view}.webp`)),
+  ...seatViews.map(view => `/scene/seat/ghost-${view}.webp`),
+];
+
+// Angled portraits are required assets; only the original front variants are optional.
+export function seatActorFile(playerId: number, view: SeatView, ghost = false, available: readonly string[] = availableSceneFiles) {
+  if (view === 'front') return ghost ? sceneFiles.ghost : cowboyFile(playerId, available);
+  const style = 'abcdef'[Math.abs(Math.trunc(playerId)) % 6];
+  return `/scene/seat/${ghost ? 'ghost' : `cowboy-${style}`}-${view}.webp`;
+}

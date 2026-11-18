@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { assetUrl, availableSceneFiles, backFiles, cardFiles, cowboyFile, fxFiles, optionalSceneFiles, sceneFiles } from './assetMap';
+import { assetUrl, availableSceneFiles, backFiles, cardFiles, seatActorFile, fxFiles, optionalSceneFiles } from './assetMap';
+import type { SeatView } from './assetMap';
 import { cardFace } from './cardCatalog';
 import { eventsToFx, FX_BUDGET, FX_CONCURRENT, scheduleFx, shouldPlayFx, shotOrigin } from './fx';
 import type { FxAnchor, FxBatch, FxContext } from './fx';
@@ -98,8 +99,9 @@ export default function GameFx({ batch, ctx, enabled, width, height }: { batch: 
       if (nodes.size >= FX_CONCURRENT) { const oldest = nodes.values().next().value!; oldest.remove(); nodes.delete(oldest); }
       let from = point(stage, job.from);
       const to = point(stage, job.to), stageBox = stage.getBoundingClientRect();
-      const sourceActor = typeof job.from === 'number' ? stage.querySelector(`[data-scene-player="${job.from}"]`)?.getBoundingClientRect() : undefined;
-      if (job.kind === 'shot') from = shotOrigin(from, to, sourceActor ? { x: sourceActor.x - stageBox.x, y: sourceActor.y - stageBox.y, width: sourceActor.width, height: sourceActor.height } : undefined);
+      const sourceElement = typeof job.from === 'number' ? stage.querySelector<HTMLElement>(`[data-scene-player="${job.from}"]`) : null;
+      const sourceActor = sourceElement?.getBoundingClientRect();
+      if (job.kind === 'shot') from = shotOrigin(from, to, sourceActor ? { x: sourceActor.x - stageBox.x, y: sourceActor.y - stageBox.y, width: sourceActor.width, height: sourceActor.height, handX: Number(sourceElement!.dataset.handX), handY: Number(sourceElement!.dataset.handY) } : undefined);
       const dx = to.x - from.x, dy = to.y - from.y, angle = Math.atan2(dy, dx) * 180 / Math.PI;
       const node = element(`fx-cue fx-cue-${job.kind}`);
       const depth = (anchor: FxAnchor) => typeof anchor === 'number' ? parseFloat(stage.querySelector<HTMLElement>(`[data-player-id="${anchor}"]`)?.style.getPropertyValue('--depth') ?? '') || 1 : 1;
@@ -152,10 +154,15 @@ export default function GameFx({ batch, ctx, enabled, width, height }: { batch: 
           shake(target);
         } else if (job.kind === 'deflect') { node.append(sprite('impact'), sprite('bullet')); }
         else if (job.kind === 'eliminate') {
-          const actor = stage.querySelector(`[data-scene-player="${job.to}"]`)?.getBoundingClientRect();
+          const actorElement = stage.querySelector<HTMLElement>(`[data-scene-player="${job.to}"]`);
+          const actor = actorElement?.getBoundingClientRect();
           if (actor) { node.style.setProperty('--fx-actor-width', `${actor.width}px`); node.style.setProperty('--fx-actor-height', `${actor.height}px`); }
-          const ghost = document.createElement('img'); ghost.src = sceneFiles.ghost; ghost.alt = ''; ghost.className = 'fx-rising-ghost'; node.append(ghost);
-          const living = document.createElement('img'); living.src = cowboyFile(Number(job.to)); living.alt = ''; living.className = 'fx-fading-cowboy'; node.append(living);
+          const view = actorElement?.dataset.seatView as SeatView | undefined;
+          if (actor) { node.style.left = `${actor.x + actor.width / 2 - stageBox.x}px`; node.style.top = `${actor.y + actor.height * .35 - stageBox.y}px`; }
+          node.style.setProperty('--fx-actor-flip', actorElement?.dataset.seatFlip === 'true' ? '-1' : '1');
+          for (const ghost of [false, true]) {
+            const art = document.createElement('img'); art.src = seatActorFile(Number(job.to), view ?? 'front', ghost); art.alt = ''; art.decoding = 'async'; art.className = ghost ? 'fx-rising-ghost' : 'fx-fading-cowboy'; node.append(art);
+          }
           const role = stage.querySelector(`[data-player-id="${job.to}"] .role-tile`);
           if (role) animate(role, [{ transform: 'rotateY(90deg)' }, { transform: 'rotateY(0)' }], 300);
         } else if (job.kind === 'turn') {

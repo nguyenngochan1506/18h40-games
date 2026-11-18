@@ -1,13 +1,21 @@
-function place(x: number, y: number, cardsX: number, cardsY: number, depth: number, actorHeight: number) {
-  return { x, y, cardsX, cardsY, depth, actorHeight, angle: cardsX < 50 ? 8 : cardsX > 50 ? -8 : 0 };
+import type { SeatView } from './assetMap.ts';
+
+function place(x: number, y: number, cardsX: number, cardsY: number, depth: number, actorHeight: number, view: SeatView) {
+  const flip = x > 50;
+  const faceX = view === 'front' ? .5 : view === 'q3back' ? .62 : .58;
+  const handX = view === 'front' ? .5 : .82;
+  return { x, y, cardsX, cardsY, depth, actorHeight, view, flip,
+    faceX: flip ? 1 - faceX : faceX, faceY: .35,
+    handX: flip ? 1 - handX : handX, handY: view === 'q3back' ? .78 : .92,
+    angle: cardsX < 50 ? 8 : cardsX > 50 ? -8 : 0 };
 }
 
-// Chair anchors measured in each source image; cards sit inward on the painted tabletop.
+// Portrait waists meet the chairs; hands reach inward over the painted table edge.
 export const sceneSeats = {
-  4: [place(50, 89, 50, 85, 1.12, .30), place(10.5, 50, 24, 52, 1, .26), place(50, 28, 50, 30, .90, .22), place(89.5, 50, 76, 52, 1, .26)],
-  5: [place(50, 89, 50, 85, 1.12, .30), place(10.5, 51.5, 24, 53, 1, .26), place(28, 31, 33, 35, .90, .22), place(72, 31, 67, 35, .90, .22), place(89.5, 51.5, 76, 53, 1, .26)],
-  6: [place(50, 89, 50, 85, 1.12, .30), place(15, 77, 32, 66, 1.05, .30), place(14, 46, 25, 43, .98, .26), place(50, 28, 50, 30, .90, .22), place(86, 46, 75, 43, .98, .26), place(85, 77, 68, 66, 1.05, .30)],
-  7: [place(50, 89, 50, 85, 1.12, .30), place(15, 77, 32, 67, 1.05, .30), place(11, 49, 21.5, 50, .98, .26), place(28, 31, 33, 35, .90, .22), place(72, 31, 67, 35, .90, .22), place(89, 49, 78.5, 50, .98, .26), place(85, 77, 68, 67, 1.05, .30)],
+  4: [place(50, 85, 50, 85, 1.12, .30, 'q3back'), place(14, 53, 27, 56, 1, .29, 'side'), place(50, 28, 50, 32, .90, .22, 'front'), place(86, 53, 73, 56, 1, .29, 'side')],
+  5: [place(50, 85, 50, 85, 1.12, .30, 'q3back'), place(14, 54.5, 27, 57, 1, .29, 'side'), place(29, 34, 35, 40, .90, .24, 'q3front'), place(71, 34, 65, 40, .90, .24, 'q3front'), place(86, 54.5, 73, 57, 1, .29, 'side')],
+  6: [place(50, 85, 50, 85, 1.12, .30, 'q3back'), place(19, 79, 34, 69, 1.05, .30, 'q3back'), place(17, 49, 28, 46, .98, .28, 'side'), place(50, 28, 50, 32, .90, .22, 'front'), place(83, 49, 72, 46, .98, .28, 'side'), place(81, 79, 66, 69, 1.05, .30, 'q3back')],
+  7: [place(50, 85, 50, 85, 1.12, .30, 'q3back'), place(19, 79, 34, 69, 1.05, .30, 'q3back'), place(14, 52, 30, 54, .98, .28, 'side'), place(29, 34, 35, 40, .90, .24, 'q3front'), place(71, 34, 65, 40, .90, .24, 'q3front'), place(86, 52, 70, 54, .98, .28, 'side'), place(81, 79, 66, 69, 1.05, .30, 'q3back')],
 };
 
 export function sceneSeatLayout(count: number, viewerIndex: number | null) {

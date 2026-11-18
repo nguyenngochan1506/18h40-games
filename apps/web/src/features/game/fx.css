@@ -45,8 +45,8 @@
 .fx-cue-damage .fx-label { color: #ffd3b3; }
 .fx-cue-deflect .fx-bullet { animation: fx-ricochet 900ms ease-out both; }
 .fx-cue-deflect .fx-impact { animation: fx-burst 600ms ease-out both; }
-.fx-rising-ghost, .fx-fading-cowboy { position: absolute; width: var(--fx-actor-width, calc(var(--scene-height) * .16)); height: var(--fx-actor-height, calc(var(--scene-height) * .23)); object-fit: contain; transform: translate(-50%,-35%); mask-image: linear-gradient(#000 70%, transparent); }
-.fx-rising-ghost { animation: fx-ghost 1200ms ease-out both; }
+.fx-rising-ghost, .fx-fading-cowboy { position: absolute; width: var(--fx-actor-width, calc(var(--scene-height) * .16)); height: var(--fx-actor-height, calc(var(--scene-height) * .23)); object-fit: contain; transform: translate(-50%,-35%); mask-image: linear-gradient(#000 97%, transparent); scale: var(--fx-actor-flip, 1) 1; }
+.fx-rising-ghost { mix-blend-mode: screen; filter: drop-shadow(0 0 8px #ace4e6); animation: fx-ghost 1200ms ease-out both; }
 .fx-fading-cowboy { animation: fx-cowboy-out 600ms ease-out both; }
 .fx-cue-eliminate .fx-label { top: -74px; color: #cbf5e9; }
 .fx-turn-ring { position: absolute; width: 100px; height: 100px; border: 2px solid #e4b459; border-radius: 50%; box-shadow: 0 0 25px #f8c86680, inset 0 0 20px #e1a54070; animation: fx-turn 900ms ease-out both; }
@@ -72,7 +72,7 @@
 @keyframes fx-health { from { opacity: 0; transform: translate(-50%,-50%) scale(.6); } 40% { opacity: .9; } to { opacity: 0; transform: translate(-50%,-50%) scale(1.3); } }
 @keyframes fx-lost-bullet { from { opacity: 1; transform: translate(0,0); } to { opacity: 0; transform: translate(calc(12px + var(--i) * 8px),48px) rotate(85deg); } }
 @keyframes fx-ricochet { from { opacity: 1; transform: translate(-50%,-50%) rotate(-25deg); } to { opacity: 0; transform: translate(110px,-80px) rotate(-55deg); } }
-@keyframes fx-ghost { from { opacity: .9; transform: translate(-50%,-35%); } to { opacity: 0; transform: translate(-50%,-70%); } }
+@keyframes fx-ghost { from { opacity: .6; transform: translate(-50%,-35%); } to { opacity: 0; transform: translate(-50%,-70%); } }
 @keyframes fx-cowboy-out { from { opacity: .8; } to { opacity: 0; } }
 @keyframes fx-turn { from { opacity: 0; transform: translate(-50%,-50%) scale(.4); } 35% { opacity: 1; } to { opacity: 0; transform: translate(-50%,-50%) scale(1.4); } }
 @keyframes fx-confetti { from { opacity: 1; transform: translate(0,-80px); } to { opacity: 0; transform: translate(calc((var(--i) - 8) * 35px),calc(40px + var(--i) * 9px)) rotate(180deg); } }

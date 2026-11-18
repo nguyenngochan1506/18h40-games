@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import type { Action, CardId, CardKind, GameSnapshot, PublicPlayer, RoomView, SpectatorView } from '../../generated/protocol';
-import { assetUrl, sceneFiles, landscapeScenes, cowboyFile, backFiles, cardFiles, characterFiles, roleFiles } from './assetMap';
+import { assetUrl, sceneFiles, landscapeScenes, seatActorFile, backFiles, cardFiles, characterFiles, roleFiles } from './assetMap';
 import { cardFace } from './cardCatalog';
 import { cards, characters, roles } from './i18n';
 import { selectGameView } from './state';
@@ -17,6 +17,7 @@ import { Icon } from './TableIcons';
 import { seatLayout } from './layout';
 import { sceneStage } from './sceneStage';
 import { sceneSeatLayout } from './sceneSeats';
+import type { SeatView } from './assetMap';
 import './game.css';
 import './cinematic.css';
 
@@ -29,8 +30,8 @@ function Artwork({ file, label }: { file: string; label: string }) {
     : <img src={assetUrl(file)} alt={label} onError={() => setMissing(true)} loading="lazy" />}</span>;
 }
 
-function CowboyPortrait({ player, scene = false }: { player: PublicPlayer; scene?: boolean }) {
-  return <img className={`cowboy${!player.alive ? ' ghost' : ''}`} src={player.alive ? scene ? cowboyFile(player.id) : sceneFiles.cowboy : sceneFiles.ghost} onError={(event) => { if (player.alive && event.currentTarget.getAttribute('src') !== sceneFiles.cowboy) event.currentTarget.src = sceneFiles.cowboy; }} alt="" decoding="async" style={scene ? undefined : { transform: player.id % 2 ? 'scaleX(-1)' : undefined, filter: player.alive ? `brightness(${.88 + player.id % 3 * .06}) hue-rotate(${player.id % 3 * 3}deg)` : undefined }} />;
+function CowboyPortrait({ player, view, flip = false }: { player: PublicPlayer; view?: SeatView; flip?: boolean }) {
+  return <img className={`cowboy${!player.alive ? ' ghost' : ''}`} src={view ? seatActorFile(player.id, view, !player.alive) : player.alive ? sceneFiles.cowboy : sceneFiles.ghost} onError={(event) => { if (player.alive && event.currentTarget.getAttribute('src') !== sceneFiles.cowboy) event.currentTarget.src = sceneFiles.cowboy; }} alt="" decoding="async" style={view ? { transform: flip ? 'scaleX(-1)' : undefined } : { transform: player.id % 2 ? 'scaleX(-1)' : undefined, filter: player.alive ? `brightness(${.88 + player.id % 3 * .06}) hue-rotate(${player.id % 3 * 3}deg)` : undefined }} />;
 }
 
 function Card({ id, inspect, pick, picked = false, style }: { id: CardId; inspect: Inspect; pick?: () => void; picked?: boolean; style?: CSSProperties }) {
@@ -163,7 +164,7 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
             const inward = painted.cardsX <= 50 ? 1 : -1;
             const equipmentDirection = painted.cardsY > 60 && painted.cardsX !== 50 ? -inward : inward;
             const middleRow = painted.cardsY > 40 && painted.cardsY < 60;
-            const equipmentOffset = player.id === viewer ? Math.max(50, stage.width * .05) : equipmentDirection * stage.width / 1280 * (middleRow ? 136 : painted.cardsY > 60 ? 126 : 112) * painted.depth;
+            const equipmentOffset = player.id === viewer ? Math.max(50, stage.width * .05) : equipmentDirection * stage.width / 1280 * (middleRow ? 90 : painted.cardsY > 60 ? 126 : 112) * painted.depth;
             Object.assign(style, { '--scene-card-x': `${painted.cardsX}%`, '--scene-card-y': `${painted.cardsY}%`, '--depth': painted.depth, '--scene-lean': `${painted.angle}deg`, '--scene-equipment-y': middleRow ? '18px' : painted.cardsY > 60 ? '-8px' : '8px', '--scene-equipment-x': `${equipmentOffset}px` });
           }
           const ownSeat = player.id === viewer;
@@ -172,7 +173,7 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
           const chooseTarget = targetMode && player.alive && (player.id !== you || targetSelf) ? () => { setDraft({ ...draft, target: player.id, selection: null }); setSelected(null); } : undefined;
           const nickname = seat?.nickname ?? `Ghế ${player.id + 1}`;
           return <Fragment key={player.id}>
-            {stage && painted && !ownSeat && <button type="button" className={`scene-actor${turn ? ' has-turn' : ''}${!player.alive ? ' eliminated' : ''}`} data-scene-player={player.id} data-scene-slot={painted.slot} style={{ left: `${painted.x}%`, top: `${painted.y}%`, height: `${painted.actorHeight * 100}%`, width: stage.height * painted.actorHeight * .75 }} aria-label={chooseTarget ? `Nhắm tới ${nickname} trên ghế` : `Xem nhân vật ${nickname} trên ghế`} disabled={!!chooseTarget && locked} onClick={(event) => chooseTarget ? chooseTarget() : inspectPlayer(player, event.currentTarget)}><CowboyPortrait player={player} scene /><span className="actor-anchor" data-animation-anchor={player.id} aria-hidden="true" />{(waiting || draft.target === player.id) && <span className="crosshair" aria-hidden="true" />}</button>}
+            {stage && painted && !ownSeat && <button type="button" className={`scene-actor${turn ? ' has-turn' : ''}${!player.alive ? ' eliminated' : ''}`} data-scene-player={player.id} data-scene-slot={painted.slot} data-seat-view={painted.view} data-seat-flip={painted.flip} data-hand-x={painted.handX} data-hand-y={painted.handY} style={{ '--face-x': `${painted.faceX * 100}%`, '--face-y': `${painted.faceY * 100}%`, left: `${painted.x}%`, top: `${painted.y}%`, height: `${painted.actorHeight * 100}%`, width: stage.height * painted.actorHeight * .75 } as CSSProperties} aria-label={chooseTarget ? `Nhắm tới ${nickname} trên ghế` : `Xem nhân vật ${nickname} trên ghế`} disabled={!!chooseTarget && locked} onClick={(event) => chooseTarget ? chooseTarget() : inspectPlayer(player, event.currentTarget)}><CowboyPortrait player={player} view={painted.view} flip={painted.flip} /><span className="actor-anchor" data-animation-anchor={player.id} aria-hidden="true" />{(waiting || draft.target === player.id) && <span className="crosshair" aria-hidden="true" />}</button>}
             <div className="seat-position" style={style} data-player-id={player.id} data-scene-slot={painted?.slot}><Seat player={player} nickname={nickname} own={ownSeat} turn={turn} waiting={waiting} presence={member ? member.online ? 'Đang kết nối' : 'Mất kết nối' : 'Đã rời phòng'} inspect={inspect} inspectPlayer={inspectPlayer} disabled={locked} targetSelected={draft.target === player.id} chooseTarget={chooseTarget} scene={!!stage} /></div>
           </Fragment>;
 

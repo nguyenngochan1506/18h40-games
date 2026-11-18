@@ -110,7 +110,7 @@ export function scheduleFx(cues: FxCue[], congested = false) {
 }
 
 // Actor-local hand position; the viewer without an actor keeps the existing first-person anchor.
-export function shotOrigin(from: { x: number; y: number }, to: { x: number; y: number }, actor?: { x: number; y: number; width: number; height: number }) {
+export function shotOrigin(from: { x: number; y: number }, to: { x: number; y: number }, actor?: { x: number; y: number; width: number; height: number; handX?: number; handY?: number }) {
   if (!actor) return from;
-  return { x: actor.x + actor.width * (to.x >= actor.x + actor.width / 2 ? .72 : .28), y: actor.y + actor.height * .62 };
+  return { x: actor.x + actor.width * (actor.handX ?? (to.x >= actor.x + actor.width / 2 ? .72 : .28)), y: actor.y + actor.height * (actor.handY ?? .62) };
 }

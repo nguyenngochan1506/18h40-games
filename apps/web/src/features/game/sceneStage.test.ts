@@ -21,7 +21,7 @@ for (const count of [4, 5, 6, 7] as const) {
     const seats = sceneSeats[count];
     assert.equal(seats.length, count);
     assert.equal(seats[0].x, 50);
-    assert.equal(seats[0].y, 89);
+    assert.equal(seats[0].y, 85);
     let previous = Math.PI / 2 - .01;
     for (const [i, seat] of seats.entries()) {
       for (const value of [seat.x, seat.y, seat.cardsX, seat.cardsY]) assert.ok(value >= 0 && value <= 100);
@@ -39,6 +39,13 @@ for (const count of [4, 5, 6, 7] as const) {
       assert.equal(seat.cardsX + mirror.cardsX, 100);
       assert.equal(seat.cardsY, mirror.cardsY);
       assert.equal(seat.angle, -mirror.angle || 0);
+      assert.equal(seat.view, mirror.view);
+      assert.equal(seat.flip, seat.x > 50);
+      if (seat.x !== 50) {
+        assert.notEqual(seat.flip, mirror.flip);
+        assert.equal(seat.handX + mirror.handX, 1);
+        assert.equal(seat.faceX + mirror.faceX, 1);
+      }
     }
   });
   test(`painted scene ${count}: every viewer rotates to the front; spectators use all chairs`, () => {
@@ -56,4 +63,21 @@ for (const count of [4, 5, 6, 7] as const) {
 test('painted scene rejects unsupported counts and viewer indices', () => {
   for (const count of [3, 8, 4.5]) assert.throws(() => sceneSeatLayout(count, null), RangeError);
   for (const viewer of [-1, 4, .5]) assert.throws(() => sceneSeatLayout(4, viewer), RangeError);
+});
+
+
+test('each painted chair uses an inward view, including side chairs in four and six seats', () => {
+  const expected = {
+    4: ['q3back', 'side', 'front', 'side'],
+    5: ['q3back', 'side', 'q3front', 'q3front', 'side'],
+    6: ['q3back', 'q3back', 'side', 'front', 'side', 'q3back'],
+    7: ['q3back', 'q3back', 'side', 'q3front', 'q3front', 'side', 'q3back'],
+  };
+  for (const count of [4, 5, 6, 7] as const) {
+    assert.deepEqual(sceneSeats[count].map(seat => seat.view), expected[count]);
+    for (const seat of sceneSeats[count]) {
+      assert.ok(seat.faceY < seat.handY && seat.handY < 1);
+      assert.ok(seat.flip ? seat.handX < seat.faceX : seat.handX >= seat.faceX);
+    }
+  }
 });

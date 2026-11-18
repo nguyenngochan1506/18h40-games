@@ -136,3 +136,14 @@ test('muzzle origin follows the near hand on either firing direction, preserving
   assert.deepEqual(shotOrigin(from, { x: 0, y: 80 }, actor), { x: 48, y: 154 });
   assert.equal(shotOrigin(from, { x: 300, y: 80 }), from);
 });
+
+
+test('angled muzzle stays on the inward hand regardless of the target side', () => {
+  const from = { x: 50, y: 50 };
+  for (const handX of [.82, .18]) for (const handY of [.78, .92]) {
+    const actor = { x: 10, y: 30, width: 100, height: 200, handX, handY };
+    const expected = { x: 10 + 100 * handX, y: 30 + 200 * handY };
+    assert.deepEqual(shotOrigin(from, { x: 0, y: 0 }, actor), expected);
+    assert.deepEqual(shotOrigin(from, { x: 300, y: 300 }, actor), expected);
+  }
+});
