@@ -239,9 +239,9 @@ export default function GameFx({ batch, ctx, enabled, width, height, ambientEnab
     if (!active) return;
     for (const player of ctx.players) {
       if (!player.alive) continue;
-      for (const kind of ['jail', 'dynamite'] as const) {
+      for (const kind of ['jail'] as const) {  // Dynamite chỉ hiện bằng lá bài trước mặt, không dựng thêm hình quả bom
         if (!player.in_play.some(id => cardFace(id)?.kind === kind)) continue;
-        const anchor = point(stage, kind === 'dynamite' ? `equipment-${player.id}` : player.id);
+        const anchor = point(stage, player.id);
         const node = element(`fx-persistent fx-persistent-${kind}`);
         node.style.left = `${anchor.x}px`; node.style.top = `${anchor.y}px`;
         const depth = parseFloat(stage.querySelector<HTMLElement>(`[data-player-id="${player.id}"]`)?.style.getPropertyValue('--depth') ?? '') || 1;
