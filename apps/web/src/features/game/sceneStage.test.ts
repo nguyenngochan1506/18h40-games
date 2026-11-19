@@ -26,7 +26,7 @@ for (const count of [4, 5, 6, 7] as const) {
     for (const [i, seat] of seats.entries()) {
       for (const value of [seat.x, seat.y, seat.cardsX, seat.cardsY]) assert.ok(value >= 0 && value <= 100);
       assert.ok(seat.x >= 0 && seat.x <= 100 && seat.y <= 100 && seat.y >= seat.actorHeight * 100);
-      assert.ok(seat.cardsX >= 20 && seat.cardsX <= 80 && seat.cardsY >= 30 && seat.cardsY <= 85);
+      assert.ok(seat.cardsX >= 18 && seat.cardsX <= 82 && seat.cardsY >= 30 && seat.cardsY <= 85);
       assert.ok(seat.actorHeight >= .22 && seat.actorHeight <= .30);
       assert.ok(seat.depth <= seats[0].depth);
       let angle = Math.atan2(seat.y - 50, seat.x - 50);
@@ -52,7 +52,7 @@ for (const count of [4, 5, 6, 7] as const) {
     for (let viewer = 0; viewer < count; viewer++) {
       const mapped = sceneSeatLayout(count, viewer);
       assert.equal(mapped[viewer].slot, 0);
-      assert.equal(mapped[viewer].cardsY, 70);
+      assert.equal(mapped[viewer].cardsY, 62);
       for (let step = 0; step < count; step++) assert.equal(mapped[(viewer + step) % count].slot, step);
     }
     const spectator = sceneSeatLayout(count, null);
@@ -78,6 +78,16 @@ test('each painted chair uses an inward view, including side chairs in four and 
     for (const seat of sceneSeats[count]) {
       assert.ok(seat.faceY < seat.handY && seat.handY < 1);
       assert.ok(seat.flip ? seat.handX < seat.faceX : seat.handX >= seat.faceX);
+    }
+  }
+});
+
+
+test('near-side ribbons in six and seven seats leave the central hand tray clear', () => {
+  for (const count of [6, 7] as const) {
+    for (const seat of sceneSeats[count].filter(seat => seat.cardsY === 69)) {
+      const halfWidth = 12 * seat.depth / 2;
+      assert.ok(seat.cardsX + halfWidth < 26 || seat.cardsX - halfWidth > 74);
     }
   }
 });

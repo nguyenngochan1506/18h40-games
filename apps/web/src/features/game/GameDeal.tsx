@@ -25,7 +25,7 @@ export default function GameDeal({ batch, players, you, hand, enabled, ownTurn, 
     const plan = dealPlan(players, you, hand);
     setFlights(plan.flatMap(flight => {
       const target = element.querySelector(flight.player === you ? '[data-animation-region="hand"]' : `[data-animation-anchor="${flight.player}"]`)?.getBoundingClientRect();
-      return target ? [{ ...flight, x: draw.x + draw.width / 2 - origin.x, y: draw.y - origin.y, toX: target.x + target.width / 2 - origin.x + (flight.player === you ? (flight.index - 1.5) * 28 : 0), toY: target.y + target.height / 2 - origin.y }] : [];
+      return target ? [{ ...flight, x: draw.x + draw.width / 2 - origin.x, y: draw.y + draw.height / 2 - origin.y, toX: target.x + target.width / 2 - origin.x + (flight.player === you ? (flight.index - 1.5) * 28 : 0), toY: target.y + target.height / 2 - origin.y }] : [];
     }));
   }, [batch, players, you, hand, enabled, reduced, ownTurn, root]);
   useEffect(() => {

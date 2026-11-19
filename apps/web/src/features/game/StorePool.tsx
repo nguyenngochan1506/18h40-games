@@ -33,7 +33,7 @@ export default function StorePool({ game, draft, locked, desktop, setDraft, send
         const action = pickingHand ? chooseHandSlotAction(game, slot, !canChoose) : chooseStoreSlotAction(game, slot, !canChoose);
         if (event.type !== 'pointercancel' && active === slot && action && tray && dropZoneAt(info.point, [{ player: null, rect: tray.getBoundingClientRect() }])) send(action);
       }}
-      onClick={() => { if (performance.now() - draggedAt.current >= 200) setDraft({ ...emptyDraft, ...(pickingHand ? { handSlot: slot } : { storeSlot: slot }) }); }}>
+      onClick={event => { if (performance.now() - draggedAt.current >= 200) { event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); setDraft({ ...emptyDraft, ...(pickingHand ? { handSlot: slot } : { storeSlot: slot }) }); } }}>
       <img src={assetUrl(backFiles.card)} alt="" draggable={false} /><span>Ô {slot + 1}</span>{desktop && canChoose && slot < 9 && <kbd aria-hidden="true">{slot + 1}</kbd>}
     </m.button>)}</div>
     {canChoose && <small>{pickingHand ? 'Chọn rồi nhấn Enter · phím 1–9 chọn ô' : 'Chọn rồi nhấn Enter · hoặc kéo lá về khay bài của bạn'}</small>}

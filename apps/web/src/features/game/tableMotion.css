@@ -6,7 +6,7 @@
 .cinematic .game-card.ui-card { transition: none; transform: none; }
 .cinematic .game-card.ui-card:has(.card-visual[style*="translateY(-"]) { z-index: 4; }
 .cinematic .hand-cards { position: relative; }
-.cinematic .in-play { overflow-x: auto; overflow-y: hidden; padding-top: 14px; margin-top: -12px; }
+.cinematic .in-play { overflow: visible; padding-top: 14px; margin-top: -12px; }
 .cinematic .pile-top { position: relative; width: calc(var(--scene-width) * .038); min-height: calc(var(--scene-width) * .0592); }
 .cinematic .pile-top .game-card { width: 100%; }
 .cinematic .pile-top .empty-pile { min-height: calc(var(--scene-width) * .0592); }
@@ -29,7 +29,7 @@
 .ui-menu-content { padding: 20px; }
 .request-pending { position: absolute; z-index: 20; left: 50%; top: 32px; transform: translateX(-50%); padding: 4px 12px; border: 1px solid #a5834f; background: #291a10ed; color: #edce91; font: 12px/1.4 system-ui, sans-serif; pointer-events: none; }
 .game-deal { position: absolute; inset: 0; z-index: 18; pointer-events: none; overflow: hidden; }
-.deal-card { position: absolute; left: 0; top: 0; width: clamp(32px, calc(var(--scene-width) * .038), 72px); aspect-ratio: 1 / 1.556; margin-left: -24px; border-radius: 3px; pointer-events: none; }
+.deal-card { position: absolute; left: 0; top: 0; width: var(--choice-card-w, 48px); aspect-ratio: 1 / 1.556; margin-left: calc(var(--choice-card-w, 48px) * -.5); margin-top: calc(var(--choice-card-w, 48px) * -.778); border-radius: 3px; pointer-events: none; }
 .deal-card img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border-radius: 3px; box-shadow: 0 4px 8px #11090577; }
 .deal-card .deal-front { backface-visibility: hidden; }
 @media (prefers-reduced-motion: reduce) {

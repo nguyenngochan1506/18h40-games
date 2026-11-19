@@ -14,8 +14,8 @@ function place(x: number, y: number, cardsX: number, cardsY: number, depth: numb
 export const sceneSeats = {
   4: [place(50, 85, 50, 85, 1.12, .30, 'q3back'), place(14, 53, 27, 56, 1, .29, 'side'), place(50, 28, 50, 32, .90, .22, 'front'), place(86, 53, 73, 56, 1, .29, 'side')],
   5: [place(50, 85, 50, 85, 1.12, .30, 'q3back'), place(14, 54.5, 27, 57, 1, .29, 'side'), place(29, 34, 35, 40, .90, .24, 'q3front'), place(71, 34, 65, 40, .90, .24, 'q3front'), place(86, 54.5, 73, 57, 1, .29, 'side')],
-  6: [place(50, 85, 50, 85, 1.12, .30, 'q3back'), place(19, 79, 34, 69, 1.05, .30, 'q3back'), place(17, 49, 28, 46, .98, .28, 'side'), place(50, 28, 50, 32, .90, .22, 'front'), place(83, 49, 72, 46, .98, .28, 'side'), place(81, 79, 66, 69, 1.05, .30, 'q3back')],
-  7: [place(50, 85, 50, 85, 1.12, .30, 'q3back'), place(19, 79, 34, 69, 1.05, .30, 'q3back'), place(14, 52, 30, 54, .98, .28, 'side'), place(29, 34, 35, 40, .90, .24, 'q3front'), place(71, 34, 65, 40, .90, .24, 'q3front'), place(86, 52, 70, 54, .98, .28, 'side'), place(81, 79, 66, 69, 1.05, .30, 'q3back')],
+  6: [place(50, 85, 50, 85, 1.12, .30, 'q3back'), place(19, 79, 19, 69, 1.05, .30, 'q3back'), place(17, 49, 28, 46, .98, .28, 'side'), place(50, 28, 50, 32, .90, .22, 'front'), place(83, 49, 72, 46, .98, .28, 'side'), place(81, 79, 81, 69, 1.05, .30, 'q3back')],
+  7: [place(50, 85, 50, 85, 1.12, .30, 'q3back'), place(19, 79, 19, 69, 1.05, .30, 'q3back'), place(14, 52, 30, 54, .98, .28, 'side'), place(29, 34, 35, 40, .90, .24, 'q3front'), place(71, 34, 65, 40, .90, .24, 'q3front'), place(86, 52, 70, 54, .98, .28, 'side'), place(81, 79, 81, 69, 1.05, .30, 'q3back')],
 };
 
 export function sceneSeatLayout(count: number, viewerIndex: number | null) {
@@ -25,6 +25,6 @@ export function sceneSeatLayout(count: number, viewerIndex: number | null) {
   return Array.from({ length: count }, (_, index) => {
     const slot = viewerIndex === null ? index : (index - viewerIndex + count) % count;
     // Keep the viewer's role reachable above their hand tray; spectators occupy the painted front chair.
-    return { ...seats[slot], cardsY: viewerIndex !== null && slot === 0 ? 70 : seats[slot].cardsY, slot };
+    return { ...seats[slot], cardsY: viewerIndex !== null && slot === 0 ? 62 : seats[slot].cardsY, slot };
   });
 }

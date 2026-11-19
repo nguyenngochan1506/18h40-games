@@ -20,7 +20,7 @@
 .fx-impact { width: calc(130px * var(--fx-target-scale, 1)); height: calc(130px * var(--fx-target-scale, 1)); }
 .fx-impact .fx-fallback { background: repeating-conic-gradient(transparent 0deg 19deg, #ffdf7e 20deg 24deg, transparent 25deg 40deg); mask-image: radial-gradient(transparent 12%, #000 25%, transparent 65%); }
 .fx-label { position: absolute; display: block; top: -74px; left: 0; transform: translateX(-50%); width: max-content; max-width: 340px; padding: 5px 10px; border: 1px solid #c59b51; border-radius: 2px; color: #ffe1a1; background: #21130de6; text-align: center; font: 700 clamp(14px, 1.2vw, 23px)/1.2 Georgia, serif; text-shadow: 0 2px 2px #170b04; animation: fx-label-rise 900ms ease-out both; }
-.fx-card { display: block; width: clamp(46px, calc(var(--scene-width) * .045), 88px); aspect-ratio: .643; position: relative; padding: 2px; border: 2px solid #d4b473; border-radius: 4px; background: #eee1b8; box-shadow: 4px 10px 10px #130a0599; }
+.fx-card { display: block; width: var(--flight-card-w, 60px); aspect-ratio: .643; position: relative; padding: 2px; border: 2px solid #d4b473; border-radius: 4px; background: #eee1b8; box-shadow: 4px 10px 10px #130a0599; }
 .fx-card > img { width: 100%; height: 100%; object-fit: contain; }
 .fx-card-rank { position: absolute; top: 2px; left: 2px; z-index: 1; padding: 1px 3px; background: #fff7de; color: #6c2917; font: 700 12px/1.2 Georgia, serif; }
 .fx-cue-reveal .fx-card { animation: fx-flip 750ms ease-out both; }
@@ -106,3 +106,5 @@
 .cinematic .particle-layer { position: absolute; inset: 0; z-index: 8; overflow: hidden; pointer-events: none; }
 .particle-canvas { display: block; width: 100%; height: 100%; pointer-events: none; }
 @media (max-width: 899px), (prefers-reduced-motion: reduce) { .particle-layer { display: none; } }
+
+.fx-cue-card, .fx-cue-reveal { width: var(--flight-card-w, 60px); height: auto; aspect-ratio: 250 / 389; }

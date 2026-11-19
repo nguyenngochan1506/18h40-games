@@ -180,8 +180,8 @@ export default function GameFx({ batch, ctx, enabled, width, height, ambientEnab
         ], job.duration);
         else animate(node, [
           { transform: 'translate(-50%,-50%) rotate(-12deg) scale(.7)', opacity: 0 },
-          { transform: `translate(${(job.kind === 'reveal' ? dx : mid.x - from.x) - 30}px,${(job.kind === 'reveal' ? dy : mid.y - from.y) - 75}px) rotate(8deg) scale(1.1)`, opacity: 1, offset: .5 },
-          { transform: `translate(${dx - 30}px,${dy - 42}px) rotate(-6deg) scale(.7)`, opacity: 0 },
+          { transform: `translate(${job.kind === 'reveal' ? dx : mid.x - from.x}px,${job.kind === 'reveal' ? dy : mid.y - from.y}px) translate(-50%,-80%) rotate(8deg) scale(1.1)`, opacity: 1, offset: .5 },
+          { transform: `translate(${dx}px,${dy}px) translate(-50%,-50%) rotate(-6deg) scale(.7)`, opacity: 0 },
         ], job.duration);
       } else {
         atTarget();

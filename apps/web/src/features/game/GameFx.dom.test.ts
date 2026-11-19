@@ -42,6 +42,7 @@ async function mount(t: TestContext, initial: FxBatch | null = null, state = { h
   t.mock.method(performance, 'now', () => Date.now());
   const pending = new Set<ReturnType<typeof setTimeout>>(), intervals = new Set<ReturnType<typeof setInterval>>();
   let callbacks = 0, peak = 0, started = 0;
+  const animationFrames: (Keyframe[] | PropertyIndexedKeyframes | null)[] = [];
   const timeout = setTimeout, cancelTimeout = clearTimeout, interval = setInterval, cancelInterval = clearInterval;
   t.mock.method(globalThis, 'setTimeout', (callback: (...args: unknown[]) => void, delay?: number, ...args: unknown[]) => {
     const handle = timeout(() => { pending.delete(handle); callbacks++; callback(...args); }, delay);
@@ -60,6 +61,7 @@ async function mount(t: TestContext, initial: FxBatch | null = null, state = { h
   t.mock.method(dom.HTMLCanvasElement.prototype, 'getContext', () => null);
   t.mock.method(HTMLElement.prototype, 'getAnimations', () => []);
   t.mock.method(HTMLElement.prototype, 'animate', (_frames: Keyframe[] | PropertyIndexedKeyframes | null, options?: number | KeyframeAnimationOptions) => {
+    animationFrames.push(_frames);
     const timing = typeof options === 'number' ? { duration: options } : options;
     const animation = { onfinish: null as Animation['onfinish'], cancel: () => clearTimeout(handle), pause() {}, currentTime: 0 };
     const handle = setTimeout(() => animation.onfinish?.call(animation as unknown as Animation, new Event('finish') as AnimationPlaybackEvent), Number(timing?.duration ?? 0) + Number(timing?.delay ?? 0));
@@ -82,7 +84,7 @@ async function mount(t: TestContext, initial: FxBatch | null = null, state = { h
   const reduced = async (value: boolean) => { await act(() => { media.matches = value; media.dispatchEvent(new Event('change')); }); };
   const unmount = async () => { if (mounted) { await act(() => root.unmount()); mounted = false; } };
   t.after(async () => { await unmount(); stage.remove(); assert.equal(errors.mock.callCount(), 0, 'No React state/update errors'); });
-  return { stage, layer, render, tick, visibility, reduced, unmount, pending, intervals, counts: () => ({ callbacks, peak, started }), listenersRemoved() {
+  return { stage, layer, render, tick, animationFrames, visibility, reduced, unmount, pending, intervals, counts: () => ({ callbacks, peak, started }), listenersRemoved() {
     for (const call of addDocument.mock.calls.filter(call => call.arguments[0] === 'visibilitychange')) assert.ok(removeDocument.mock.calls.some(removed => removed.arguments[0] === call.arguments[0] && removed.arguments[1] === call.arguments[1]));
     for (const call of addMedia.mock.calls) assert.ok(removeMedia.mock.calls.some(removed => removed.arguments[0] === call.arguments[0] && removed.arguments[1] === call.arguments[1]));
   } };
@@ -167,4 +169,19 @@ test('GameFx rapid seq/events changes replace delayed work and duplicate batches
   await fx.tick(3000);
   assert.equal(fx.counts().started, started, 'A duplicate seq with a fresh events object must not replay');
   assert.equal(fx.pending.size, 0); assert.equal(fx.layer.children.length, 0);
+});
+
+
+test('card flights end at measured anchor centers independently of card size', async t => {
+  const fx = await mount(t);
+  for (const [region, rect] of [['draw', { x: 200, y: 100, width: 64, height: 100 }], ['hand', { x: 600, y: 600, width: 400, height: 100 }], ['table', { x: 400, y: 300, width: 200, height: 120 }]] as const) {
+    const anchor = document.createElement('div'); anchor.dataset.animationRegion = region; fx.stage.append(anchor);
+    t.mock.method(anchor, 'getBoundingClientRect', () => rect as DOMRect);
+  }
+  await fx.render({ batch: { id: 1, events: [{ type: 'cards_drawn', player: 0, count: 1 }], waiting: null } });
+  await fx.tick(0);
+  const flight = fx.animationFrames.find(frames => Array.isArray(frames) && frames.length === 3 && String(frames[2].transform).includes('scale(.7)')) as Keyframe[];
+  assert.ok(flight);
+  assert.equal(flight[1].transform, 'translate(268px,210px) translate(-50%,-80%) rotate(8deg) scale(1.1)');
+  assert.equal(flight[2].transform, 'translate(568px,500px) translate(-50%,-50%) rotate(-6deg) scale(.7)');
 });
