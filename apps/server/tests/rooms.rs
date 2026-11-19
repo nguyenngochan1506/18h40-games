@@ -469,3 +469,105 @@ async fn create_room_delivers_joined_then_initial_snapshot() {
     client.send(json!({"type":"ping","nonce":9})).await;
     assert_eq!(client.until("pong").await["nonce"], 9);
 }
+
+#[tokio::test(start_paused = true)]
+async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() {
+    let server = TestServer::new(Config {
+        game_seed: Some(42),
+        ..Default::default()
+    })
+    .await;
+    let (mut host, joined) = server.create("Host").await;
+    let defaults = json!({"mode":"classic","roles":{"deputy":0,"outlaw":2,"renegade":1}});
+    assert_eq!(joined["room"]["settings"], defaults);
+    host.send(json!({"type":"update_settings","settings":{"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}}})).await;
+    host.error("invalid_settings").await;
+    let mut club = defaults.clone();
+    club["mode"] = json!("club");
+    host.send(json!({"type":"update_settings","settings":club}))
+        .await;
+    host.state(|room| room["settings"] == club).await;
+    let mut guests = Vec::new();
+    for i in 1..4 {
+        let (guest, data) = server.join(code(&joined), &format!("Guest{i}")).await;
+        assert_eq!(data["room"]["settings"], club);
+        guests.push(guest);
+    }
+    let custom = json!({"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}});
+    guests[0]
+        .send(json!({"type":"update_settings","settings":custom}))
+        .await;
+    guests[0].error("not_host").await;
+    for roles in [
+        json!({"deputy":3,"outlaw":0,"renegade":0}),
+        json!({"deputy":0,"outlaw":1,"renegade":1}),
+        json!({"deputy":255,"outlaw":255,"renegade":255}),
+    ] {
+        host.send(json!({"type":"update_settings","settings":{"mode":"club","roles":roles}}))
+            .await;
+        host.error("invalid_settings").await;
+        host.send(json!({"type":"ping","nonce":123})).await;
+        assert_eq!(host.until("pong").await["nonce"], 123);
+    }
+    host.send(json!({"type":"update_settings","settings":custom}))
+        .await;
+    for guest in &mut guests {
+        guest.state(|room| room["settings"] == custom).await;
+    }
+    let (mut fifth, fifth_data) = server.join(code(&joined), "Fifth").await;
+    let five = json!({"mode":"club","roles":{"deputy":1,"outlaw":2,"renegade":1}});
+    assert_eq!(fifth_data["room"]["settings"], five);
+    fifth.send(json!({"type":"leave_room"})).await;
+    fifth.until("left").await;
+    host.state(|room| room["settings"] == club).await;
+    host.send(json!({"type":"update_settings","settings":custom}))
+        .await;
+    host.state(|room| room["settings"] == custom).await;
+    guests[2].disconnect().await;
+    host.state(|room| room["members"][3]["online"] == false)
+        .await;
+    tokio::time::advance(Duration::from_secs(60)).await;
+    host.state(|room| room["members"].as_array().unwrap().len() == 3 && room["settings"] == club)
+        .await;
+    let (fourth, _) = server.join(code(&joined), "Fourth").await;
+    guests[2] = fourth;
+    host.send(json!({"type":"update_settings","settings":custom}))
+        .await;
+    host.state(|room| room["settings"] == custom).await;
+    let mut rejoined = server.connect().await;
+    rejoined
+        .send(json!({"type":"rejoin_room","room_code":code(&joined),"token":joined["token"]}))
+        .await;
+    assert_eq!(rejoined.until("joined").await["room"]["settings"], custom);
+    host = rejoined;
+    host.send(json!({"type":"start_game"})).await;
+    let mut counts = std::collections::BTreeMap::new();
+    for client in std::iter::once(&mut host).chain(guests.iter_mut()) {
+        let start = client.until("game_started").await;
+        assert_eq!(start["view"]["perspective"], "player");
+        let own = &start["view"]["view"];
+        let role = own["table"]["players"][own["you"].as_u64().unwrap() as usize]["role"]
+            .as_str()
+            .unwrap();
+        *counts.entry(role.to_owned()).or_insert(0) += 1;
+    }
+    assert_eq!(
+        counts,
+        std::collections::BTreeMap::from([
+            ("sheriff".into(), 1),
+            ("deputy".into(), 1),
+            ("outlaw".into(), 1),
+            ("renegade".into(), 1)
+        ])
+    );
+    host.send(json!({"type":"update_settings","settings":custom}))
+        .await;
+    host.error("wrong_phase").await;
+    host.send(json!({"type":"ping","nonce":456})).await;
+    assert_eq!(host.until("pong").await["nonce"], 456);
+    host.send(json!({"type":"end_game"})).await;
+    host.state(|room| room["phase"] == "waiting" && room["settings"] == custom)
+        .await;
+    host.send(json!({"type":"take_seat"})).await;
+    host.state(|room| room["settings"] == club).await;
+}

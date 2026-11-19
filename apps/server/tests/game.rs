@@ -84,7 +84,15 @@ impl Table {
             .send(json!({"type":"start_game"}))
             .await;
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
-        let (state, events) = bang::setup(count, &mut rng).unwrap();
+        let (state, events) = bang::setup(
+            count,
+            bang::GameConfig {
+                roles: bang::RoleCounts::standard(count),
+                ..Default::default()
+            },
+            &mut rng,
+        )
+        .unwrap();
         for (i, client) in clients.iter_mut().enumerate() {
             let message = client.as_mut().unwrap().until("game_started").await;
             check_wire(&message);
@@ -384,7 +392,15 @@ async fn a_complete_seeded_game_crosses_websocket_then_waits_for_host_end() {
 async fn offline_top_decisions_get_their_own_full_window_and_rejoin_cancels_deadline() {
     let seed = (0..100)
         .find(|seed| {
-            let (state, _) = bang::setup(4, &mut ChaCha8Rng::seed_from_u64(*seed)).unwrap();
+            let (state, _) = bang::setup(
+                4,
+                bang::GameConfig {
+                    roles: bang::RoleCounts::standard(4),
+                    ..Default::default()
+                },
+                &mut ChaCha8Rng::seed_from_u64(*seed),
+            )
+            .unwrap();
             matches!(state.decision().unwrap().kind, DecisionKind::DrawChoice)
                 && state.decision().unwrap().player != PlayerId(0)
         })
@@ -531,7 +547,15 @@ async fn ping_barrier_follows_the_same_connections_action_update_or_error() {
 async fn blind_store_stays_private_for_all_connections_and_rejoin_snapshots() {
     let seed = (0..10000)
         .find(|seed| {
-            let (state, _) = bang::setup(4, &mut ChaCha8Rng::seed_from_u64(*seed)).unwrap();
+            let (state, _) = bang::setup(
+                4,
+                bang::GameConfig {
+                    roles: bang::RoleCounts::standard(4),
+                    ..Default::default()
+                },
+                &mut ChaCha8Rng::seed_from_u64(*seed),
+            )
+            .unwrap();
             let player = state.turn.player;
             state
                 .decision()

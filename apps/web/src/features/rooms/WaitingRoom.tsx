@@ -7,6 +7,7 @@ import { DecodedImage } from '../../shared/SaloonScene';
 import { landscapeScenes } from '../game/assetMap';
 import { waitingSeats } from './waitingSeats';
 import { availableGames } from '../lobby/games';
+import WaitingSettings from './WaitingSettings';
 
 type Props = { room: RoomView; disabled: boolean; send: (message: ClientMessage) => void };
 
@@ -33,7 +34,7 @@ export default function WaitingRoom({ room, disabled, send }: Props) {
       setCopying(false);
     }
   }
-  return <section className="saloon-waiting" aria-label={`Phòng ${room.code}`}>
+  return <section className={`saloon-waiting${waiting ? ' with-settings' : ''}`} aria-label={`Phòng ${room.code}`}>
     <div className="waiting-stage">
       <DecodedImage className="waiting-backdrop" src={landscapeScenes[7]} />
       <div className="waiting-vignette" aria-hidden="true" />
@@ -82,5 +83,6 @@ export default function WaitingRoom({ room, disabled, send }: Props) {
         <m.button {...feedback} className="western-button quiet-button" disabled={disabled} onClick={() => send({ v: PROTOCOL_VERSION, type: 'leave_room' })}>Rời phòng</m.button>
       </nav>
     </div>
+    {waiting && <WaitingSettings key={JSON.stringify([room.settings, seats.length])} settings={room.settings} players={seats.length} editable={host && !disabled} send={send} />}
   </section>;
 }

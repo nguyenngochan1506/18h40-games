@@ -13,16 +13,24 @@ mod skills;
 /// Deals initial hands, then starts the Sheriff's turn including character draw choices.
 pub fn setup<R: Rng + ?Sized>(
     count: usize,
+    config: crate::GameConfig,
     rng: &mut R,
 ) -> Result<(GameState, Vec<Event>), ActionError> {
     use Role::*;
-    let mut roles = match count {
-        4 => vec![Sheriff, Outlaw, Outlaw, Renegade],
-        5 => vec![Sheriff, Deputy, Outlaw, Outlaw, Renegade],
-        6 => vec![Sheriff, Deputy, Outlaw, Outlaw, Outlaw, Renegade],
-        7 => vec![Sheriff, Deputy, Deputy, Outlaw, Outlaw, Outlaw, Renegade],
-        _ => return Err(ActionError::InvalidPlayerCount),
-    };
+    if !(4..=7).contains(&count) {
+        return Err(ActionError::InvalidPlayerCount);
+    }
+    if !config.roles.valid_for(count) {
+        return Err(ActionError::InvalidSettings);
+    }
+    let mut roles = vec![Sheriff];
+    for (role, count) in [
+        (Deputy, config.roles.deputy),
+        (Outlaw, config.roles.outlaw),
+        (Renegade, config.roles.renegade),
+    ] {
+        roles.extend(std::iter::repeat_n(role, usize::from(count)));
+    }
     roles.shuffle(rng);
     let mut characters = Character::ALL;
     characters.shuffle(rng);
@@ -46,6 +54,7 @@ pub fn setup<R: Rng + ?Sized>(
     let mut draw_pile: Vec<_> = (0..DECK.len()).map(|id| CardId(id as u8)).collect();
     draw_pile.shuffle(rng);
     let mut state = GameState {
+        config,
         players,
         draw_pile,
         discard_pile: Vec::new(),

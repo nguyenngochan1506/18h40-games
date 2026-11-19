@@ -98,7 +98,15 @@ fn setup_deals_roles_health_cards_and_the_first_turn_for_every_player_count() {
     for count in 4..=7 {
         for seed in 0..32 {
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
-            let (state, events) = setup(count, &mut rng).unwrap();
+            let (state, events) = setup(
+                count,
+                bang::GameConfig {
+                    roles: bang::RoleCounts::standard(count),
+                    ..Default::default()
+                },
+                &mut rng,
+            )
+            .unwrap();
             invariant(&state);
             let counts = |role| state.players.iter().filter(|p| p.role == role).count();
             assert_eq!(counts(Role::Sheriff), 1);
@@ -149,7 +157,17 @@ fn setup_deals_roles_health_cards_and_the_first_turn_for_every_player_count() {
     for count in [0, 1, 3, 8, usize::MAX] {
         let mut rng = ChaCha8Rng::seed_from_u64(1);
         let before = rng.clone();
-        assert_eq!(setup(count, &mut rng), Err(ActionError::InvalidPlayerCount));
+        assert_eq!(
+            setup(
+                count,
+                bang::GameConfig {
+                    roles: bang::RoleCounts::standard(count),
+                    ..Default::default()
+                },
+                &mut rng
+            ),
+            Err(ActionError::InvalidPlayerCount)
+        );
         assert_eq!(rng.get_word_pos(), before.get_word_pos());
     }
 }
@@ -869,3 +887,114 @@ mod cards;
 
 #[path = "engine/characters.rs"]
 mod characters;
+
+#[test]
+fn custom_roles_are_validated_before_rng_and_preserved_with_mode() {
+    let configs = [
+        RoleCounts {
+            deputy: 1,
+            outlaw: 1,
+            renegade: 1,
+        },
+        RoleCounts {
+            deputy: 2,
+            outlaw: 1,
+            renegade: 0,
+        },
+        RoleCounts {
+            deputy: 0,
+            outlaw: 0,
+            renegade: 3,
+        },
+        RoleCounts {
+            deputy: 0,
+            outlaw: 3,
+            renegade: 0,
+        },
+    ];
+    for roles in configs {
+        let mut sheriff_seats = BTreeSet::new();
+        for seed in 0..32 {
+            let config = GameConfig {
+                mode: GameMode::Club,
+                roles,
+            };
+            let mut rng = ChaCha8Rng::seed_from_u64(seed);
+            let (state, events) = setup(4, config, &mut rng).unwrap();
+            invariant(&state);
+            assert_eq!(state.config, config);
+            for (role, count) in [
+                (Role::Sheriff, 1),
+                (Role::Deputy, roles.deputy),
+                (Role::Outlaw, roles.outlaw),
+                (Role::Renegade, roles.renegade),
+            ] {
+                assert_eq!(
+                    state.players.iter().filter(|p| p.role == role).count(),
+                    usize::from(count)
+                );
+            }
+            sheriff_seats.insert(state.turn.player.0);
+            let (replay, replay_events) =
+                setup(4, config, &mut ChaCha8Rng::seed_from_u64(seed)).unwrap();
+            assert_eq!(state, replay);
+            assert_eq!(events, replay_events);
+            let restored: GameState =
+                serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+            assert_eq!(restored.config, config);
+            let (mut classic, classic_events) = setup(
+                4,
+                GameConfig {
+                    mode: GameMode::Classic,
+                    roles,
+                },
+                &mut ChaCha8Rng::seed_from_u64(seed),
+            )
+            .unwrap();
+            classic.config.mode = GameMode::Club;
+            assert_eq!(
+                classic, state,
+                "Mode is stored but does not change rules in phase A"
+            );
+            assert_eq!(classic_events, events);
+        }
+        assert_eq!(sheriff_seats.len(), 4);
+    }
+    for roles in [
+        RoleCounts {
+            deputy: 0,
+            outlaw: 0,
+            renegade: 0,
+        },
+        RoleCounts {
+            deputy: 3,
+            outlaw: 0,
+            renegade: 0,
+        },
+        RoleCounts {
+            deputy: 1,
+            outlaw: 2,
+            renegade: 1,
+        },
+        RoleCounts {
+            deputy: 255,
+            outlaw: 255,
+            renegade: 255,
+        },
+    ] {
+        let mut rng = ChaCha8Rng::seed_from_u64(42);
+        let before = rng.clone();
+        assert_eq!(
+            setup(
+                4,
+                GameConfig {
+                    mode: GameMode::Classic,
+                    roles
+                },
+                &mut rng
+            ),
+            Err(ActionError::InvalidSettings)
+        );
+        assert_eq!(rng.get_word_pos(), before.get_word_pos());
+    }
+}

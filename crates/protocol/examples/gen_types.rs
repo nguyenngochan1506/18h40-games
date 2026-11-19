@@ -11,6 +11,9 @@ fn main() -> std::io::Result<()> {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/web/src/generated/protocol.ts");
     fs::create_dir_all(output.parent().unwrap())?;
     let declarations = [
+        bang::GameMode::decl(&config),
+        bang::RoleCounts::decl(&config),
+        bang::GameConfig::decl(&config),
         bang::PlayerId::decl(&config),
         bang::CardId::decl(&config),
         bang::CardKind::decl(&config),

@@ -85,6 +85,7 @@ impl Registry {
         rooms.insert(code.clone(), sender.clone());
         let room = Room {
             game_kind,
+            settings: bang::GameConfig::default(),
             code,
             phase: Phase::Waiting,
             game: None,
@@ -164,6 +165,7 @@ struct MemberState {
 
 struct Room {
     game_kind: GameKind,
+    settings: bang::GameConfig,
     code: String,
     phase: Phase,
     game: Option<Game>,
@@ -226,6 +228,7 @@ impl Room {
         let (min_players, max_players) = self.game_kind.player_limits();
         RoomView {
             game: self.game_kind,
+            settings: self.settings,
             code: self.code.clone(),
             phase: self.phase,
             host: self.host.clone(),
@@ -315,6 +318,7 @@ impl Room {
         message: ClientMessage,
         now: Instant,
     ) -> Result<bool, ErrorCode> {
+        let previous_players = self.players();
         match message {
             ClientMessage::CreateRoom { nickname: name, .. }
             | ClientMessage::JoinRoom { nickname: name, .. } => {
@@ -353,6 +357,7 @@ impl Room {
                 });
                 self.empty_since = None;
                 self.maintain_host(now);
+                self.reset_roles_if_changed(previous_players);
                 peer.send(ServerMessage::Joined {
                     v: PROTOCOL_VERSION,
                     room_code: self.code.clone(),
@@ -376,6 +381,7 @@ impl Room {
                 let id = member.view.id.clone();
                 self.empty_since = None;
                 self.maintain_host(now);
+                self.reset_roles_if_changed(previous_players);
                 peer.send(ServerMessage::Joined {
                     v: PROTOCOL_VERSION,
                     room_code: self.code.clone(),
@@ -411,6 +417,21 @@ impl Room {
                         }
                         self.members[index].view.role = Role::Player;
                     }
+                    ClientMessage::UpdateSettings { settings, .. } => {
+                        if self.members[index].view.id != self.host {
+                            return Err(ErrorCode::NotHost);
+                        }
+                        if self.phase != Phase::Waiting {
+                            return Err(ErrorCode::WrongPhase);
+                        }
+                        if !settings.roles.valid_for(self.players().max(4))
+                            || (self.players() < 4
+                                && settings.roles != bang::RoleCounts::standard(4))
+                        {
+                            return Err(ErrorCode::InvalidSettings);
+                        }
+                        self.settings = settings;
+                    }
                     ClientMessage::StartGame { .. } | ClientMessage::EndGame { .. } => {
                         if self.members[index].view.id != self.host {
                             return Err(ErrorCode::NotHost);
@@ -434,7 +455,9 @@ impl Room {
                                 })
                                 .collect();
                             let (game, events) = match self.game_kind {
-                                GameKind::Bang => Game::new(seats, self.config.game_seed, now)?,
+                                GameKind::Bang => {
+                                    Game::new(seats, self.settings, self.config.game_seed, now)?
+                                }
                             };
                             self.game = Some(game);
                             self.phase = Phase::Playing;
@@ -458,6 +481,7 @@ impl Room {
                             for member in &mut self.members {
                                 member.view.role = Role::Spectator;
                             }
+                            return Ok(true);
                         }
                     }
                     ClientMessage::GameAction { action, .. } => {
@@ -489,7 +513,14 @@ impl Room {
                 }
             }
         }
+        self.reset_roles_if_changed(previous_players);
         Ok(true)
+    }
+
+    fn reset_roles_if_changed(&mut self, previous_players: usize) {
+        if self.phase == Phase::Waiting && self.players() != previous_players {
+            self.settings.roles = bang::RoleCounts::standard(self.players());
+        }
     }
 
     fn track_empty(&mut self, now: Instant) {
@@ -527,11 +558,13 @@ impl Room {
 
     fn expire(&mut self, now: Instant) -> bool {
         let count = self.members.len();
+        let previous_players = self.players();
         self.members.retain(|m| {
             !(m.offline_since
                 .is_some_and(|since| now.duration_since(since) >= self.config.offline_timeout)
                 && (self.phase == Phase::Waiting || m.view.role == Role::Spectator))
         });
+        self.reset_roles_if_changed(previous_players);
         let host_changed = self.maintain_host(now);
         if self.members.len() != count || host_changed {
             self.broadcast();
@@ -582,6 +615,7 @@ mod tests {
         let (shutdown, _) = tokio::sync::watch::channel(None);
         let room = Room {
             game_kind: GameKind::Bang,
+            settings: bang::GameConfig::default(),
             code: "ABCDE".into(),
             phase,
             game: None,
@@ -679,7 +713,8 @@ mod tests {
         let now = Instant::now();
         let (game, _) = (0..100)
             .find_map(|seed| {
-                let (game, events) = Game::new(game_seats(), Some(seed), now).unwrap();
+                let (game, events) =
+                    Game::new(game_seats(), bang::GameConfig::default(), Some(seed), now).unwrap();
                 matches!(
                     game.state.decision().unwrap().kind,
                     bang::DecisionKind::DrawChoice
@@ -716,7 +751,11 @@ mod tests {
         let (mut room, _) = timer_room(Phase::Playing, false);
         let now = Instant::now();
         room.members.clear();
-        room.game = Some(Game::new(game_seats(), Some(42), now).unwrap().0);
+        room.game = Some(
+            Game::new(game_seats(), bang::GameConfig::default(), Some(42), now)
+                .unwrap()
+                .0,
+        );
         room.drive_game(now);
         let decision = room.game.as_ref().unwrap().state.decision();
         assert!(matches!(
@@ -729,5 +768,39 @@ mod tests {
         );
         room.drive_game(now);
         assert_eq!(room.game.as_ref().unwrap().state.decision(), decision);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn starting_with_mismatched_roles_rejects_without_repairing_settings() {
+        let (mut room, _) = timer_room(Phase::Waiting, true);
+        for id in ["3", "4"] {
+            room.members.push(MemberState {
+                view: Member {
+                    id: id.into(),
+                    nickname: id.into(),
+                    role: Role::Player,
+                    online: false,
+                },
+                token: [0; 16],
+                connection: None,
+                offline_since: None,
+            });
+        }
+        room.settings.roles = bang::RoleCounts::standard(5);
+        let before = room.settings;
+        let peer = room.members[0].connection.clone().unwrap();
+        assert_eq!(
+            room.apply(
+                &peer,
+                ClientMessage::StartGame {
+                    v: PROTOCOL_VERSION
+                },
+                Instant::now()
+            ),
+            Err(ErrorCode::InvalidSettings)
+        );
+        assert_eq!(room.settings, before);
+        assert_eq!(room.phase, Phase::Waiting);
+        assert!(room.game.is_none());
     }
 }

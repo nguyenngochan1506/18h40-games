@@ -10,7 +10,15 @@ pub struct Scenario {
 impl Scenario {
     pub fn new(count: usize) -> Self {
         let mut rng = ChaCha8Rng::seed_from_u64(42);
-        let (mut state, _) = setup(count, &mut rng).unwrap();
+        let (mut state, _) = setup(
+            count,
+            bang::GameConfig {
+                roles: bang::RoleCounts::standard(count),
+                ..Default::default()
+            },
+            &mut rng,
+        )
+        .unwrap();
         state.draw_pile = (0..80).map(CardId).collect();
         state.discard_pile.clear();
         state.pending.clear();

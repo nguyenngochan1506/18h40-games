@@ -9,6 +9,7 @@ import { PROTOCOL_VERSION } from '../../generated/protocol.ts';
 import type { ClientMessage } from '../../generated/protocol.ts';
 import type LobbyComponent from './Lobby.tsx';
 import type RoomComponent from '../rooms/Room.tsx';
+import type WaitingSettingsComponent from '../rooms/WaitingSettings.tsx';
 import { demoGame, demoRoom } from '../game/demo.ts';
 
 const dom = new Window({ url: 'http://localhost/', width: 1280, height: 720, settings: { enableImageFileLoading: false, enableCSSFileLoading: false, disableJavaScriptFileLoading: true } });
@@ -18,8 +19,9 @@ const previous = Object.getOwnPropertyDescriptors(globalThis);
 for (const [name, value] of Object.entries(globals)) Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 const vite = await createServer({ root: fileURLToPath(new URL('../../../', import.meta.url)), configFile: false, optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false, watch: null } });
-let Lobby: typeof LobbyComponent, Room: typeof RoomComponent;
+let Lobby: typeof LobbyComponent, Room: typeof RoomComponent, WaitingSettings: typeof WaitingSettingsComponent;
 try {
+  WaitingSettings = (await vite.ssrLoadModule('/src/features/rooms/WaitingSettings.tsx')).default;
   Lobby = (await vite.ssrLoadModule('/src/features/lobby/Lobby.tsx')).default;
   await vite.ssrLoadModule('/src/features/game/GameBoard.tsx');
   Room = (await vite.ssrLoadModule('/src/features/rooms/Room.tsx')).default;
@@ -83,4 +85,47 @@ test('a BANG room renders its mapped board and catalog name in the waiting room'
   await act(async () => root.render(createElement(Room, { ...props, room: { ...demoRoom, phase: 'waiting' }, game: null })));
   assert.ok(container.querySelector('.saloon-waiting'));
   assert.match(container.querySelector('.waiting-table-note')!.textContent!, /BANG!.*4–7/s);
+});
+
+test('room settings edit a draft, validate totals and send the selected mode with custom roles', async t => {
+  const { container, root, sent, fill } = await mount(t);
+  const settings = { mode: 'classic' as const, roles: { deputy: 0, outlaw: 2, renegade: 1 } };
+  await act(async () => root.render(createElement(WaitingSettings, { settings, players: 4, editable: true, send: message => sent.push(message) })));
+  const button = (label: string) => [...container.querySelectorAll<HTMLButtonElement>('button')].find(b => b.getAttribute('aria-label') === label || b.textContent === label)!;
+  await act(() => button('Tăng Phó cảnh sát').click());
+  await act(() => button('Áp dụng cài đặt').click());
+  assert.equal(sent.length, 0);
+  assert.match(container.querySelector('[role="alert"]')!.textContent!, /Điều chỉnh tổng số vai/);
+  await act(() => button('Giảm Tội phạm').click());
+  assert.equal(container.querySelector('[role="alert"]'), null);
+  await act(() => container.querySelector<HTMLInputElement>('input[value="club"]')!.click());
+  await act(() => button('Áp dụng cài đặt').click());
+  assert.deepEqual([...sent], [{ v: PROTOCOL_VERSION, type: 'update_settings', settings: { mode: 'club', roles: { deputy: 1, outlaw: 1, renegade: 1 } } }]);
+  await act(() => button('Về mặc định').click());
+  assert.equal(container.querySelector<HTMLInputElement>('#role-deputy')!.value, '0');
+  assert.equal(container.querySelector<HTMLInputElement>('input[value="club"]')!.checked, true);
+  await act(() => button('Áp dụng cài đặt').click());
+  assert.deepEqual(sent.at(-1), { v: PROTOCOL_VERSION, type: 'update_settings', settings: { mode: 'club', roles: settings.roles } });
+  await fill('#role-deputy', '');
+  await act(() => button('Áp dụng cài đặt').click());
+  assert.match(container.querySelector('[role="alert"]')!.textContent!, /0 đến 6/);
+  await act(() => button('Tăng Phó cảnh sát').click());
+  assert.equal(container.querySelector<HTMLInputElement>('#role-deputy')!.value, '1');
+  assert.equal(container.querySelector('[role="alert"]'), null);
+});
+
+test('room settings are read-only to guests and reset a host draft on a seat-count snapshot', async t => {
+  const { container, root, sent } = await mount(t);
+  const room = { ...demoRoom, phase: 'waiting' as const, members: demoRoom.members.slice(0, 4), settings: { mode: 'classic' as const, roles: { deputy: 0, outlaw: 2, renegade: 1 } } };
+  const props = { room, game: null, log: [], fxBatch: null, soundBatch: null, fxEnabled: false, viewer: 0, disabled: false, send: (message: ClientMessage) => sent.push(message) };
+  await act(async () => root.render(createElement(Room, props)));
+  await act(() => container.querySelector<HTMLButtonElement>('[aria-label="Tăng Phó cảnh sát"]')!.click());
+  assert.equal(container.querySelector<HTMLInputElement>('#role-deputy')!.value, '1');
+  await act(async () => root.render(createElement(Room, { ...props, room: { ...room, members: demoRoom.members, settings: demoRoom.settings } })));
+  assert.equal(container.querySelector<HTMLInputElement>('#role-outlaw')!.value, '2');
+  assert.match(container.querySelector('#role-total')!.textContent!, /5\/5 người · Hợp lệ/);
+  await act(async () => root.render(createElement(Room, { ...props, room: { ...room, you: '2' } })));
+  assert.equal(container.querySelectorAll('.room-settings fieldset:disabled').length, 2);
+  assert.equal(container.querySelector('.room-settings button[type="submit"]'), null);
+  assert.equal(sent.length, 0);
 });

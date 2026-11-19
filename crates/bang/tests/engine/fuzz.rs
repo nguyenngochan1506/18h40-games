@@ -22,8 +22,24 @@ fn seeded_bots_cover_all_cards_frames_and_outcomes() {
         for seed in 0..1024 {
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
             let mut replay_rng = rng.clone();
-            let (mut state, events) = setup(count, &mut rng).unwrap();
-            let (mut replay, replay_events) = setup(count, &mut replay_rng).unwrap();
+            let (mut state, events) = setup(
+                count,
+                bang::GameConfig {
+                    roles: bang::RoleCounts::standard(count),
+                    ..Default::default()
+                },
+                &mut rng,
+            )
+            .unwrap();
+            let (mut replay, replay_events) = setup(
+                count,
+                bang::GameConfig {
+                    roles: bang::RoleCounts::standard(count),
+                    ..Default::default()
+                },
+                &mut replay_rng,
+            )
+            .unwrap();
             assert_eq!(state, replay);
             assert_eq!(events, replay_events);
             invariant(&state);

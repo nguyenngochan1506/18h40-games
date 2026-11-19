@@ -18,6 +18,7 @@ pub(super) struct Game {
 impl Game {
     pub fn new(
         seats: Vec<GameSeat>,
+        settings: bang::GameConfig,
         seed: Option<u64>,
         now: Instant,
     ) -> Result<(Self, Vec<Event>), ErrorCode> {
@@ -29,7 +30,7 @@ impl Game {
             ChaCha8Rng::from_seed(seed)
         };
         let (state, events) =
-            bang::setup(seats.len(), &mut rng).map_err(|_| ErrorCode::NotEnoughPlayers)?;
+            bang::setup(seats.len(), settings, &mut rng).map_err(|_| ErrorCode::InvalidSettings)?;
         let decision = state.decision();
         Ok((
             Self {

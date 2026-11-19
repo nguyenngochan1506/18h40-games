@@ -70,6 +70,7 @@ pub enum Action {
 #[serde(rename_all = "snake_case")]
 pub enum ActionError {
     InvalidPlayerCount,
+    InvalidSettings,
     UnknownPlayer,
     Eliminated,
     GameOver,

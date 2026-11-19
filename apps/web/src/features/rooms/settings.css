@@ -1,0 +1,36 @@
+.saloon-waiting.with-settings { grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 48px 16px 24px; }
+@media (min-width: 1200px) {
+ .with-settings .waiting-name { width: clamp(104px, 10vw, 160px); }
+ .with-settings .waiting-actions { bottom: 12px; left: 16px; }
+}
+.room-settings { width: 100%; padding: 20px; align-self: center; }
+.room-settings fieldset { min-width: 0; border: 0; padding: 0; margin: 0 0 16px; }
+.room-settings legend { margin-bottom: 8px; font: 700 22px/1.2 Georgia, serif; }
+.room-mode-options { display: grid; gap: 8px; }
+.room-mode-options label { display: flex; gap: 10px; align-items: flex-start; padding: 8px; margin: 0; border: 1px solid #9b733d; cursor: pointer; }
+.room-mode-options label.is-selected { background: #fff1ca88; border-color: #63391d; }
+.room-mode-options input { margin-top: 4px; accent-color: #63391d; }
+.room-mode-options strong, .room-mode-options small { display: block; }
+.room-mode-options small { margin-top: 2px; font: 12px/1.4 system-ui, sans-serif; }
+.fixed-sheriff, .room-role { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; font: 13px/1.4 system-ui, sans-serif; }
+.room-role label { margin: 0; }
+.role-stepper { display: flex; align-items: center; gap: 4px; }
+.role-stepper input { width: 44px; height: 36px; border: 1px solid #886536; background: #fff1ca88; color: #352314; text-align: center; font: 16px/1.3 system-ui, sans-serif; appearance: textfield; }
+.role-stepper input::-webkit-inner-spin-button { appearance: none; }
+.role-stepper button { width: 36px; height: 36px; border: 1px solid #886536; background: #5b3a20; color: #ffe1a5; font-size: 20px; cursor: pointer; }
+.role-stepper button:disabled { opacity: .45; cursor: default; }
+.room-settings :is(input, button):focus-visible { outline: 3px solid #63391d; outline-offset: 3px; box-shadow: 0 0 0 5px #fff0bf; }
+.role-total, .settings-hint, .settings-error { font: 12px/1.5 system-ui, sans-serif; margin: 8px 0; }
+.settings-reset { color: #573317; text-decoration: underline; padding: 4px 0; font-size: 13px; cursor: pointer; }
+.settings-error { color: #732b1c; font-weight: 600; }
+.room-settings > .western-button { width: 100%; }
+@media (max-width: 1199px) {
+ .saloon-waiting.with-settings { grid-template-columns: minmax(0, 1fr); }
+ .room-settings { max-width: 680px; justify-self: center; }
+}
+@media (max-width: 899px) {
+ .saloon-waiting.with-settings { padding: 44px 0 20px; display: grid; }
+ .room-settings { width: calc(100% - 40px); }
+ .role-stepper button, .role-stepper input { height: 44px; }
+ .role-stepper button { width: 44px; }
+}

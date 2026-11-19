@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -47,6 +47,10 @@ pub enum ClientMessage {
     },
     StartGame {
         v: u32,
+    },
+    UpdateSettings {
+        v: u32,
+        settings: bang::GameConfig,
     },
     GameAction {
         v: u32,
@@ -170,11 +174,13 @@ pub enum ErrorCode {
     NoFreeSeat,
     ServerBusy,
     IllegalAction,
+    InvalidSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct RoomView {
     pub game: GameKind,
+    pub settings: bang::GameConfig,
     pub code: String,
     pub phase: Phase,
     pub host: String,
@@ -234,7 +240,7 @@ mod tests {
                 assert!(serde_json::from_value::<ClientMessage>(invalid).is_err());
             }
         }
-        let room = json!({"code":"ABCDE","game":"bang","phase":"waiting","host":"1","you":"1","min_players":4,"max_players":7,"members":[{"id":"1","nickname":"Hân","role":"player","online":true}]});
+        let room = json!({"code":"ABCDE","game":"bang","settings":bang::GameConfig::default(),"phase":"waiting","host":"1","you":"1","min_players":4,"max_players":7,"members":[{"id":"1","nickname":"Hân","role":"player","online":true}]});
         for value in [
             json!({"v":PROTOCOL_VERSION,"type":"joined","room_code":"ABCDE","token":"secret","room":room,"game":null}),
             json!({"v":PROTOCOL_VERSION,"type":"room_state","room":room}),
@@ -478,7 +484,7 @@ mod tests {
             missing.as_object_mut().unwrap().remove("v");
             assert!(serde_json::from_value::<ClientMessage>(missing).is_err());
         }
-        let joined = ServerMessage::Joined { v: PROTOCOL_VERSION, room_code: "ABCDE".into(), token: "secret".into(), game: Some(GameSnapshot { seq: 2, seats, view: player }), room: serde_json::from_value(json!({"code":"ABCDE","game":"bang","phase":"playing","host":"1","you":"1","min_players":4,"max_players":7,"members":[]})).unwrap() };
+        let joined = ServerMessage::Joined { v: PROTOCOL_VERSION, room_code: "ABCDE".into(), token: "secret".into(), game: Some(GameSnapshot { seq: 2, seats, view: player }), room: serde_json::from_value(json!({"code":"ABCDE","game":"bang","settings":bang::GameConfig::default(),"phase":"playing","host":"1","you":"1","min_players":4,"max_players":7,"members":[]})).unwrap() };
         for field in ["seq", "seats", "view"] {
             let mut value = serde_json::to_value(&joined).unwrap();
             value["game"].as_object_mut().unwrap().remove(field);
@@ -497,5 +503,27 @@ mod tests {
                 .unwrap(),
             joined
         );
+    }
+
+    #[test]
+    fn settings_messages_require_typed_modes_and_role_counts() {
+        let valid = json!({"v":PROTOCOL_VERSION,"type":"update_settings","settings":bang::GameConfig::default()});
+        let message: ClientMessage = serde_json::from_value(valid.clone()).unwrap();
+        assert_eq!(serde_json::to_value(message).unwrap(), valid);
+        for bad in [json!("unknown"), Value::Null, json!(1)] {
+            let mut value = valid.clone();
+            value["settings"]["mode"] = bad;
+            assert!(serde_json::from_value::<ClientMessage>(value).is_err());
+        }
+        for bad in [json!(-1), json!(256), json!(1.5), Value::Null, json!("1")] {
+            let mut value = valid.clone();
+            value["settings"]["roles"]["deputy"] = bad;
+            assert!(serde_json::from_value::<ClientMessage>(value).is_err());
+        }
+        for field in ["mode", "roles"] {
+            let mut value = valid.clone();
+            value["settings"].as_object_mut().unwrap().remove(field);
+            assert!(serde_json::from_value::<ClientMessage>(value).is_err());
+        }
     }
 }

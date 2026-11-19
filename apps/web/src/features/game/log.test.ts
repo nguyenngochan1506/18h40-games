@@ -87,3 +87,18 @@ test('result reads all final roles and winner membership, including eliminated w
   table.players[4].role = null;
   assert.equal(gameResult(game, null)!.players[4].won, null);
 });
+
+test('four-player custom roles show a Deputy and distinguish multiple Renegades in results', () => {
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Expected player view');
+  game.seats = game.seats.slice(0, 4);
+  const table = game.view.view.table;
+  table.players = table.players.slice(0, 4);
+  table.players.forEach((player, index) => { player.role = (['sheriff', 'deputy', 'renegade', 'renegade'] as const)[index]; });
+  table.winner = 'sheriff_and_deputies';
+  const result = gameResult(game, 0)!;
+  assert.deepEqual(result.players.map(player => player.won), [true, true, false, false]);
+  assert.equal(result.players[1].role, 'Phó cảnh sát');
+  table.winner = { renegade: { player: 3 } };
+  assert.deepEqual(gameResult(game, 0)!.players.map(player => player.won), [false, false, false, true]);
+});

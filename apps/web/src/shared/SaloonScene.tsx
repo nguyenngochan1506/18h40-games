@@ -31,7 +31,7 @@ export function SceneTransition({ children }: { children: ReactNode }) {
   useEffect(() => {
     scene.current?.querySelector<HTMLElement>('[data-scene-title]')?.focus({ preventScroll: true });
   }, []);
-  return <m.div ref={scene} className="app-scene" inert={!present} aria-hidden={!present || undefined}
+  return <m.div ref={scene} className="app-scene" inert={!present}
     initial={{ opacity: 0, y: reduced ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
     transition={{ duration: reduced ? .1 : .3, ease: 'easeOut' }}>{children}</m.div>;
 }

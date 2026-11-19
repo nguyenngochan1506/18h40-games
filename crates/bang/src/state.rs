@@ -172,6 +172,7 @@ pub struct Decision {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GameState {
+    pub config: crate::GameConfig,
     pub players: Vec<Player>,
     pub draw_pile: Vec<CardId>,
     pub discard_pile: Vec<CardId>,
