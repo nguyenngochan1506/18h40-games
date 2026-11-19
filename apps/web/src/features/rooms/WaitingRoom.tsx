@@ -6,11 +6,13 @@ import { PROTOCOL_VERSION } from '../../generated/protocol';
 import { DecodedImage } from '../../shared/SaloonScene';
 import { landscapeScenes } from '../game/assetMap';
 import { waitingSeats } from './waitingSeats';
+import { availableGames } from '../lobby/games';
 
 type Props = { room: RoomView; disabled: boolean; send: (message: ClientMessage) => void };
 
 export default function WaitingRoom({ room, disabled, send }: Props) {
   const reduced = useReducedMotion();
+  const info = availableGames[room.game];
   const [copyStatus, setCopyStatus] = useState('');
   const [copying, setCopying] = useState(false);
   const seats = waitingSeats(room);
@@ -59,8 +61,8 @@ export default function WaitingRoom({ room, disabled, send }: Props) {
         {spectators.length === 0 ? <p>Bạn bè có thể vào xem.</p> : <ul aria-live="polite">{spectators.map(member => <li key={member.id} className={member.online ? '' : 'is-offline'}><strong>{member.nickname}{member.id === room.you ? ' (bạn)' : ''}{member.id === room.host ? ' ★' : ''}</strong><small>{member.online ? 'Đang xem' : 'Mất kết nối'}{member.id === room.host ? ' · Chủ phòng' : ''}</small></li>)}</ul>}
       </aside>
       <div className="waiting-table-note saloon-poster">
-        <p className="saloon-eyebrow">BANG! · Bàn bạn bè</p>
-        <div className="waiting-status" role="status" aria-live="polite"><h3>{waiting ? 'Đang chờ' : 'Đang chơi'}</h3><p>{seats.length} người chơi · cần {room.min_players}–{room.max_players}</p></div>
+        <p className="saloon-eyebrow">{info.name} · Bàn bạn bè</p>
+        <div className="waiting-status" role="status" aria-live="polite"><h3>{waiting ? 'Đang chờ' : 'Đang chơi'}</h3><p>{seats.length} người chơi · cần {info.minPlayers}–{info.maxPlayers}</p></div>
         <div className="waiting-primary">
           {you?.role === 'spectator' && waiting && <m.button {...feedback} className="western-button" disabled={disabled || seats.length >= room.max_players} onClick={() => send({ v: PROTOCOL_VERSION, type: 'take_seat' })}>Tham gia ván</m.button>}
           {host && waiting && <m.button {...feedback} className="western-button" disabled={disabled || missing > 0} aria-describedby="waiting-help" onClick={() => send({ v: PROTOCOL_VERSION, type: 'start_game' })}>Bắt đầu <span aria-hidden="true">→</span></m.button>}

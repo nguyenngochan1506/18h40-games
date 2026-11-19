@@ -1,9 +1,10 @@
+import { PROTOCOL_VERSION } from '../../generated/protocol.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ServerMessage } from '../../generated/protocol.ts';
 import { createRequestTracker, REQUEST_TIMEOUT_MS } from './request.ts';
 
-const pong = (nonce: number): ServerMessage => ({ v: 1, type: 'pong', nonce });
+const pong = (nonce: number): ServerMessage => ({ v: PROTOCOL_VERSION, type: 'pong', nonce });
 
 test('only the matching connection and pong nonce finish a request, never shared updates or errors', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -12,12 +13,12 @@ test('only the matching connection and pong nonce finish a request, never shared
   const first = tracker.start(connection)!;
   assert.equal(tracker.start(connection), null);
   for (const message of [
-    { v: 1, type: 'game_update', seq: 123 },
-    { v: 1, type: 'game_over', seq: 124 },
-    { v: 1, type: 'room_state' },
-    { v: 1, type: 'joined' },
-    { v: 1, type: 'left' },
-    { v: 1, type: 'error', code: 'illegal_action' },
+    { v: PROTOCOL_VERSION, type: 'game_update', seq: 123 },
+    { v: PROTOCOL_VERSION, type: 'game_over', seq: 124 },
+    { v: PROTOCOL_VERSION, type: 'room_state' },
+    { v: PROTOCOL_VERSION, type: 'joined' },
+    { v: PROTOCOL_VERSION, type: 'left' },
+    { v: PROTOCOL_VERSION, type: 'error', code: 'illegal_action' },
   ] as ServerMessage[]) {
     assert.equal(tracker.finish(connection, message), false);
     assert.equal(tracker.pending, true);
@@ -28,7 +29,7 @@ test('only the matching connection and pong nonce finish a request, never shared
   const second = tracker.start(connection)!;
   assert.notEqual(second, first);
   assert.equal(tracker.finish(connection, pong(first)), false);
-  assert.equal(tracker.finish(connection, { v: 1, type: 'error', code: 'illegal_action', message: 'Old error' }), false);
+  assert.equal(tracker.finish(connection, { v: PROTOCOL_VERSION, type: 'error', code: 'illegal_action', message: 'Old error' }), false);
   assert.equal(tracker.pending, true);
   assert.equal(tracker.finish(connection, pong(second)), true);
   t.mock.timers.tick(REQUEST_TIMEOUT_MS * 2);

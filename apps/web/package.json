@@ -7,7 +7,7 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "vite build && node ../../scripts/check-web-build.mjs",
-    "test": "node --test src/shared/lib/*.test.ts src/features/game/*.test.ts src/features/rooms/*.test.ts"
+    "test": "node --test src/shared/lib/*.test.ts src/features/game/*.test.ts src/features/rooms/*.test.ts src/features/lobby/*.test.ts"
   },
   "dependencies": {
     "motion": "14.11.1",

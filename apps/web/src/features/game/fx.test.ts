@@ -1,3 +1,4 @@
+import { PROTOCOL_VERSION } from '../../generated/protocol.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -77,23 +78,23 @@ test('batch planner caps work, concurrent intervals and lifetime; congested batc
 });
 
 test('reducer keeps only fresh filtered events; setup/join/rejoin/gaps never replay FX', () => {
-  let state = receiveGameState(initialGameState, { v: 1, type: 'game_started', seq: 0, seats: demoGame.seats, view: demoGame.view });
-  const update = (seq: number, events: EventKind[] = demoFx.shot.events): ServerMessage => ({ v: 1, type: 'game_update', seq, view: demoGame.view, events });
+  let state = receiveGameState(initialGameState, { v: PROTOCOL_VERSION, type: 'game_started', seq: 0, seats: demoGame.seats, view: demoGame.view });
+  const update = (seq: number, events: EventKind[] = demoFx.shot.events): ServerMessage => ({ v: PROTOCOL_VERSION, type: 'game_update', seq, view: demoGame.view, events });
   state = receiveGameState(state, update(0)); assert.equal(state.fxBatch, null);
   state = receiveGameState(state, update(1));
   assert.equal(state.fxBatch?.id, 1); assert.deepEqual(state.fxBatch?.events, demoFx.shot.events);
   const first = state.fxBatch;
   assert.equal(receiveGameState(state, update(1)), state);
   assert.equal(receiveGameState(state, update(0)), state);
-  assert.equal(receiveGameState(state, { v: 1, type: 'pong', nonce: 1 }).fxBatch, first);
+  assert.equal(receiveGameState(state, { v: PROTOCOL_VERSION, type: 'pong', nonce: 1 }).fxBatch, first);
   state = receiveGameState(state, update(2, demoFx.heal.events));
   assert.deepEqual(state.fxBatch?.events, demoFx.heal.events);
   const gap = receiveGameState(state, update(4)); assert.equal(gap.fxBatch, null); assert.equal(gap.desynced, true);
-  const joined: ServerMessage = { v: 1, type: 'joined', room_code: 'ABCDE', token: 'private', room: demoRoom, game: demoGame };
+  const joined: ServerMessage = { v: PROTOCOL_VERSION, type: 'joined', room_code: 'ABCDE', token: 'private', room: demoRoom, game: demoGame };
   state = receiveGameState(gap, joined); assert.equal(state.fxBatch, null);
   assert.equal(receiveGameState(state, update(17)), state);
   state = receiveGameState(state, update(18)); assert.equal(state.fxBatch?.id, 18);
-  assert.equal(receiveGameState(state, { v: 1, type: 'left' }).fxBatch, null);
+  assert.equal(receiveGameState(state, { v: PROTOCOL_VERSION, type: 'left' }).fxBatch, null);
 });
 
 test('cowboy style is stable by id across six variants with a safe original fallback', () => {

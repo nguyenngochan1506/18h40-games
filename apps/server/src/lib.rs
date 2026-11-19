@@ -178,7 +178,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                 let entering = matches!(message, ClientMessage::CreateRoom { .. } | ClientMessage::JoinRoom { .. } | ClientMessage::RejoinRoom { .. });
                 if entering && room.is_some() { peer.send(error(ErrorCode::AlreadyInRoom)); continue; }
                 let target = match &message {
-                    ClientMessage::CreateRoom { nickname, .. } => state.registry.create(nickname),
+                    ClientMessage::CreateRoom { nickname, game, .. } => state.registry.create(nickname, *game),
                     ClientMessage::JoinRoom { room_code, .. } | ClientMessage::RejoinRoom { room_code, .. } => state.registry.find(room_code).ok_or(ErrorCode::RoomNotFound),
                     _ => room.clone().ok_or(ErrorCode::NotInRoom),
                 };

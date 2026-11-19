@@ -30,6 +30,6 @@ export const demoGame: GameSnapshot = {
 };
 
 export const demoRoom: RoomView = {
-  code: 'DEMO', phase: 'playing', host: '1', you: '1', min_players: 4, max_players: 7,
+  code: 'DEMO', game: 'bang', phase: 'playing', host: '1', you: '1', min_players: 4, max_players: 7,
   members: demoGame.seats.map((seat) => ({ id: seat.member_id, nickname: seat.nickname, role: 'player', online: seat.member_id !== '5' })),
 };

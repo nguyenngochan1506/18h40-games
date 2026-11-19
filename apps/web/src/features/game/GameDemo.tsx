@@ -1,3 +1,4 @@
+import { PROTOCOL_VERSION } from '../../generated/protocol.ts';
 import { useEffect, useState } from 'react';
 import type { Action, ClientMessage, EventKind, GameSnapshot } from '../../generated/protocol';
 import GameBoard from './GameBoard';
@@ -124,7 +125,7 @@ export default function GameDemo() {
       <button type="button" className="action secondary" data-demo-motion="eliminate" onClick={() => setFxBatch(current => ({ id: (current?.id ?? 0) + 1, events: demoFx.eliminate.events, waiting: null }))}>Bị loại</button>
     </fieldset><fieldset className="demo-fx-controls demo-sound-controls"><legend>Thử âm thanh</legend>{(Object.keys(soundCues) as SoundKind[]).map(kind => <button type="button" className="action secondary" data-demo-sound={kind} key={kind} onClick={() => { soundSequence.forEach(clearTimeout); sound.stop(); void sound.play(kind); }}>{soundLabels[kind]}</button>)}<button type="button" className="action" data-demo-sound="sequence" onClick={() => { soundSequence.forEach(clearTimeout); sound.stop(); setSoundSequence((['card', 'shot', 'missed', 'hit', 'clink', 'jail'] as SoundKind[]).map((kind, i) => window.setTimeout(() => { void sound.play(kind); }, i * 1000))); }}>Phát chuỗi âm thanh</button></fieldset></details>
     {actionError && <p className="demo-drag-error" role="alert">{actionError}</p>}
-    <GameBoard ambientEnabled={ambientEnabled} requestVersion={requestVersion} pending={pending} disabled={pending} actionError={actionError} key={`${mode}:${count}`} game={game} room={room} log={log} fxBatch={fxBatch} viewer={spectator ? null : 0} sendAction={(action) => { setSent({ v: 1, type: 'game_action', action }); setActionError(null); setPending(true); setTrial(current => ({ id: (current?.id ?? 0) + 1, action })); }} endGame={() => setSent({ v: 1, type: 'end_game' })} />
+    <GameBoard ambientEnabled={ambientEnabled} requestVersion={requestVersion} pending={pending} disabled={pending} actionError={actionError} key={`${mode}:${count}`} game={game} room={room} log={log} fxBatch={fxBatch} viewer={spectator ? null : 0} sendAction={(action) => { setSent({ v: PROTOCOL_VERSION, type: 'game_action', action }); setActionError(null); setPending(true); setTrial(current => ({ id: (current?.id ?? 0) + 1, action })); }} endGame={() => setSent({ v: PROTOCOL_VERSION, type: 'end_game' })} />
     {sent && <output className="demo-action-log" aria-label="Hành động thử">{JSON.stringify(sent, null, 2)}</output>}
   </main>;
 }

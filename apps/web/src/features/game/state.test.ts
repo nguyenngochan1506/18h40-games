@@ -1,12 +1,13 @@
+import { PROTOCOL_VERSION } from '../../generated/protocol.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ServerMessage } from '../../generated/protocol.ts';
 import { demoGame, demoRoom } from './demo.ts';
 import { initialGameState, receiveGame, selectGameView, inputLocked } from './state.ts';
 
-const started: ServerMessage = { v: 1, type: 'game_started', seq: 0, seats: demoGame.seats, view: demoGame.view };
+const started: ServerMessage = { v: PROTOCOL_VERSION, type: 'game_started', seq: 0, seats: demoGame.seats, view: demoGame.view };
 const initial = receiveGame(null, started)!;
-const update = (seq: number): Extract<ServerMessage, { type: 'game_update' }> => ({ v: 1, type: 'game_update', seq, events: [], view: demoGame.view });
+const update = (seq: number): Extract<ServerMessage, { type: 'game_update' }> => ({ v: PROTOCOL_VERSION, type: 'game_update', seq, events: [], view: demoGame.view });
 
 test('view selection exposes hand/choices only for the living player perspective', () => {
   const own = selectGameView(demoGame.view);
@@ -42,12 +43,12 @@ test('seq accepts the next snapshot and ignores duplicate setup, stale, backward
 });
 
 test('authoritative joined snapshots resync any seq; waiting/left clear the board', () => {
-  const joined: ServerMessage = { v: 1, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game: demoGame };
+  const joined: ServerMessage = { v: PROTOCOL_VERSION, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game: demoGame };
   assert.equal(receiveGame(initial, joined), demoGame);
-  assert.equal(receiveGame(demoGame, { v: 1, type: 'room_state', room: demoRoom }), demoGame);
-  assert.equal(receiveGame(demoGame, { v: 1, type: 'room_state', room: { ...demoRoom, phase: 'waiting' } }), null);
+  assert.equal(receiveGame(demoGame, { v: PROTOCOL_VERSION, type: 'room_state', room: demoRoom }), demoGame);
+  assert.equal(receiveGame(demoGame, { v: PROTOCOL_VERSION, type: 'room_state', room: { ...demoRoom, phase: 'waiting' } }), null);
   assert.equal(receiveGame(demoGame, { ...joined, game: null }), null);
-  assert.equal(receiveGame(demoGame, { v: 1, type: 'left' }), null);
+  assert.equal(receiveGame(demoGame, { v: PROTOCOL_VERSION, type: 'left' }), null);
 });
 
 test('seq gaps lock the board until an authoritative snapshot, while stale packets do not desync', async () => {
@@ -59,7 +60,7 @@ test('seq gaps lock the board until an authoritative snapshot, while stale packe
   assert.equal(gap.desynced, true);
   assert.equal(inputLocked({ connected: true, pending: false, restoring: false, desynced: gap.desynced }), true);
   assert.equal(receiveGameState(gap, update(1)), gap);
-  const restored = receiveGameState(gap, { v: 1, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game: demoGame });
+  const restored = receiveGameState(gap, { v: PROTOCOL_VERSION, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game: demoGame });
   assert.equal(restored.game, demoGame);
   assert.equal(restored.desynced, false);
 });
@@ -99,7 +100,7 @@ test('rejoin starts a bounded history without replay, preserves own nickname aft
   const table = structuredClone(selectGameView(demoGame.view).table);
   table.players[0].alive = false;
   const deadGame = { ...demoGame, view: { perspective: 'spectator' as const, view: table } };
-  const joined = { v: 1, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game: deadGame } satisfies ServerMessage;
+  const joined = { v: PROTOCOL_VERSION, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game: deadGame } satisfies ServerMessage;
   state = receiveGameState(gap, joined);
   assert.equal(state.log.length, 1);
   assert.match(state.log[0].text, /Lịch sử trước đó không có/);
@@ -109,8 +110,8 @@ test('rejoin starts a bounded history without replay, preserves own nickname aft
   state = receiveGameState(state, { ...update(18), view: deadGame.view, events: [{ type: 'health_changed', player: 0, source: null, delta: 1, health: 1 }] });
   assert.match(state.log.at(-1)!.text, /Hân \(bạn\)/);
   assert.equal(receiveGameState(state, { ...update(0), events: [{ type: 'cards_drawn', player: 0, count: 9 }] }).log.length, 2);
-  assert.equal(receiveGameState(state, { v: 1, type: 'left' }).log.length, 0);
-  assert.equal(receiveGameState(state, { v: 1, type: 'room_state', room: { ...demoRoom, phase: 'waiting' } }).log.length, 0);
+  assert.equal(receiveGameState(state, { v: PROTOCOL_VERSION, type: 'left' }).log.length, 0);
+  assert.equal(receiveGameState(state, { v: PROTOCOL_VERSION, type: 'room_state', room: { ...demoRoom, phase: 'waiting' } }).log.length, 0);
 });
 
 test('blind store snapshots retain only slot counts and rejoin never replays a private reveal', async () => {
@@ -120,14 +121,14 @@ test('blind store snapshots retain only slot counts and rejoin never replays a p
   game.view.view.table.store_slots = 3;
   game.view.view.table.waiting = { player: 0, pending_id: 104, kind: { type: 'general_store' } };
   game.view.view.choices = [];
-  const joined = { v: 1, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game } satisfies ServerMessage;
+  const joined = { v: PROTOCOL_VERSION, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game } satisfies ServerMessage;
   const state = receiveGameState(initialGameState, joined);
   assert.equal(selectGameView(state.game!.view).table.store_slots, 3);
   assert.deepEqual(selectGameView(state.game!.view).choices, []);
   assert.equal(state.fxBatch, null); assert.equal(state.soundBatch, null);
-  const own = receiveGameState(state, { v: 1, type: 'game_update', seq: game.seq + 1, view: game.view, events: [{ type: 'store_card_claimed', player: 0, slot: 1 }, { type: 'store_card_received', card: 37 }] });
+  const own = receiveGameState(state, { v: PROTOCOL_VERSION, type: 'game_update', seq: game.seq + 1, view: game.view, events: [{ type: 'store_card_claimed', player: 0, slot: 1 }, { type: 'store_card_received', card: 37 }] });
   assert.ok(own.log.some(entry => entry.text.includes('Beer')));
-  const other = receiveGameState(state, { v: 1, type: 'game_update', seq: game.seq + 1, view: game.view, events: [{ type: 'store_card_claimed', player: 1, slot: 1 }] });
+  const other = receiveGameState(state, { v: PROTOCOL_VERSION, type: 'game_update', seq: game.seq + 1, view: game.view, events: [{ type: 'store_card_claimed', player: 1, slot: 1 }] });
   assert.ok(other.log.some(entry => entry.text === 'Minh chọn một lá General Store.'));
   assert.ok(other.log.every(entry => !entry.text.includes('Beer')));
   assert.equal(receiveGameState(own, joined).fxBatch, null);

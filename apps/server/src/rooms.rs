@@ -2,7 +2,7 @@ mod game;
 use crate::{Config, Peer, QUEUE_CAPACITY, error};
 use game::Game;
 use protocol::{
-    ClientMessage, ErrorCode, GameSeat, Member, PROTOCOL_VERSION, Phase, Role, RoomView,
+    ClientMessage, ErrorCode, GameKind, GameSeat, Member, PROTOCOL_VERSION, Phase, Role, RoomView,
     ServerMessage,
 };
 use std::{
@@ -14,8 +14,6 @@ use tokio::{
     time::Instant,
 };
 
-const MIN_PLAYERS: u32 = 4;
-const MAX_PLAYERS: u32 = 7;
 const CODE_ALPHABET: &[u8] = b"23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 
 type Rooms = Mutex<HashMap<String, mpsc::Sender<Command>>>;
@@ -53,7 +51,11 @@ impl Registry {
             .cloned()
     }
 
-    pub fn create(&self, name: &str) -> Result<mpsc::Sender<Command>, ErrorCode> {
+    pub fn create(
+        &self,
+        name: &str,
+        game_kind: GameKind,
+    ) -> Result<mpsc::Sender<Command>, ErrorCode> {
         nickname(name)?;
         let mut rooms = self.rooms.lock().unwrap();
         if rooms.len() >= self.config.max_rooms {
@@ -82,6 +84,7 @@ impl Registry {
         let (sender, receiver) = mpsc::channel(QUEUE_CAPACITY);
         rooms.insert(code.clone(), sender.clone());
         let room = Room {
+            game_kind,
             code,
             phase: Phase::Waiting,
             game: None,
@@ -160,6 +163,7 @@ struct MemberState {
 }
 
 struct Room {
+    game_kind: GameKind,
     code: String,
     phase: Phase,
     game: Option<Game>,
@@ -219,13 +223,15 @@ impl Room {
     }
 
     fn view(&self, you: &str) -> RoomView {
+        let (min_players, max_players) = self.game_kind.player_limits();
         RoomView {
+            game: self.game_kind,
             code: self.code.clone(),
             phase: self.phase,
             host: self.host.clone(),
             you: you.into(),
-            min_players: MIN_PLAYERS,
-            max_players: MAX_PLAYERS,
+            min_players,
+            max_players,
             members: self.members.iter().map(|m| m.view.clone()).collect(),
         }
     }
@@ -325,7 +331,8 @@ impl Room {
                 }
                 let mut token = [0; 16];
                 getrandom::fill(&mut token).map_err(|_| ErrorCode::ServerBusy)?;
-                let role = if self.phase == Phase::Waiting && self.players() < MAX_PLAYERS as usize
+                let role = if self.phase == Phase::Waiting
+                    && self.players() < self.game_kind.player_limits().1 as usize
                 {
                     Role::Player
                 } else {
@@ -399,7 +406,7 @@ impl Room {
                         if self.members[index].view.role == Role::Player {
                             return Ok(true);
                         }
-                        if self.players() >= MAX_PLAYERS as usize {
+                        if self.players() >= self.game_kind.player_limits().1 as usize {
                             return Err(ErrorCode::NoFreeSeat);
                         }
                         self.members[index].view.role = Role::Player;
@@ -412,7 +419,7 @@ impl Room {
                             if self.phase != Phase::Waiting {
                                 return Err(ErrorCode::WrongPhase);
                             }
-                            if self.players() < MIN_PLAYERS as usize {
+                            if self.players() < self.game_kind.player_limits().0 as usize {
                                 return Err(ErrorCode::NotEnoughPlayers);
                             }
                             let seats = self
@@ -426,7 +433,9 @@ impl Room {
                                     nickname: member.view.nickname.clone(),
                                 })
                                 .collect();
-                            let (game, events) = Game::new(seats, self.config.game_seed, now)?;
+                            let (game, events) = match self.game_kind {
+                                GameKind::Bang => Game::new(seats, self.config.game_seed, now)?,
+                            };
                             self.game = Some(game);
                             self.phase = Phase::Playing;
                             for member in &self.members {
@@ -572,6 +581,7 @@ mod tests {
         let (outgoing, receiver) = mpsc::channel(QUEUE_CAPACITY);
         let (shutdown, _) = tokio::sync::watch::channel(None);
         let room = Room {
+            game_kind: GameKind::Bang,
             code: "ABCDE".into(),
             phase,
             game: None,

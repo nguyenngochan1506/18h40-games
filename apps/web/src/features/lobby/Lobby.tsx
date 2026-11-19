@@ -1,40 +1,55 @@
 import { useState } from 'react';
 import { m, useReducedMotion } from 'motion/react';
-import type { ClientMessage } from '../../generated/protocol';
+import type { ClientMessage, GameKind } from '../../generated/protocol';
 import { PROTOCOL_VERSION } from '../../generated/protocol';
 import { SaloonBackdrop } from '../../shared/SaloonScene';
+import { Icon } from '../game/TableIcons';
+import { games, availableGames } from './games';
+import './lobby.css';
 
 type Props = { disabled: boolean; send: (message: ClientMessage) => void };
 
 export default function Lobby({ disabled, send }: Props) {
   const [nickname, setNickname] = useState('');
   const [roomCode, setRoomCode] = useState('');
+  const [selectedGame, setSelectedGame] = useState<GameKind | null>(null);
   const reduced = useReducedMotion();
   const nameLength = Array.from(nickname.trim()).length;
   const validName = nameLength >= 1 && nameLength <= 20;
   const feedback = { whileHover: { scale: reduced || disabled ? 1 : 1.02 }, whileTap: { scale: reduced || disabled ? 1 : .98 }, transition: { duration: .1 } };
   return (
-    <section className="saloon-lobby" aria-label="Sảnh BANG!">
+    <section className="saloon-lobby" aria-label="Sảnh chọn game">
       <SaloonBackdrop />
       <header className="lobby-heading">
         <p className="saloon-eyebrow">18h40 games · Quán quen miền Tây</p>
-        <h2 className="saloon-sign western-wood" data-scene-title tabIndex={-1}>BANG!</h2>
+        <h2 className="saloon-sign western-wood" data-scene-title tabIndex={-1}>18h40</h2>
         <p className="lobby-invitation">Hẹn nhau một ván</p>
       </header>
-      <div className="lobby-posters">
-        <form className="saloon-poster" aria-labelledby="create-heading" onSubmit={(event) => {
+      <div className="lobby-posters game-lobby-posters">
+        <form className="saloon-poster create-poster" aria-labelledby="create-heading" onSubmit={(event) => {
           event.preventDefault();
-          if (validName && !disabled) send({ v: PROTOCOL_VERSION, type: 'create_room', nickname });
+          if (validName && selectedGame && !disabled) send({ v: PROTOCOL_VERSION, type: 'create_room', nickname, game: selectedGame });
         }}>
           <span className="poster-star" aria-hidden="true">✦</span>
-          <h3 id="create-heading">Tạo phòng</h3>
+          <h3 id="create-heading">Chọn game, mở bàn</h3>
           <p className="poster-description">Mở bàn, gọi hội bạn vào chơi.</p>
           <div className="poster-fields">
             <label htmlFor="nickname">Tên của bạn</label>
             <input id="nickname" autoComplete="nickname" autoCapitalize="words" value={nickname} onChange={(event) => setNickname(event.target.value)} aria-describedby="nickname-hint" className="saloon-field" />
             <p id="nickname-hint" className="field-hint">Từ 1 đến 20 ký tự · {nameLength}/20</p>
           </div>
-          <m.button {...feedback} className="western-button" disabled={disabled || !validName} type="submit">Tạo phòng <span aria-hidden="true">✦</span></m.button>
+          <div className="game-options" role="group" aria-label="Chọn game để tạo phòng">{games.map(game => {
+            const available = game.status === 'available';
+            return <m.button key={game.id} type="button" className={`game-choice${selectedGame === game.id ? ' is-selected' : ''}${available ? '' : ' is-soon'}`} data-game-id={game.id}
+              disabled={disabled || !available} aria-disabled={!available || disabled} aria-pressed={available ? selectedGame === game.id : undefined}
+              onClick={() => { if (game.status === 'available') setSelectedGame(game.id); }} {...(available ? feedback : {})}>
+              <span className="game-choice-art" aria-hidden="true">{game.id === 'bang' ? <Icon name="gun" /> : game.id === 'uno' ? 'U' : '☾'}</span>
+              <strong>{game.name}</strong><span className="game-choice-meta">{game.status === 'available' ? `${game.minPlayers}–${game.maxPlayers} người` : 'Sắp có'}</span>
+              <span className="game-choice-description">{game.description}</span>
+              {available && <span className="game-choice-state" aria-hidden="true">{selectedGame === game.id ? 'Đã chọn' : 'Chọn game'}</span>}
+            </m.button>;
+          })}</div>
+          <m.button {...feedback} className="western-button" disabled={disabled || !validName || !selectedGame} type="submit">Tạo phòng{selectedGame ? ` ${availableGames[selectedGame].name}` : ''} <span aria-hidden="true">✦</span></m.button>
         </form>
         <form className="saloon-poster join-poster" aria-labelledby="join-heading" onSubmit={(event) => {
           event.preventDefault();
@@ -54,7 +69,7 @@ export default function Lobby({ disabled, send }: Props) {
           <m.button {...feedback} className="western-button" disabled={disabled || !validName || roomCode.trim().length !== 5} type="submit">Vào phòng <span aria-hidden="true">→</span></m.button>
         </form>
       </div>
-      <p className="lobby-footnote">4–7 người chơi <span aria-hidden="true">✦</span> Một bàn, đủ chuyện</p>
+      <p className="lobby-footnote">Chọn game yêu thích <span aria-hidden="true">✦</span> Rủ bạn vào bàn</p>
     </section>
   );
 }

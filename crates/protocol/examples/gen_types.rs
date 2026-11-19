@@ -1,5 +1,5 @@
 use protocol::{
-    ClientMessage, ErrorCode, GameEvents, GameSeat, GameSnapshot, GameView, Member,
+    ClientMessage, ErrorCode, GameEvents, GameKind, GameSeat, GameSnapshot, GameView, Member,
     PROTOCOL_VERSION, Phase, Role, RoomView, ServerMessage,
 };
 use std::{fs, path::Path};
@@ -38,6 +38,7 @@ fn main() -> std::io::Result<()> {
         Phase::decl(&config),
         Role::decl(&config),
         Member::decl(&config),
+        GameKind::decl(&config),
         RoomView::decl(&config),
         ClientMessage::decl(&config),
         ServerMessage::decl(&config),

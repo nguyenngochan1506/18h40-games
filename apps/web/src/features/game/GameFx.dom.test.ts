@@ -1,3 +1,4 @@
+import { PROTOCOL_VERSION } from '../../generated/protocol.ts';
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import type { TestContext } from 'node:test';
@@ -116,7 +117,7 @@ test('GameFx changing the view cancels pending cues without replaying the same b
 });
 
 test('GameFx snapshots and remounts never replay events from joined/rejoin', async t => {
-  const joined = receiveGameState(initialGameState, { v: 1, type: 'joined', room_code: demoRoom.code, token: 'snapshot', room: demoRoom, game: demoGame });
+  const joined = receiveGameState(initialGameState, { v: PROTOCOL_VERSION, type: 'joined', room_code: demoRoom.code, token: 'snapshot', room: demoRoom, game: demoGame });
   const fx = await mount(t, { id: demoGame.seq, events: demoFx.shot.events, waiting: null });
   await fx.tick(3000);
   assert.equal(fx.counts().started, 0, 'An initial batch is a snapshot marker');

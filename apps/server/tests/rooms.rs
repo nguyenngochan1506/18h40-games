@@ -28,6 +28,9 @@ fn you(joined: &Value) -> &str {
 async fn joining_validates_names_sessions_and_membership() {
     let server = TestServer::new(Config::default()).await;
     let (mut host, joined) = server.create("  Hân  ").await;
+    assert_eq!(joined["room"]["game"], "bang");
+    assert_eq!(joined["room"]["min_players"], 4);
+    assert_eq!(joined["room"]["max_players"], 7);
     let room_code = code(&joined);
     assert_eq!(room_code.len(), 5);
     assert!(
@@ -65,11 +68,13 @@ async fn joining_validates_names_sessions_and_membership() {
         .send(json!({"type":"join_room","room_code":room_code.to_lowercase(),"nickname":"B"}))
         .await;
     let other = guest.until("joined").await;
+    assert_eq!(other["room"]["game"], joined["room"]["game"]);
     assert_eq!(member(&other["room"], you(&other))["role"], "player");
     assert_ne!(other["token"], joined["token"]);
     let snapshot = host
         .state(|room| room["members"].as_array().unwrap().len() == 2)
         .await;
+    assert_eq!(snapshot["game"], "bang");
     assert_eq!(snapshot["you"], you(&joined));
     assert!(
         !snapshot
@@ -81,7 +86,7 @@ async fn joining_validates_names_sessions_and_membership() {
             .to_string()
             .contains(joined["token"].as_str().unwrap())
     );
-    host.send(json!({"type":"create_room","nickname":"Other"}))
+    host.send(json!({"type":"create_room","game":"bang","nickname":"Other"}))
         .await;
     host.error("already_in_room").await;
     guest.send(json!({"type":"leave_room"})).await;
@@ -171,6 +176,7 @@ async fn rejoin_preserves_identity_and_closes_the_previous_connection() {
         .await;
     let rejoined = restored.until("joined").await;
     assert_eq!(rejoined["token"], joined["token"]);
+    assert_eq!(rejoined["room"]["game"], "bang");
     assert_eq!(you(&rejoined), you(&joined));
     assert_eq!(member(&rejoined["room"], you(&joined))["role"], "player");
     observer
@@ -302,7 +308,7 @@ async fn resource_limits_and_empty_room_cleanup_use_virtual_time() {
         .await;
     extra.error("server_busy").await;
     extra
-        .send(json!({"type":"create_room","nickname":"Extra"}))
+        .send(json!({"type":"create_room","game":"bang","nickname":"Extra"}))
         .await;
     extra.error("server_busy").await;
     host.send(json!({"type":"leave_room"})).await;
@@ -311,7 +317,7 @@ async fn resource_limits_and_empty_room_cleanup_use_virtual_time() {
     guest.until("left").await;
     tokio::time::advance(Duration::from_secs(599)).await;
     extra
-        .send(json!({"type":"create_room","nickname":"Extra"}))
+        .send(json!({"type":"create_room","game":"bang","nickname":"Extra"}))
         .await;
     extra.error("server_busy").await;
     tokio::time::advance(Duration::from_secs(1)).await;
@@ -320,7 +326,7 @@ async fn resource_limits_and_empty_room_cleanup_use_virtual_time() {
         .await;
     extra.error("room_not_found").await;
     extra
-        .send(json!({"type":"create_room","nickname":"Extra"}))
+        .send(json!({"type":"create_room","game":"bang","nickname":"Extra"}))
         .await;
     extra.until("joined").await;
 }
@@ -429,7 +435,7 @@ async fn empty_playing_rooms_expire_even_with_reserved_player_seats() {
     tokio::time::advance(Duration::from_secs(599)).await;
     let mut extra = server.connect().await;
     extra
-        .send(json!({"type":"create_room","nickname":"Extra"}))
+        .send(json!({"type":"create_room","game":"bang","nickname":"Extra"}))
         .await;
     extra.error("server_busy").await;
     tokio::time::advance(Duration::from_secs(1)).await;
@@ -438,7 +444,7 @@ async fn empty_playing_rooms_expire_even_with_reserved_player_seats() {
         .await;
     extra.error("room_not_found").await;
     extra
-        .send(json!({"type":"create_room","nickname":"Extra"}))
+        .send(json!({"type":"create_room","game":"bang","nickname":"Extra"}))
         .await;
     extra.until("joined").await;
 }
@@ -448,7 +454,7 @@ async fn create_room_delivers_joined_then_initial_snapshot() {
     let server = TestServer::new(Config::default()).await;
     let mut client = server.connect().await;
     client
-        .send(json!({"type":"create_room","nickname":"Host"}))
+        .send(json!({"type":"create_room","game":"bang","nickname":"Host"}))
         .await;
     let first = client.0.next().await.unwrap().unwrap();
     assert!(

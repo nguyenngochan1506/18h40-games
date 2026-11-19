@@ -5,7 +5,7 @@ import { sceneSeats } from '../game/sceneSeats.ts';
 import { waitingSeats } from './waitingSeats.ts';
 
 const player = (id: string, online = true): Member => ({ id, nickname: `Cao bồi ${id}`, role: 'player', online });
-const room = (members: Member[]): RoomView => ({ code: 'ABCDE', phase: 'waiting', host: 'a', you: 'a', min_players: 4, max_players: 7, members });
+const room = (members: Member[]): RoomView => ({ code: 'ABCDE', game: 'bang', phase: 'waiting', host: 'a', you: 'a', min_players: 4, max_players: 7, members });
 
 for (const count of [1, 4, 7]) {
   test(`waiting room with ${count} players uses the seven painted chairs and server player IDs`, () => {

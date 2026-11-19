@@ -1,3 +1,4 @@
+import { PROTOCOL_VERSION } from '../../generated/protocol.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -52,14 +53,14 @@ test('audio timing follows the visual scheduler and batch size stays bounded', (
 });
 
 test('snapshot, duplicate, out-of-order, desync and rejoin cannot produce audio batches', () => {
-  const start = { v: 1, type: 'game_started', seq: 0, seats: demoGame.seats, view: demoGame.view } satisfies ServerMessage;
-  const setup = { v: 1, type: 'game_update', seq: 0, events: [{ type: 'game_started', sheriff: 0 }], view: demoGame.view } satisfies ServerMessage;
+  const start = { v: PROTOCOL_VERSION, type: 'game_started', seq: 0, seats: demoGame.seats, view: demoGame.view } satisfies ServerMessage;
+  const setup = { v: PROTOCOL_VERSION, type: 'game_update', seq: 0, events: [{ type: 'game_started', sheriff: 0 }], view: demoGame.view } satisfies ServerMessage;
   let state = receiveGameState(initialGameState, start);
   assert.equal(state.soundBatch, null);
   state = receiveGameState(state, setup); assert.deepEqual(kinds(state.soundBatch!.events), ['gamestart']);
   assert.equal(receiveGameState(state, setup), state);
   const gap = receiveGameState(state, { ...setup, seq: 2 }); assert.equal(gap.soundBatch, null);
-  const joined = receiveGameState(gap, { v: 1, type: 'joined', room_code: 'ABCDE', token: 'secret', room: demoRoom, game: { ...demoGame, seq: 0 } });
+  const joined = receiveGameState(gap, { v: PROTOCOL_VERSION, type: 'joined', room_code: 'ABCDE', token: 'secret', room: demoRoom, game: { ...demoGame, seq: 0 } });
   assert.equal(joined.soundBatch, null); assert.equal(receiveGameState(joined, setup), joined);
   const batch = { id: 3, events: demoFx.shot.events, waiting: null };
   const ready = { enabled: true, hidden: false, muted: false };

@@ -1,7 +1,21 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum GameKind {
+    Bang,
+}
+
+impl GameKind {
+    pub const fn player_limits(self) -> (u32, u32) {
+        match self {
+            Self::Bang => (4, 7),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -13,6 +27,7 @@ pub enum ClientMessage {
     CreateRoom {
         v: u32,
         nickname: String,
+        game: GameKind,
     },
     JoinRoom {
         v: u32,
@@ -159,6 +174,7 @@ pub enum ErrorCode {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct RoomView {
+    pub game: GameKind,
     pub code: String,
     pub phase: Phase,
     pub host: String,
@@ -198,13 +214,13 @@ mod tests {
     #[test]
     fn room_messages_round_trip_and_require_version_and_field_types() {
         let clients = [
-            json!({"v":1,"type":"create_room","nickname":"Hân"}),
-            json!({"v":1,"type":"join_room","room_code":"ABCDE","nickname":"Hân"}),
-            json!({"v":1,"type":"rejoin_room","room_code":"ABCDE","token":"secret"}),
-            json!({"v":1,"type":"leave_room"}),
-            json!({"v":1,"type":"take_seat"}),
-            json!({"v":1,"type":"start_game"}),
-            json!({"v":1,"type":"end_game"}),
+            json!({"v":PROTOCOL_VERSION,"type":"create_room","game":"bang","nickname":"Hân"}),
+            json!({"v":PROTOCOL_VERSION,"type":"join_room","room_code":"ABCDE","nickname":"Hân"}),
+            json!({"v":PROTOCOL_VERSION,"type":"rejoin_room","room_code":"ABCDE","token":"secret"}),
+            json!({"v":PROTOCOL_VERSION,"type":"leave_room"}),
+            json!({"v":PROTOCOL_VERSION,"type":"take_seat"}),
+            json!({"v":PROTOCOL_VERSION,"type":"start_game"}),
+            json!({"v":PROTOCOL_VERSION,"type":"end_game"}),
         ];
         for value in clients {
             let message: ClientMessage = serde_json::from_value(value.clone()).unwrap();
@@ -218,11 +234,11 @@ mod tests {
                 assert!(serde_json::from_value::<ClientMessage>(invalid).is_err());
             }
         }
-        let room = json!({"code":"ABCDE","phase":"waiting","host":"1","you":"1","min_players":4,"max_players":7,"members":[{"id":"1","nickname":"Hân","role":"player","online":true}]});
+        let room = json!({"code":"ABCDE","game":"bang","phase":"waiting","host":"1","you":"1","min_players":4,"max_players":7,"members":[{"id":"1","nickname":"Hân","role":"player","online":true}]});
         for value in [
-            json!({"v":1,"type":"joined","room_code":"ABCDE","token":"secret","room":room,"game":null}),
-            json!({"v":1,"type":"room_state","room":room}),
-            json!({"v":1,"type":"left"}),
+            json!({"v":PROTOCOL_VERSION,"type":"joined","room_code":"ABCDE","token":"secret","room":room,"game":null}),
+            json!({"v":PROTOCOL_VERSION,"type":"room_state","room":room}),
+            json!({"v":PROTOCOL_VERSION,"type":"left"}),
         ] {
             let message: ServerMessage = serde_json::from_value(value.clone()).unwrap();
             assert_eq!(serde_json::to_value(message).unwrap(), value);
@@ -244,11 +260,34 @@ mod tests {
             ("phase", json!("unknown")),
             ("members", json!([{"id":1}])),
             ("min_players", json!("4")),
+            ("game", json!("uno")),
         ] {
             let mut invalid = room.clone();
             invalid[field] = bad;
             assert!(serde_json::from_value::<RoomView>(invalid).is_err());
         }
+    }
+
+    #[test]
+    fn creating_a_room_requires_an_available_game_kind() {
+        assert_eq!(GameKind::Bang.player_limits(), (4, 7));
+        let valid =
+            json!({"v":PROTOCOL_VERSION,"type":"create_room","nickname":"Host","game":"bang"});
+        assert!(matches!(
+            serde_json::from_value::<ClientMessage>(valid.clone()).unwrap(),
+            ClientMessage::CreateRoom {
+                game: GameKind::Bang,
+                ..
+            }
+        ));
+        for game in [json!("uno"), json!("werewolf"), Value::Null, json!(42)] {
+            let mut invalid = valid.clone();
+            invalid["game"] = game;
+            assert!(serde_json::from_value::<ClientMessage>(invalid).is_err());
+        }
+        let mut missing = valid;
+        missing.as_object_mut().unwrap().remove("game");
+        assert!(serde_json::from_value::<ClientMessage>(missing).is_err());
     }
 
     #[test]
@@ -258,7 +297,10 @@ mod tests {
             nonce: u32::MAX,
         };
         let value = serde_json::to_value(&message).unwrap();
-        assert_eq!(value, json!({"v": 1, "type": "ping", "nonce": u32::MAX}));
+        assert_eq!(
+            value,
+            json!({"v": PROTOCOL_VERSION, "type": "ping", "nonce": u32::MAX})
+        );
         assert_eq!(
             serde_json::from_value::<ClientMessage>(value).unwrap(),
             message
@@ -268,14 +310,17 @@ mod tests {
     #[test]
     fn server_round_trips_have_version_and_type() {
         let messages = [
-            ServerMessage::Pong { v: 1, nonce: 42 },
+            ServerMessage::Pong {
+                v: PROTOCOL_VERSION,
+                nonce: 42,
+            },
             ServerMessage::Error {
-                v: 1,
+                v: PROTOCOL_VERSION,
                 code: ErrorCode::UnsupportedVersion,
                 message: "Unsupported protocol version".into(),
             },
             ServerMessage::Error {
-                v: 1,
+                v: PROTOCOL_VERSION,
                 code: ErrorCode::InvalidMessage,
                 message: "Invalid message".into(),
             },
@@ -296,12 +341,12 @@ mod tests {
         for value in [
             json!({"type": "ping", "nonce": 1}),
             json!({"v": "1", "type": "ping", "nonce": 1}),
-            json!({"v": 1, "type": "ping", "nonce": "1"}),
-            json!({"v": 1, "type": "ping", "nonce": -1}),
-            json!({"v": 1, "type": "ping", "nonce": 4294967296_u64}),
-            json!({"v": 1, "type": "ping"}),
-            json!({"v": 1, "nonce": 1}),
-            json!({"v": 1, "type": "unknown"}),
+            json!({"v": PROTOCOL_VERSION, "type": "ping", "nonce": "1"}),
+            json!({"v": PROTOCOL_VERSION, "type": "ping", "nonce": -1}),
+            json!({"v": PROTOCOL_VERSION, "type": "ping", "nonce": 4294967296_u64}),
+            json!({"v": PROTOCOL_VERSION, "type": "ping"}),
+            json!({"v": PROTOCOL_VERSION, "nonce": 1}),
+            json!({"v": PROTOCOL_VERSION, "type": "unknown"}),
         ] {
             assert!(serde_json::from_value::<ClientMessage>(value).is_err());
         }
@@ -313,8 +358,8 @@ mod tests {
             json!({"type": "pong", "nonce": 1}),
             json!({"type": "error", "code": "invalid_message", "message": "Invalid"}),
             json!({"v": false, "type": "pong", "nonce": 1}),
-            json!({"v": 1, "type": "pong", "nonce": "1"}),
-            json!({"v": 1, "type": "error", "code": "unknown", "message": "Invalid"}),
+            json!({"v": PROTOCOL_VERSION, "type": "pong", "nonce": "1"}),
+            json!({"v": PROTOCOL_VERSION, "type": "error", "code": "unknown", "message": "Invalid"}),
             Value::Null,
         ] {
             assert!(serde_json::from_value::<ServerMessage>(value).is_err());
@@ -383,19 +428,19 @@ mod tests {
         }];
         for message in [
             ServerMessage::GameStarted {
-                v: 1,
+                v: PROTOCOL_VERSION,
                 seq: 0,
                 seats: seats.clone(),
                 view: player.clone(),
             },
             ServerMessage::GameUpdate {
-                v: 1,
+                v: PROTOCOL_VERSION,
                 seq: 1,
                 events: hidden.clone(),
                 view: public.clone(),
             },
             ServerMessage::GameOver {
-                v: 1,
+                v: PROTOCOL_VERSION,
                 seq: 2,
                 events: hidden,
                 view: public,
@@ -416,9 +461,11 @@ mod tests {
             }
         }
         for message in [
-            ClientMessage::HostSkip { v: 1 },
+            ClientMessage::HostSkip {
+                v: PROTOCOL_VERSION,
+            },
             ClientMessage::GameAction {
-                v: 1,
+                v: PROTOCOL_VERSION,
                 action: bang::Action::EndTurn { discard: vec![] },
             },
         ] {
@@ -431,7 +478,7 @@ mod tests {
             missing.as_object_mut().unwrap().remove("v");
             assert!(serde_json::from_value::<ClientMessage>(missing).is_err());
         }
-        let joined = ServerMessage::Joined { v: 1, room_code: "ABCDE".into(), token: "secret".into(), game: Some(GameSnapshot { seq: 2, seats, view: player }), room: serde_json::from_value(json!({"code":"ABCDE","phase":"playing","host":"1","you":"1","min_players":4,"max_players":7,"members":[]})).unwrap() };
+        let joined = ServerMessage::Joined { v: PROTOCOL_VERSION, room_code: "ABCDE".into(), token: "secret".into(), game: Some(GameSnapshot { seq: 2, seats, view: player }), room: serde_json::from_value(json!({"code":"ABCDE","game":"bang","phase":"playing","host":"1","you":"1","min_players":4,"max_players":7,"members":[]})).unwrap() };
         for field in ["seq", "seats", "view"] {
             let mut value = serde_json::to_value(&joined).unwrap();
             value["game"].as_object_mut().unwrap().remove(field);

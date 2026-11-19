@@ -35,7 +35,7 @@ impl TestServer {
     pub async fn create(&self, name: &str) -> (Client, Value) {
         let mut client = self.connect().await;
         client
-            .send(json!({"type":"create_room","nickname":name}))
+            .send(json!({"type":"create_room","game":"bang","nickname":name}))
             .await;
         let joined = client.until("joined").await;
         (client, joined)
@@ -59,7 +59,7 @@ impl Drop for TestServer {
 pub struct Client(pub WebSocketStream<MaybeTlsStream<TcpStream>>);
 impl Client {
     pub async fn send(&mut self, mut value: Value) {
-        value["v"] = json!(1);
+        value["v"] = json!(protocol::PROTOCOL_VERSION);
         self.0
             .send(Message::Text(value.to_string().into()))
             .await
@@ -68,7 +68,7 @@ impl Client {
     pub async fn receive(&mut self) -> Value {
         let text = self.0.next().await.unwrap().unwrap().into_text().unwrap();
         let value: Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(value["v"], 1);
+        assert_eq!(value["v"], protocol::PROTOCOL_VERSION);
         if value["type"] == "room_state" {
             assert!(
                 !text.contains("token"),
