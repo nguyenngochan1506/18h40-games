@@ -1,0 +1,27 @@
+# Staging: nginx host (TLS) -> Traefik :8888 -> 2 container này, cùng mạng betodemy-network
+services:
+  server:
+    image: bang-server:staging
+    container_name: bang-server-staging
+    restart: unless-stopped
+    environment:
+      ALLOWED_ORIGINS: https://07nghiep.site
+    networks: [betodemy-network]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.bang-ws.rule=Host(`07nghiep.site`) && (Path(`/ws`) || Path(`/healthz`))
+      - traefik.http.routers.bang-ws.priority=10
+      - traefik.http.services.bang-ws.loadbalancer.server.port=3000
+  web:
+    image: bang-web:staging
+    container_name: bang-web-staging
+    restart: unless-stopped
+    networks: [betodemy-network]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.bang-web.rule=Host(`07nghiep.site`)
+      - traefik.http.routers.bang-web.priority=1
+      - traefik.http.services.bang-web.loadbalancer.server.port=80
+networks:
+  betodemy-network:
+    external: true
