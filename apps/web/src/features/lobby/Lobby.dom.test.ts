@@ -142,3 +142,35 @@ test('BANG HUD lists stacked weapons and displays the server-supplied maximum ra
   assert.match(container.querySelector('.hud-gun')!.textContent!, /Volcanic \+ Winchester/);
   assert.match(container.querySelector('.hud-gun')!.textContent!, /Tầm bắn: 5/);
 });
+
+test('manual check controls expose Enter, lock pending input and retain Barrel alternatives', async t => {
+  const { container, root, sent } = await mount(t);
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Expected player view');
+  const table = game.view.view.table;
+  table.waiting = { player: 0, pending_id: 44, kind: { type: 'check', reason: 'dynamite' } };
+  const props = { room: demoRoom, game, log: [], fxBatch: null, soundBatch: null, fxEnabled: false, viewer: 0, disabled: false, send: (message: ClientMessage) => sent.push(message) };
+  await act(async () => root.render(createElement(Room, props)));
+  assert.match(container.querySelector('.game-controls')!.textContent!, /Dynamite: lật 1 lá/);
+  const initialFlip = container.querySelector<HTMLButtonElement>('[aria-label="Lật kiểm tra"] button')!;
+  assert.equal(initialFlip.getAttribute('aria-keyshortcuts'), 'Enter');
+  assert.equal(initialFlip.getAttribute('data-primary-action'), 'true');
+  await act(() => initialFlip.click());
+  assert.deepEqual([...sent], [{ v: PROTOCOL_VERSION, type: 'game_action', action: { type: 'flip_check', pending_id: 44 } }]);
+  await act(async () => root.render(createElement(Room, { ...props, disabled: true })));
+  const flip = container.querySelector<HTMLButtonElement>('[aria-label="Lật kiểm tra"] button')!;
+  assert.equal(flip.disabled, true);
+  await act(() => flip.click()); assert.equal(sent.length, 1);
+  table.waiting = { player: 0, pending_id: 45, kind: { type: 'attack_response', kind: 'bang', remaining: 2, checks_left: 2 } };
+  table.players[0].character = 'jourdonnais';
+  await act(async () => root.render(createElement(Room, { ...props, game: { ...game, seq: game.seq + 1 } })));
+  const buttons = [...container.querySelectorAll<HTMLButtonElement>('.game-controls button')];
+  assert.ok(buttons.some(button => button.textContent!.includes('Lật Barrel (2 lần còn lại)')));
+  assert.ok(buttons.some(button => button.textContent!.includes('Chịu đòn')));
+  await act(() => buttons.find(button => button.textContent!.includes('Lật Barrel'))!.click());
+  assert.deepEqual(sent.at(-1), { v: PROTOCOL_VERSION, type: 'game_action', action: { type: 'flip_barrel', pending_id: 45 } });
+  table.waiting = { player: 0, pending_id: 46, kind: { type: 'attack_response', kind: 'bang', remaining: 2, checks_left: 1 } };
+  await act(async () => root.render(createElement(Room, { ...props, game: { ...game, seq: game.seq + 2 } })));
+  const current = [...container.querySelectorAll<HTMLElement>('.game-controls')].find(control => !control.closest('[inert]'))!;
+  assert.match(current.textContent!, /Lật Jourdonnais/);
+});

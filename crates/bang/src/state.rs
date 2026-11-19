@@ -58,6 +58,7 @@ pub struct Defense {
     pub kind: AttackKind,
     pub remaining: u8,
     pub checks_left: u8,
+    pub damage: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,6 +78,11 @@ pub struct Pending {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PendingKind {
+    Check {
+        player: PlayerId,
+        reason: CardKind,
+        continuation: DrawContinuation,
+    },
     DrawChoice {
         player: PlayerId,
     },
@@ -96,6 +102,7 @@ pub enum PendingKind {
         source: PlayerId,
         kind: AttackKind,
         remaining: u8,
+        checks_left: u8,
         damage: u8,
     },
     ResolveTargets {
@@ -137,6 +144,7 @@ impl Pending {
         match &self.kind {
             PendingKind::AttackResponse { target, .. } => Some(*target),
             PendingKind::Dying { player, .. }
+            | PendingKind::Check { player, .. }
             | PendingKind::DrawChoice { player }
             | PendingKind::KeepCards { player, .. }
             | PendingKind::ChooseDrawResult { player, .. } => Some(*player),
@@ -161,13 +169,26 @@ pub enum Winner {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DecisionKind {
     Turn,
-    AttackResponse { kind: AttackKind, remaining: u8 },
+    AttackResponse {
+        kind: AttackKind,
+        remaining: u8,
+        checks_left: u8,
+    },
+    Check {
+        reason: CardKind,
+    },
     Duel,
     GeneralStore,
     DrawChoice,
-    KeepCards { keep: usize },
-    ChooseDrawResult { reason: CardKind },
-    Dying { needed: u16 },
+    KeepCards {
+        keep: usize,
+    },
+    ChooseDrawResult {
+        reason: CardKind,
+    },
+    Dying {
+        needed: u16,
+    },
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -205,11 +226,16 @@ impl GameState {
                 pending_id: Some(frame.id),
                 kind: match &frame.kind {
                     PendingKind::AttackResponse {
-                        kind, remaining, ..
+                        kind,
+                        remaining,
+                        checks_left,
+                        ..
                     } => DecisionKind::AttackResponse {
                         kind: *kind,
                         remaining: *remaining,
+                        checks_left: *checks_left,
                     },
+                    PendingKind::Check { reason, .. } => DecisionKind::Check { reason: *reason },
                     PendingKind::Dying { needed, .. } => DecisionKind::Dying { needed: *needed },
                     PendingKind::Duel { .. } => DecisionKind::Duel,
                     PendingKind::GeneralStore { .. } => DecisionKind::GeneralStore,

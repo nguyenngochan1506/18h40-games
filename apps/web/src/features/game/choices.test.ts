@@ -67,7 +67,7 @@ test('Lucky chooses only a card from the private check pool for each supplied re
 });
 
 test('Sid can heal across any waiting frame, uses only his own Dying nonce, and leaves the underlying decision untouched', () => {
-  for (const kind of [{ type: 'turn' }, { type: 'attack_response', kind: 'bang', remaining: 1 }, { type: 'general_store' }, { type: 'keep_cards', keep: 2 }, { type: 'dying', needed: 2 }] as const) {
+  for (const kind of [{ type: 'turn' }, { type: 'attack_response', kind: 'bang', remaining: 1, checks_left: 0 }, { type: 'general_store' }, { type: 'keep_cards', keep: 2 }, { type: 'dying', needed: 2 }] as const) {
     const { game, table } = fixture(kind);
     table.players[0].character = 'sid_ketchum';
     table.players[0].health = 2;

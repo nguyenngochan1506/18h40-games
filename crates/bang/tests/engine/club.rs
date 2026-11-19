@@ -11,7 +11,7 @@ fn club() -> Scenario {
 
 fn play(game: &mut Scenario, player: usize, kind: CardKind, target: Option<usize>) -> CardId {
     let card = game.give(player, kind);
-    game.act(
+    game.act_with_checks(
         player,
         Action::Play {
             card,
@@ -202,7 +202,7 @@ fn club_holder_death_discards_or_vulture_inherits_dynamite_and_replay_starts_a_f
         if vulture {
             assert!(game.state.players[3].hand.contains(&dynamite));
             game.state.turn.player = PlayerId(3);
-            game.act(
+            game.act_with_checks(
                 3,
                 Action::Play {
                     card: dynamite,
@@ -226,7 +226,7 @@ fn club_dynamite_removed_by_panic_or_cat_balou_ends_old_round() {
         let dynamite = game.equip(1, CardKind::Dynamite);
         safe_end(&mut game);
         let card = game.give(1, kind);
-        game.act(
+        game.act_with_checks(
             1,
             Action::AffectCard {
                 card,
@@ -236,7 +236,7 @@ fn club_dynamite_removed_by_panic_or_cat_balou_ends_old_round() {
         );
         assert!(game.state.dynamite_round.is_none());
         if kind == CardKind::Panic {
-            game.act(
+            game.act_with_checks(
                 1,
                 Action::Play {
                     card: dynamite,
@@ -335,7 +335,7 @@ fn club_jail_heart_escape_and_removal_reset_progress_and_classic_still_discards_
                 assert_eq!(game.state.players[1].jail_turns_served, 1);
                 to_turn(&mut game, 0);
                 let panic = game.give(0, CardKind::Panic);
-                game.act(
+                game.act_with_checks(
                     0,
                     Action::AffectCard {
                         card: panic,
@@ -344,7 +344,7 @@ fn club_jail_heart_escape_and_removal_reset_progress_and_classic_still_discards_
                     },
                 );
                 assert_eq!(game.state.players[1].jail_turns_served, 0);
-                game.act(
+                game.act_with_checks(
                     0,
                     Action::Play {
                         card: jail,
@@ -405,7 +405,7 @@ fn club_lucky_dynamite_and_jail_survive_serialization_dying_and_stale_choices() 
     game.end();
     let pending_id = game.state.pending.last().unwrap().id;
     game.state = serde_json::from_str(&serde_json::to_string(&game.state).unwrap()).unwrap();
-    let events = game.act(
+    let events = game.act_with_checks(
         1,
         Action::ChooseDrawResult {
             pending_id,
@@ -441,7 +441,7 @@ fn club_lucky_dynamite_and_jail_survive_serialization_dying_and_stale_choices() 
     let original = game.state.clone();
     let original_rng = game.rng.clone();
     game.state = serde_json::from_str(&serde_json::to_string(&game.state).unwrap()).unwrap();
-    let events = game.act(
+    let events = game.act_with_checks(
         1,
         Action::ChooseDrawResult {
             pending_id,
@@ -499,7 +499,7 @@ fn club_weapons_stack_use_max_range_and_recompute_when_each_weapon_leaves() {
             (volcanic, CardKind::CatBalou, 1),
         ] {
             let card = game.give(0, kind);
-            game.act(
+            game.act_with_checks(
                 0,
                 Action::AffectCard {
                     card,
@@ -650,7 +650,7 @@ fn club_jail_removal_or_inheritance_never_keeps_old_served_turns() {
         if vulture {
             assert!(game.state.players[3].hand.contains(&jail));
             game.state.turn.player = PlayerId(3);
-            game.act(
+            game.act_with_checks(
                 3,
                 Action::Play {
                     card: jail,
@@ -669,7 +669,7 @@ fn club_jail_removal_or_inheritance_never_keeps_old_served_turns() {
     let jail = game.equip(1, CardKind::Jail);
     game.state.players[1].jail_turns_served = 2;
     let cat = game.give(0, CardKind::CatBalou);
-    game.act(
+    game.act_with_checks(
         0,
         Action::AffectCard {
             card: cat,

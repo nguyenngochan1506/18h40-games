@@ -10,7 +10,7 @@ export const demoEvents = {
   card_shown: { type: 'card_shown', player: 0, card: 37 },
   choice_offered: { type: 'choice_offered', player: 0, cards: [1, 26] },
   card_played: { type: 'card_played', player: 0, card: 1, target: 1 },
-  decision_changed: { type: 'decision_changed', decision: { player: 1, pending_id: 7, kind: { type: 'attack_response', kind: 'bang', remaining: 1 } } },
+  decision_changed: { type: 'decision_changed', decision: { player: 1, pending_id: 7, kind: { type: 'attack_response', kind: 'bang', remaining: 1, checks_left: 0 } } },
   health_changed: { type: 'health_changed', player: 1, source: 0, delta: -1, health: 2 },
   card_discarded: { type: 'card_discarded', player: 0, card: 26 },
   card_equipped: { type: 'card_equipped', player: 1, card: 63 },

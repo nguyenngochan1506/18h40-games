@@ -22,7 +22,7 @@ export const demoGame: GameSnapshot = {
           { id: 4, character: 'calamity_janet', health: 2, max_health: 4, alive: true, hand_count: 2, in_play: [65], weapon_range: 1, role: null },
         ],
         turn: { player: 1, step: 'play', bangs_played: 1 },
-        waiting: { player: 0, pending_id: 12, kind: { type: 'attack_response', kind: 'bang', remaining: 2 } },
+        waiting: { player: 0, pending_id: 12, kind: { type: 'attack_response', kind: 'bang', remaining: 2, checks_left: 0 } },
         draw_count: 40, discard_count: 21, discard_top: 58, store_slots: 0, winner: null,
       },
     },

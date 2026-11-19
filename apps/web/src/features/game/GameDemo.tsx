@@ -71,7 +71,7 @@ export default function GameDemo() {
     if (mode === 'jesse' || mode === 'pedro') { table.players[0].character = mode === 'jesse' ? 'jesse_jones' : 'pedro_ramirez'; table.waiting = { player: 0, pending_id: 17, kind: { type: 'draw_choice' } }; }
     if (mode === 'kit' || mode === 'kit_short') { table.players[0].character = 'kit_carlson'; game.view.view.choices = mode === 'kit_short' ? [5] : [5, 33, 60]; table.waiting = { player: 0, pending_id: 18, kind: { type: 'keep_cards', keep: Math.min(2, game.view.view.choices.length) } }; }
     if (mode.startsWith('lucky')) { table.players[0].character = 'lucky_duke'; game.view.view.choices = [5, 33]; table.waiting = { player: 0, pending_id: 19, kind: { type: 'choose_draw_result', reason: mode === 'lucky_jail' ? 'jail' : mode === 'lucky_dynamite' ? 'dynamite' : 'barrel' } }; }
-    if (mode === 'sid' || mode === 'sid_dying') { table.players[0].character = 'sid_ketchum'; table.players[0].health = mode === 'sid_dying' ? 0 : 2; table.waiting = mode === 'sid_dying' ? { player: 0, pending_id: 20, kind: { type: 'dying', needed: 1 } } : { player: 1, pending_id: 21, kind: { type: 'attack_response', kind: 'bang', remaining: 1 } }; }
+    if (mode === 'sid' || mode === 'sid_dying') { table.players[0].character = 'sid_ketchum'; table.players[0].health = mode === 'sid_dying' ? 0 : 2; table.waiting = mode === 'sid_dying' ? { player: 0, pending_id: 20, kind: { type: 'dying', needed: 1 } } : { player: 1, pending_id: 21, kind: { type: 'attack_response', kind: 'bang', remaining: 1, checks_left: 0 } }; }
   }
   if (game.view.perspective === 'player' && fxBatch) {
     const table = game.view.view.table;

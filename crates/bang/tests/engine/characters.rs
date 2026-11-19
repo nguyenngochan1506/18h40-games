@@ -29,16 +29,19 @@ fn exhaust(game: &mut Scenario, available: usize) {
 }
 
 fn resumed(game: &mut Scenario) {
-    let mut restored: GameState =
+    let restored: GameState =
         serde_json::from_str(&serde_json::to_string(&game.state).unwrap()).unwrap();
     assert_eq!(restored, game.state);
-    let mut rng = game.rng.clone();
+    let mut replay = Scenario {
+        state: restored,
+        rng: game.rng.clone(),
+    };
     let (player, action) = default_action(&game.state).unwrap();
-    let events = apply(&mut restored, player, action.clone(), &mut rng).unwrap();
-    assert_eq!(events, game.act(player.0, action));
-    assert_eq!(restored, game.state);
-    assert_eq!(rng.get_word_pos(), game.rng.get_word_pos());
-    invariant(&restored);
+    let events = replay.act_with_checks(player.0, action.clone());
+    assert_eq!(events, game.act_with_checks(player.0, action));
+    assert_eq!(replay.state, game.state);
+    assert_eq!(replay.rng.get_word_pos(), game.rng.get_word_pos());
+    invariant(&replay.state);
 }
 
 #[test]
@@ -66,7 +69,7 @@ fn paul_and_rose_stack_with_equipment_and_affect_bang_and_panic() {
         ActionError::OutOfRange,
     );
     game.equip(0, CardKind::Remington);
-    let events = game.act(
+    let events = game.act_with_checks(
         0,
         Action::Play {
             card: bang,
@@ -98,7 +101,7 @@ fn paul_and_rose_stack_with_equipment_and_affect_bang_and_panic() {
         effective_distance(&game.state, PlayerId(0), PlayerId(3)),
         Ok(1)
     );
-    game.act(
+    game.act_with_checks(
         0,
         Action::AffectCard {
             card: panic,
@@ -126,7 +129,7 @@ fn willy_remains_unlimited_with_or_without_volcanic_and_still_obeys_range() {
         game.respond(None);
     }
     let gun = game.give(0, CardKind::Schofield);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: gun,
@@ -186,7 +189,7 @@ fn slab_barrel_and_jourdonnais_reduce_each_required_response_independently() {
             }
         }
         let bang = game.give(0, CardKind::Bang);
-        let events = game.act(
+        let events = game.act_with_checks(
             0,
             Action::Play {
                 card: bang,
@@ -223,7 +226,7 @@ fn jourdonnais_stops_after_success_and_neither_slab_nor_barrel_modifies_indians(
     game.equip(1, CardKind::Barrel);
     game.top_face(CardKind::Beer, Suit::Hearts, Rank::Six);
     let card = game.give(0, CardKind::Gatling);
-    let events = game.act(0, Action::Play { card, target: None });
+    let events = game.act_with_checks(0, Action::Play { card, target: None });
     assert_eq!(
         events
             .iter()
@@ -235,7 +238,7 @@ fn jourdonnais_stops_after_success_and_neither_slab_nor_barrel_modifies_indians(
     game.respond(None);
     game.respond(None);
     let card = game.give(0, CardKind::Indians);
-    let events = game.act(0, Action::Play { card, target: None });
+    let events = game.act_with_checks(0, Action::Play { card, target: None });
     assert!(
         !events
             .iter()
@@ -245,7 +248,8 @@ fn jourdonnais_stops_after_success_and_neither_slab_nor_barrel_modifies_indians(
         game.state.decision().unwrap().kind,
         DecisionKind::AttackResponse {
             kind: AttackKind::Indians,
-            remaining: 1
+            remaining: 1,
+            ..
         }
     ));
 }
@@ -255,7 +259,7 @@ fn calamity_converts_both_cards_in_turn_duel_and_indians_but_counts_bang_limit()
     let mut game = Scenario::new(4);
     game.character(0, Character::CalamityJanet);
     let card = game.give(0, CardKind::Missed);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card,
@@ -273,7 +277,7 @@ fn calamity_converts_both_cards_in_turn_duel_and_indians_but_counts_bang_limit()
         ActionError::BangLimit,
     );
     game.equip(0, CardKind::Volcanic);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: second,
@@ -288,13 +292,13 @@ fn calamity_converts_both_cards_in_turn_duel_and_indians_but_counts_bang_limit()
     game.respond(Some(bang));
     let card = game.give(0, CardKind::Indians);
     let missed = game.give(1, CardKind::Missed);
-    game.act(0, Action::Play { card, target: None });
+    game.act_with_checks(0, Action::Play { card, target: None });
     game.respond(Some(missed));
     game.respond(None);
     game.respond(None);
     let duel = game.give(0, CardKind::Duel);
     let missed = game.give(1, CardKind::Missed);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: duel,
@@ -398,7 +402,7 @@ fn jesse_chooses_source_rejects_empty_self_dead_and_stale_without_rng_changes() 
     game.give(2, CardKind::Beer);
     let before = game.state.clone();
     let before_rng = game.rng.clone();
-    let events = game.act(
+    let events = game.act_with_checks(
         1,
         Action::ChooseDrawSource {
             pending_id,
@@ -474,7 +478,7 @@ fn pedro_chooses_discard_or_deck_and_does_not_reveal_a_hidden_discard() {
     game.character(1, Character::PedroRamirez);
     let secret = game.give(2, CardKind::Bang);
     let cat = game.give(0, CardKind::CatBalou);
-    game.act(
+    game.act_with_checks(
         0,
         Action::AffectCard {
             card: cat,
@@ -485,7 +489,7 @@ fn pedro_chooses_discard_or_deck_and_does_not_reveal_a_hidden_discard() {
     assert_eq!(spectator_view(&game.state).discard_top, None);
     begin_turn(&mut game, 1);
     let pending_id = id(&game);
-    let events = game.act(
+    let events = game.act_with_checks(
         1,
         Action::ChooseDrawSource {
             pending_id,
@@ -590,7 +594,7 @@ fn lucky_barrel_choice_is_private_until_selected_and_resumes_the_same_attack() {
     let heart = game.top_face(CardKind::Beer, Suit::Hearts, Rank::Six);
     let spade = game.top_face(CardKind::Missed, Suit::Spades, Rank::Two);
     let bang = game.give(0, CardKind::Bang);
-    let events = game.act(
+    let events = game.act_with_checks(
         0,
         Action::Play {
             card: bang,
@@ -640,7 +644,7 @@ fn lucky_barrel_choice_is_private_until_selected_and_resumes_the_same_attack() {
         pending_id,
         card: heart,
     };
-    let events = game.act(1, action.clone());
+    let events = game.act_with_checks(1, action.clone());
     assert_eq!(
         events,
         apply(&mut restored, PlayerId(1), action, &mut rng).unwrap()
@@ -690,7 +694,7 @@ fn lucky_dynamite_and_jail_continuations_resume_without_rechecking_or_skipping_d
             pending_id: id(&game),
             card: if explode { danger } else { safe },
         };
-        let events = game.act(1, action);
+        let events = game.act_with_checks(1, action);
         assert_eq!(
             events
                 .iter()
@@ -732,7 +736,7 @@ fn lucky_dynamite_and_jail_continuations_resume_without_rechecking_or_skipping_d
             pending_id: id(&game),
             card: if escape { heart } else { spade },
         };
-        game.act(1, action);
+        game.act_with_checks(1, action);
         assert_eq!(game.state.turn.player, PlayerId(if escape { 1 } else { 2 }));
         assert_eq!(game.state.players[1].hand.len(), if escape { 2 } else { 0 });
     }
@@ -883,7 +887,7 @@ fn suzy_draws_after_last_card_duel_response_and_after_el_gringo_steals() {
     let duel = game.give(0, CardKind::Duel);
     let response = game.give(1, CardKind::Bang);
     let new_bang = game.top_face(CardKind::Bang, Suit::Diamonds, Rank::Two);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: duel,
@@ -900,7 +904,7 @@ fn suzy_draws_after_last_card_duel_response_and_after_el_gringo_steals() {
     game.character(1, Character::ElGringo);
     let bang = game.give(0, CardKind::Bang);
     let beer = game.give(0, CardKind::Beer);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: bang,
@@ -968,7 +972,7 @@ fn sid_heals_out_of_turn_without_touching_other_frames_and_validates_atomically(
         ActionError::CardNotInHand,
     );
     for pair in cards.chunks(2) {
-        game.act(
+        game.act_with_checks(
             2,
             Action::SidHeal {
                 pending_id: None,
@@ -1019,7 +1023,7 @@ fn sid_can_save_himself_repeatedly_in_dying_and_rejects_old_packets() {
             },
             ActionError::StalePending,
         );
-        game.act(
+        game.act_with_checks(
             1,
             Action::SidHeal {
                 pending_id: Some(pending_id),
@@ -1099,7 +1103,7 @@ fn outlaw_duel_initiator_dying_has_no_bounty_but_other_victim_still_rewards_kill
         game.state.players[2].health = 1;
         let duel = game.give(1, CardKind::Duel);
         let bang = game.give(2, CardKind::Bang);
-        game.act(
+        game.act_with_checks(
             1,
             Action::Play {
                 card: duel,
@@ -1179,7 +1183,7 @@ fn deputy_starting_a_duel_still_penalizes_the_sheriff_who_kills_them() {
     let duel = game.give(1, CardKind::Duel);
     let bang = game.give(0, CardKind::Bang);
     let penalty = game.give(0, CardKind::Beer);
-    game.act(
+    game.act_with_checks(
         1,
         Action::Play {
             card: duel,
@@ -1212,7 +1216,7 @@ fn el_gringo_hidden_card_identity_does_not_change_uninvolved_views_or_events() {
         pending_id: id(&game),
         card: None,
     };
-    let events = game.act(1, action.clone());
+    let events = game.act_with_checks(1, action.clone());
     let other_events = apply(&mut alternate, PlayerId(1), action, &mut rng).unwrap();
     assert_ne!(game.state.players[1].hand, alternate.players[1].hand);
     for recipient in [None, Some(PlayerId(2)), Some(PlayerId(3))] {
@@ -1239,7 +1243,7 @@ fn pedro_removing_public_top_does_not_expose_a_buried_lucky_card() {
     let chosen = game.top_face(CardKind::Beer, Suit::Hearts, Rank::Six);
     game.shoot(0, 1);
     let pending_id = id(&game);
-    game.act(
+    game.act_with_checks(
         1,
         Action::ChooseDrawResult {
             pending_id,
@@ -1249,7 +1253,7 @@ fn pedro_removing_public_top_does_not_expose_a_buried_lucky_card() {
     assert_eq!(spectator_view(&game.state).discard_top, Some(chosen));
     begin_turn(&mut game, 2);
     let pending_id = id(&game);
-    game.act(
+    game.act_with_checks(
         2,
         Action::ChooseDrawSource {
             pending_id,
@@ -1301,7 +1305,7 @@ fn sid_out_of_turn_preserves_each_kind_of_waiting_frame() {
             0 => game.dying_child(1, Some(PlayerId(0))),
             1 => {
                 let card = game.give(0, CardKind::Duel);
-                game.act(
+                game.act_with_checks(
                     0,
                     Action::Play {
                         card,
@@ -1324,13 +1328,13 @@ fn sid_out_of_turn_preserves_each_kind_of_waiting_frame() {
             }
             5 => {
                 let card = game.give(0, CardKind::GeneralStore);
-                game.act(0, Action::Play { card, target: None });
+                game.act_with_checks(0, Action::Play { card, target: None });
             }
             _ => unreachable!(),
         }
         let pending = game.state.pending.clone();
         let decision = game.state.decision();
-        game.act(
+        game.act_with_checks(
             2,
             Action::SidHeal {
                 pending_id: None,
@@ -1439,7 +1443,7 @@ fn el_gringo_losing_his_own_duel_does_not_steal_even_when_the_beer_would_save_hi
         let duel = game.give(1, CardKind::Duel);
         let bang = game.give(2, CardKind::Bang);
         let beer = game.give(2, CardKind::Beer);
-        game.act(
+        game.act_with_checks(
             1,
             Action::Play {
                 card: duel,
@@ -1504,7 +1508,7 @@ fn el_gringo_losing_an_opponents_duel_steals_before_dying_and_can_use_that_beer(
         game.state.players[1].health = health;
         let duel = game.give(0, CardKind::Duel);
         let beer = game.give(0, CardKind::Beer);
-        game.act(
+        game.act_with_checks(
             0,
             Action::Play {
                 card: duel,

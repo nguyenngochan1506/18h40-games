@@ -46,3 +46,4 @@
 /* Lá bài trong tay được phép nhô lên trên khay (không bị cắt đỉnh) */
 .cinematic .hand-tray .hand-cards { overflow: visible; }
 .cinematic .hand-tray { overflow: visible; }
+.bang-board .decision-overlay .check-controls .action { min-height: 44px; width: 100%; font-size: 16px; }

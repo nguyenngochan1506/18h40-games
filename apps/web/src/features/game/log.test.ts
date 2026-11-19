@@ -64,7 +64,7 @@ test('response phrasing follows supplied decisions, including Calamity, Slab and
   assert.equal(eventsToLog([{ type: 'card_played', player: 1, card: 1, target: null }], { ...ctx, waiting: { player: 1, pending_id: 1, kind: { type: 'duel' } } })[0], 'Minh đáp Duel bằng BANG! (2♦).');
   assert.equal(eventsToLog([{ type: 'health_changed', player: 0, source: null, delta: 1, health: 3 }], ctx)[0], 'Hân (bạn) hồi 1 máu (còn 3).');
   for (const reason of ['barrel', 'jail', 'dynamite'] as const) assert.ok(!eventsToLog([{ ...demoEvents.draw_revealed, reason }], ctx)[0].includes('thành công'));
-  const attack = { player: 1, pending_id: 8, kind: { type: 'attack_response', kind: 'bang', remaining: 2 } } as const;
+  const attack = { player: 1, pending_id: 8, kind: { type: 'attack_response', kind: 'bang', remaining: 2, checks_left: 0 } } as const;
   assert.match(eventsToLog([{ type: 'decision_changed', decision: attack }], ctx)[0], /còn 2/);
   assert.equal(eventsToLog([{ type: 'card_played', player: 1, card: 1, target: null }], { ...ctx, waiting: attack })[0], 'Minh đỡ bằng BANG! (2♦).');
   assert.equal(eventsToLog([{ type: 'card_played', player: 0, card: 37, target: null }], { ...ctx, waiting: { player: 0, pending_id: 9, kind: { type: 'dying', needed: 1 } } })[0], 'Hân (bạn) dùng Beer (6♥) để cứu mạng.');

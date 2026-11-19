@@ -29,6 +29,19 @@ pub(super) fn begin<R: Rng + ?Sized>(
     }
 }
 
+pub(super) fn wait(
+    state: &mut GameState,
+    player: PlayerId,
+    reason: CardKind,
+    continuation: DrawContinuation,
+) {
+    state.push_pending(PendingKind::Check {
+        player,
+        reason,
+        continuation,
+    });
+}
+
 fn reveal(
     state: &mut GameState,
     player: PlayerId,
@@ -68,34 +81,18 @@ pub(super) fn choose<R: Rng + ?Sized>(
     resume(state, continuation, Some(card), rng, events);
 }
 
-pub(super) fn defend<R: Rng + ?Sized>(
-    state: &mut GameState,
-    mut defense: Defense,
-    rng: &mut R,
-    events: &mut Vec<Event>,
-) {
+pub(super) fn defend(state: &mut GameState, defense: Defense) {
     if defense.remaining == 0 {
         return;
     }
-    if defense.checks_left > 0 {
-        defense.checks_left -= 1;
-        begin(
-            state,
-            defense.target,
-            CardKind::Barrel,
-            DrawContinuation::Defense { defense },
-            rng,
-            events,
-        );
-    } else {
-        state.push_pending(PendingKind::AttackResponse {
-            target: defense.target,
-            source: defense.source,
-            kind: defense.kind,
-            remaining: defense.remaining,
-            damage: 1,
-        });
-    }
+    state.push_pending(PendingKind::AttackResponse {
+        target: defense.target,
+        source: defense.source,
+        kind: defense.kind,
+        remaining: defense.remaining,
+        checks_left: defense.checks_left,
+        damage: defense.damage,
+    });
 }
 
 fn resume<R: Rng + ?Sized>(
@@ -111,7 +108,7 @@ fn resume<R: Rng + ?Sized>(
             if face.is_some_and(|c| c.suit == Suit::Hearts) {
                 defense.remaining -= 1;
             }
-            defend(state, defense, rng, events);
+            defend(state, defense);
         }
         DrawContinuation::Dynamite {
             player,

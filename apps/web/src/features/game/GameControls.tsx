@@ -1,5 +1,5 @@
 import type { Action, GameSnapshot } from '../../generated/protocol';
-import { actionMode, discardCount, emptyDraft, endTurnAction, playAction, playKind, needsTarget, respondAction, responseKind, chooseStoreSlotAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, isSid, sidHealAction } from './actions';
+import { actionMode, discardCount, emptyDraft, endTurnAction, playAction, playKind, needsTarget, respondAction, responseKind, chooseStoreSlotAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, isSid, sidHealAction, flipCheckAction, flipBarrelAction } from './actions';
 import type { ActionDraft } from './actions';
 import { cardFace } from './cardCatalog';
 import { cards } from './i18n';
@@ -15,6 +15,12 @@ function DecisionControls({ game, draft, disabled, setDraft, sendAction }: Props
   const cardName = draft.card !== null && cardFace(draft.card) ? cards[cardFace(draft.card)!.kind].name : null;
   const send = (action: Action | null) => { if (action && !disabled) sendAction(action); };
   const cancel = <button type="button" className="action secondary" disabled={disabled} onClick={() => setDraft(emptyDraft)}>Hủy <kbd aria-hidden="true">Esc</kbd></button>;
+  if (mode === 'check' && table.waiting?.kind.type === 'check') {
+    const reason = table.waiting.kind.reason;
+    const action = flipCheckAction(game, disabled);
+    return <div className="game-controls check-controls" aria-label="Lật kiểm tra"><p role="status">{reason === 'dynamite' ? 'Dynamite: lật 1 lá. ♠ từ 2 đến 9 thì nổ, mất 3 máu.' : 'Jail: lật 1 lá. ♥ thì thoát, không thì mất lượt.'}</p>
+      <div className="control-buttons"><button type="button" className="action" data-primary-action="true" aria-keyshortcuts="Enter" disabled={!action} onClick={() => send(action)}>Lật bài <kbd aria-hidden="true">Enter</kbd></button></div></div>;
+  }
   if (mode === 'draw_choice') {
     const own = table.players.find((player) => player.id === you)!;
     const action = chooseDrawSourceAction(game, draft.source, disabled);
@@ -36,9 +42,13 @@ function DecisionControls({ game, draft, disabled, setDraft, sendAction }: Props
     const dying = table.waiting?.kind.type === 'dying';
     const required = responseKind(game)!;
     const remaining = table.waiting?.kind.type === 'attack_response' && table.waiting.kind.kind !== 'indians' ? table.waiting.kind.remaining : 1;
+    const checks = table.waiting?.kind.type === 'attack_response' ? table.waiting.kind.checks_left : 0;
+    const barrel = flipBarrelAction(game, disabled);
+    const barrelName = table.players.find(player => player.id === you)?.character === 'jourdonnais' && checks === 1 ? 'Jourdonnais' : 'Barrel';
     return <div className="game-controls" aria-label="Phản ứng của bạn"><p>{remaining > 1 && `Cần thêm ${remaining} lá Missed! nữa. `}Chọn {cards[required].name} trên tay để {dying ? 'hồi máu' : 'phản ứng'}, hoặc {dying ? 'chấp nhận bị loại' : 'chịu đòn'}.</p><div className="control-buttons">
       <button type="button" className="action" data-primary-action="true" aria-keyshortcuts="Enter" disabled={!action} onClick={() => send(action)}>{dying ? 'Dùng Beer' : required === 'missed' ? `Đỡ bằng ${cardName ?? 'Missed!'}` : `Đáp bằng ${cardName ?? 'BANG!'}`} <kbd aria-hidden="true">Enter</kbd></button>
-      <button type="button" className="action secondary" data-primary-action={draft.card === null ? "true" : undefined} aria-keyshortcuts={draft.card === null ? "Enter" : undefined} disabled={disabled} onClick={() => send(respondAction(game, null, disabled))}>{dying ? 'Chấp nhận bị loại' : 'Chịu đòn'}{draft.card === null && <kbd aria-hidden="true">Enter</kbd>}</button>
+      {checks > 0 && <button type="button" className="action" data-primary-action={draft.card === null ? "true" : undefined} aria-keyshortcuts={draft.card === null ? "Enter" : undefined} disabled={!barrel} onClick={() => send(barrel)}>Lật {barrelName}{checks > 1 ? ` (${checks} lần còn lại)` : ''}{draft.card === null && <kbd aria-hidden="true">Enter</kbd>}</button>}
+      <button type="button" className="action secondary" data-primary-action={draft.card === null && !checks ? "true" : undefined} aria-keyshortcuts={draft.card === null && !checks ? "Enter" : undefined} disabled={disabled} onClick={() => send(respondAction(game, null, disabled))}>{dying ? 'Chấp nhận bị loại' : 'Chịu đòn'}{draft.card === null && !checks && <kbd aria-hidden="true">Enter</kbd>}</button>
       {draft.card !== null && cancel}
     </div></div>;
   }

@@ -46,7 +46,7 @@ test('hand drag categories and actions match click, including multi-step selecti
 test('response drops reuse respondAction; pool/discard/Sid selection stays click-only', () => {
   const game = turn(); if (game.view.perspective !== 'player') throw new Error('player');
   for (const [kind, card] of [['duel', 1], ['dying', 37], ['attack_response', 26]] as const) {
-    game.view.view.table.waiting = { player: 0, pending_id: 12, kind: kind === 'attack_response' ? { type: kind, kind: 'bang', remaining: 1 } : kind === 'dying' ? { type: kind, needed: 1 } : { type: kind } };
+    game.view.view.table.waiting = { player: 0, pending_id: 12, kind: kind === 'attack_response' ? { type: kind, kind: 'bang', remaining: 1, checks_left: 0 } : kind === 'dying' ? { type: kind, needed: 1 } : { type: kind } };
     assert.equal(dragDestination(game, emptyDraft, card, false), 'table');
     assert.deepEqual(dropAction(game, emptyDraft, card, center, false)?.action, { type: 'respond', pending_id: 12, card });
     assert.equal(dropAction(game, emptyDraft, card, actor, false), null);

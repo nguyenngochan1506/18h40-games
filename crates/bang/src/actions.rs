@@ -26,6 +26,12 @@ pub enum DrawSource {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
+    FlipCheck {
+        pending_id: PendingId,
+    },
+    FlipBarrel {
+        pending_id: PendingId,
+    },
     ChooseDrawSource {
         pending_id: PendingId,
         source: DrawSource,
@@ -161,6 +167,19 @@ pub(crate) fn validate(
     }
     if let Some(frame) = state.pending.last() {
         return match action {
+            Action::FlipCheck { pending_id } | Action::FlipBarrel { pending_id } => {
+                if *pending_id != frame.id {
+                    return Err(ActionError::StalePending);
+                }
+                match (action, &frame.kind) {
+                    (Action::FlipCheck { .. }, PendingKind::Check { .. }) => Ok(()),
+                    (
+                        Action::FlipBarrel { .. },
+                        PendingKind::AttackResponse { checks_left, .. },
+                    ) if *checks_left > 0 => Ok(()),
+                    _ => Err(ActionError::WrongAction),
+                }
+            }
             Action::ChooseDrawSource { pending_id, source } => {
                 if *pending_id != frame.id {
                     return Err(ActionError::StalePending);
@@ -245,7 +264,9 @@ pub(crate) fn validate(
         };
     }
     match action {
-        Action::Respond { .. }
+        Action::FlipCheck { .. }
+        | Action::FlipBarrel { .. }
+        | Action::Respond { .. }
         | Action::ChooseStoreSlot { .. }
         | Action::ChooseDrawSource { .. }
         | Action::KeepCards { .. }

@@ -93,6 +93,50 @@ pub fn apply<R: Rng + ?Sized>(
     let before = state.decision();
     let mut events = Vec::new();
     match action {
+        Action::FlipCheck { .. } => {
+            let PendingKind::Check {
+                player,
+                reason,
+                continuation,
+            } = state.pending.pop().unwrap().kind
+            else {
+                unreachable!()
+            };
+            checks::begin(state, player, reason, continuation, rng, &mut events);
+        }
+        Action::FlipBarrel { .. } => {
+            let PendingKind::AttackResponse {
+                target,
+                source,
+                kind,
+                remaining,
+                checks_left,
+                damage,
+            } = state.pending.pop().unwrap().kind
+            else {
+                unreachable!()
+            };
+            if checks_left == 1 && state.players[target.0].character == Character::Jourdonnais {
+                skills::activate(state, target, &mut events);
+            }
+            checks::begin(
+                state,
+                target,
+                CardKind::Barrel,
+                DrawContinuation::Defense {
+                    defense: Defense {
+                        target,
+                        source,
+                        kind,
+                        remaining,
+                        checks_left: checks_left - 1,
+                        damage,
+                    },
+                },
+                rng,
+                &mut events,
+            );
+        }
         Action::ChooseDrawSource { source, .. } => {
             skills::choose_source(state, player, source, rng, &mut events)
         }
@@ -123,7 +167,6 @@ pub fn apply<R: Rng + ?Sized>(
                             player,
                             target.unwrap(),
                             AttackKind::Bang,
-                            rng,
                             &mut events,
                         );
                     }
@@ -570,6 +613,7 @@ fn clear_pending(state: &mut GameState, events: &mut Vec<Event>) {
                 discard_private_pool(state, pool, events);
             }
             PendingKind::DrawChoice { .. }
+            | PendingKind::Check { .. }
             | PendingKind::AttackResponse { .. }
             | PendingKind::Dying { .. }
             | PendingKind::Duel { .. }
@@ -678,12 +722,11 @@ fn draw<R: Rng + ?Sized>(
     skills::receive(state, player, cards, events);
 }
 
-fn start_attack<R: Rng + ?Sized>(
+fn start_attack(
     state: &mut GameState,
     source: PlayerId,
     target: PlayerId,
     kind: AttackKind,
-    rng: &mut R,
     events: &mut Vec<Event>,
 ) {
     let slab =
@@ -696,7 +739,6 @@ fn start_attack<R: Rng + ?Sized>(
         checks_left = u8::from(state.players[target.0].has_in_play(CardKind::Barrel));
         if state.players[target.0].character == Character::Jourdonnais {
             checks_left += 1;
-            skills::activate(state, target, events);
         }
     }
     checks::defend(
@@ -707,9 +749,8 @@ fn start_attack<R: Rng + ?Sized>(
             kind,
             remaining: if slab { 2 } else { 1 },
             checks_left,
+            damage: 1,
         },
-        rng,
-        events,
     );
 }
 
@@ -755,6 +796,7 @@ fn advance_until_input<R: Rng + ?Sized>(
                 && matches!(
                     frame.kind,
                     PendingKind::DrawChoice { .. }
+                        | PendingKind::Check { .. }
                         | PendingKind::KeepCards { .. }
                         | PendingKind::ChooseDrawResult { .. }
                 )
@@ -782,7 +824,7 @@ fn advance_until_input<R: Rng + ?Sized>(
                     {
                         *stored = cursor + 1;
                     }
-                    start_attack(state, source, targets[cursor], kind, rng, events);
+                    start_attack(state, source, targets[cursor], kind, events);
                     continue;
                 }
                 PendingKind::GeneralStore {
@@ -844,7 +886,7 @@ fn advance_until_input<R: Rng + ?Sized>(
                             remaining: turn_order(state, player, true),
                         });
                     }
-                    checks::begin(
+                    checks::wait(
                         state,
                         player,
                         CardKind::Dynamite,
@@ -852,8 +894,6 @@ fn advance_until_input<R: Rng + ?Sized>(
                             player,
                             card: dynamite,
                         },
-                        rng,
-                        events,
                     );
                 }
             }
@@ -872,13 +912,11 @@ fn advance_until_input<R: Rng + ?Sized>(
                         events.push(Event::public(EventKind::JailExpired { player }));
                         continue;
                     }
-                    checks::begin(
+                    checks::wait(
                         state,
                         player,
                         CardKind::Jail,
                         DrawContinuation::Jail { player, card: jail },
-                        rng,
-                        events,
                     );
                 }
             }
@@ -913,6 +951,7 @@ pub fn default_action(state: &GameState) -> Option<(PlayerId, Action)> {
                 pending_id,
                 card: *pool.first()?,
             },
+            PendingKind::Check { .. } => Action::FlipCheck { pending_id },
             _ => Action::Respond {
                 pending_id,
                 card: None,

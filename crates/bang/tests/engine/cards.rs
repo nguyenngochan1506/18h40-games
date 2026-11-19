@@ -10,7 +10,7 @@ fn play(
     target: Option<usize>,
 ) -> (CardId, Vec<Event>) {
     let card = game.give(player, kind);
-    let events = game.act(
+    let events = game.act_with_checks(
         player,
         Action::Play {
             card,
@@ -27,7 +27,7 @@ fn affect(
     selection: CardSelection,
 ) -> Vec<Event> {
     let card = game.give(0, kind);
-    game.act(
+    game.act_with_checks(
         0,
         Action::AffectCard {
             card,
@@ -57,7 +57,7 @@ fn roundtrip_step(game: &mut Scenario) -> Vec<Event> {
     let (player, action) = default_action(&game.state).unwrap();
     let action_copy = serde_json::from_str(&serde_json::to_string(&action).unwrap()).unwrap();
     let actual = apply(&mut restored, player, action_copy, &mut rng).unwrap();
-    let expected = game.act(player.0, action);
+    let expected = game.act_with_checks(player.0, action);
     assert_eq!(restored, game.state);
     assert_eq!(actual, expected);
     assert_eq!(rng.get_word_pos(), game.rng.get_word_pos());
@@ -82,7 +82,7 @@ fn stagecoach_and_wells_fargo_draw_exactly_two_and_three() {
             },
             ActionError::InvalidTarget,
         );
-        let events = game.act(0, Action::Play { card, target: None });
+        let events = game.act_with_checks(0, Action::Play { card, target: None });
         assert_eq!(game.state.players[0].hand.len(), count);
         assert_eq!(game.state.discard_pile.last(), Some(&card));
         assert!(events.iter().any(|event| matches!(event.kind, EventKind::CardsDrawn { player: PlayerId(0), count: actual } if actual == count)));
@@ -197,7 +197,7 @@ fn panic_and_cat_balou_support_selected_equipment_and_self_targets() {
             },
             ActionError::WrongAction,
         );
-        game.act(
+        game.act_with_checks(
             0,
             Action::AffectCard {
                 card: only,
@@ -244,7 +244,7 @@ fn panic_range_uses_scope_and_mustang_but_never_weapon_range() {
         effective_distance(&game.state, PlayerId(0), PlayerId(1)),
         Ok(1)
     );
-    game.act(
+    game.act_with_checks(
         0,
         Action::AffectCard {
             card: panic,
@@ -279,7 +279,7 @@ fn random_hand_selection_hides_identity_from_uninvolved_players_and_discard_top(
             selection: CardSelection::Hand,
         };
         let copied_action = serde_json::from_str(&serde_json::to_string(&action).unwrap()).unwrap();
-        let expected = game.act(0, action);
+        let expected = game.act_with_checks(0, action);
         let actual = apply(&mut other, PlayerId(0), copied_action, &mut rng).unwrap();
         invariant(&other);
         assert_eq!(filter_events(&actual, None), filter_events(&expected, None));
@@ -307,7 +307,7 @@ fn random_hand_selection_hides_identity_from_uninvolved_players_and_discard_top(
         } else {
             assert_eq!(spectator_view(&other).discard_top, Some(card));
         }
-        game.act(
+        game.act_with_checks(
             0,
             Action::Play {
                 card: public_cover,
@@ -365,7 +365,7 @@ fn duplicate_equipment_is_rejected_and_new_weapons_replace_the_old_one() {
         },
         ActionError::InvalidTarget,
     );
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: scope,
@@ -403,7 +403,7 @@ fn every_weapon_range_is_used_and_distance_is_independent() {
                 ActionError::OutOfRange,
             );
         } else {
-            game.act(
+            game.act_with_checks(
                 0,
                 Action::Play {
                     card: bang,
@@ -426,7 +426,7 @@ fn every_weapon_range_is_used_and_distance_is_independent() {
         ActionError::OutOfRange,
     );
     play(&mut game, 0, CardKind::Scope, None);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: bang,
@@ -459,7 +459,7 @@ fn volcanic_allows_multiple_bangs_and_replacing_it_restores_the_limit() {
 }
 
 #[test]
-fn barrel_automatically_reveals_a_card_before_asking_for_missed() {
+fn barrel_manual_choice_reveals_a_card_before_asking_for_missed() {
     let mut game = Scenario::new(4);
     game.equip(1, CardKind::Barrel);
     game.state.players[1].health = 2;
@@ -479,7 +479,7 @@ fn barrel_automatically_reveals_a_card_before_asking_for_missed() {
     let bang = game.give(0, CardKind::Bang);
     let missed = game.give(1, CardKind::Missed);
     game.top_face(CardKind::Missed, Suit::Spades, Rank::Three);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: bang,
@@ -726,7 +726,7 @@ fn general_store_hides_cards_and_each_player_chooses_once_in_order() {
             }
         ))
     );
-    game.act(
+    game.act_with_checks(
         0,
         Action::ChooseStoreSlot {
             pending_id: old_id,
@@ -932,7 +932,7 @@ fn jail_rejects_sheriff_self_and_duplicates() {
             ActionError::InvalidTarget,
         );
     }
-    game.act(
+    game.act_with_checks(
         1,
         Action::Play {
             card: first,
@@ -1059,7 +1059,7 @@ fn blind_store_exposes_only_counts_and_receivers_private_card() {
         assert!(own.choices.is_empty());
         assert!(own.hand.is_empty());
     }
-    let events = game.act(
+    let events = game.act_with_checks(
         0,
         Action::ChooseStoreSlot {
             pending_id: game.state.pending.last().unwrap().id,

@@ -44,9 +44,9 @@ async function host(t: TestContext) {
 
 const cases: { name: string; card: number; kind: DecisionKind; calamity?: boolean }[] = [
   { name: 'BANG! answering Duel', card: 1, kind: { type: 'duel' } },
-  { name: 'BANG! answering Indians', card: 1, kind: { type: 'attack_response', kind: 'indians', remaining: 1 } },
+  { name: 'BANG! answering Indians', card: 1, kind: { type: 'attack_response', kind: 'indians', remaining: 1, checks_left: 0 } },
   { name: 'Calamity Missed! answering Duel', card: 26, kind: { type: 'duel' }, calamity: true },
-  { name: 'Calamity Missed! answering Indians', card: 26, kind: { type: 'attack_response', kind: 'indians', remaining: 1 }, calamity: true },
+  { name: 'Calamity Missed! answering Indians', card: 26, kind: { type: 'attack_response', kind: 'indians', remaining: 1, checks_left: 0 }, calamity: true },
 ];
 for (const [index, scenario] of cases.entries()) test(`useCardDrag sends ${scenario.name} once from the table zone with the current pending_id`, async t => {
   const { container, root } = await host(t);

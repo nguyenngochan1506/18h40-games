@@ -55,7 +55,7 @@ export function eventsToLog(events: EventKind[], ctx: LogContext): string[] {
         waiting = event.decision;
         if (!waiting) return 'Đã giải quyết xong lượt chờ.';
         const kind = waiting.kind;
-        const prompt = kind.type === 'turn' ? 'chơi lượt của mình' : kind.type === 'attack_response' ? kind.kind === 'indians' ? 'bỏ BANG! hoặc chịu đòn' : `đỡ bằng Missed! (còn ${kind.remaining}) hoặc chịu đòn` : kind.type === 'duel' ? 'đáp Duel' : kind.type === 'dying' ? 'dùng Beer hoặc kỹ năng để sống, hoặc chấp nhận bị loại' : kind.type === 'general_store' ? 'chọn 1 lá General Store' : kind.type === 'draw_choice' ? 'chọn nơi rút lá đầu' : kind.type === 'keep_cards' ? `chọn ${kind.keep} lá để giữ` : `chọn kết quả lật kiểm tra cho ${cards[kind.reason].name}`;
+        const prompt = kind.type === 'turn' ? 'chơi lượt của mình' : kind.type === 'check' ? `lật kiểm tra cho ${cards[kind.reason].name}` : kind.type === 'attack_response' ? kind.kind === 'indians' ? 'bỏ BANG! hoặc chịu đòn' : `${kind.checks_left > 0 ? `lật Barrel (còn ${kind.checks_left} lần), ` : ''}đỡ bằng Missed! (còn ${kind.remaining}) hoặc chịu đòn` : kind.type === 'duel' ? 'đáp Duel' : kind.type === 'dying' ? 'dùng Beer hoặc kỹ năng để sống, hoặc chấp nhận bị loại' : kind.type === 'general_store' ? 'chọn 1 lá General Store' : kind.type === 'draw_choice' ? 'chọn nơi rút lá đầu' : kind.type === 'keep_cards' ? `chọn ${kind.keep} lá để giữ` : `chọn kết quả lật kiểm tra cho ${cards[kind.reason].name}`;
         return `Đang chờ ${name(waiting.player)} ${prompt}.`;
       }
       case 'card_equipped': return `${name(event.player)} đặt ${cardName(event.card)} trước mặt.`;

@@ -46,12 +46,12 @@ test('Panic and Cat Balou build AffectCard only with a selected public region', 
 });
 
 test('responses carry the current nonce, allow declining, and select the right kind for each simple frame', () => {
-  const attack = fixture({ type: 'attack_response', kind: 'bang', remaining: 2 });
+  const attack = fixture({ type: 'attack_response', kind: 'bang', remaining: 2, checks_left: 0 });
   assert.deepEqual(respondAction(attack, 26, false), { type: 'respond', pending_id: 42, card: 26 });
   assert.deepEqual(respondAction(attack, null, false), { type: 'respond', pending_id: 42, card: null });
   assert.equal(respondAction(attack, 1, false), null);
   assert.equal(respondAction(attack, 26, true), null);
-  for (const kind of [{ type: 'duel' }, { type: 'attack_response', kind: 'indians', remaining: 1 }] as const) {
+  for (const kind of [{ type: 'duel' }, { type: 'attack_response', kind: 'indians', remaining: 1, checks_left: 0 }] as const) {
     const game = fixture(kind);
     assert.deepEqual(respondAction(game, 1, false), { type: 'respond', pending_id: 42, card: 1 });
     assert.equal(respondAction(game, 26, false), null);

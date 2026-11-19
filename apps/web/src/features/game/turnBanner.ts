@@ -1,4 +1,5 @@
 import type { SpectatorView } from '../../generated/protocol';
+import { cards } from './i18n.ts';
 
 export type TurnBanner = { text: string; own: boolean; key: string };
 
@@ -9,7 +10,8 @@ export function turnBanner(table: Pick<SpectatorView, 'turn' | 'waiting' | 'winn
   const waiting = table.waiting;
   if (waiting && waiting.kind.type !== 'turn') {
     const own = waiting.player === viewer;
-    const verb = waiting.kind.type === 'general_store' ? 'chọn' : 'phản ứng';
+    const kind = waiting.kind;
+    const verb = kind.type === 'check' || kind.type === 'choose_draw_result' ? `lật ${cards[kind.reason].name}` : kind.type === 'attack_response' && kind.checks_left > 0 ? 'lật Barrel hoặc phản ứng' : kind.type === 'general_store' ? 'chọn' : 'phản ứng';
     return { own, key: `wait:${waiting.player}`, text: own ? `Chờ bạn ${verb}` : `${name(waiting.player)} đang ${verb}` };
   }
   const own = table.turn.player === viewer;

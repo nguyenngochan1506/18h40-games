@@ -280,7 +280,7 @@ fn bang_missed_and_pass_resume_the_same_turn_without_auto_defense() {
     game.end();
     game.end();
     let defense = game.give(1, CardKind::Missed);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: second,
@@ -416,7 +416,7 @@ fn slab_requires_two_missed_and_willy_can_fire_again() {
     assert_eq!(game.state.players[1].health, 4);
     game.state.players[0].character = Character::WillyTheKid;
     let bang = game.give(0, CardKind::Bang);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: bang,
@@ -430,7 +430,7 @@ fn beer_heals_only_self_and_never_exceeds_maximum_or_works_with_two_alive() {
     let mut game = Scenario::new(4);
     game.state.players[0].health = 4;
     let first = game.give(0, CardKind::Beer);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: first,
@@ -439,7 +439,7 @@ fn beer_heals_only_self_and_never_exceeds_maximum_or_works_with_two_alive() {
     );
     assert_eq!(game.state.players[0].health, 5);
     let second = game.give(0, CardKind::Beer);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: second,
@@ -451,7 +451,7 @@ fn beer_heals_only_self_and_never_exceeds_maximum_or_works_with_two_alive() {
     game.dead(3);
     game.state.players[0].health = 3;
     let beer = game.give(0, CardKind::Beer);
-    game.act(
+    game.act_with_checks(
         0,
         Action::Play {
             card: beer,
@@ -719,7 +719,7 @@ fn serialized_attack_and_dying_states_actions_events_and_views_resume_identicall
         let (player, action) = default_action(&game.state).unwrap();
         let encoded_action = serde_json::to_string(&action).unwrap();
         let action_copy = serde_json::from_str(&encoded_action).unwrap();
-        let expected = game.act(player.0, action);
+        let expected = game.act_with_checks(player.0, action);
         let actual = apply(&mut restored, player, action_copy, &mut rng).unwrap();
         assert_eq!(restored, game.state);
         assert_eq!(actual, expected);
@@ -776,7 +776,7 @@ fn hidden_information_is_noninterfering_in_views_and_filtered_draw_events() {
     let mut rng = game.rng.clone();
     let (_, action) = default_action(&game.state).unwrap();
     let actual = apply(&mut other, PlayerId(0), action.clone(), &mut rng).unwrap();
-    let expected = game.act(0, action);
+    let expected = game.act_with_checks(0, action);
     assert_eq!(filter_events(&actual, None), filter_events(&expected, None));
     assert_eq!(
         filter_events(&actual, Some(PlayerId(0))),
@@ -1001,3 +1001,6 @@ fn custom_roles_are_validated_before_rng_and_preserved_with_mode() {
 
 #[path = "engine/club.rs"]
 mod club;
+
+#[path = "engine/manual_checks.rs"]
+mod manual_checks;

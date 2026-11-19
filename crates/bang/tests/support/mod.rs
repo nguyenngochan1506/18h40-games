@@ -107,6 +107,25 @@ impl Scenario {
         result
     }
 
+    // Rule scenarios choose each available check; manual-input tests use act directly.
+    pub fn act_with_checks(&mut self, player: usize, action: Action) -> Vec<Event> {
+        let mut events = self.act(player, action);
+        while let Some(decision) = self.state.decision() {
+            let Some(pending_id) = decision.pending_id else {
+                break;
+            };
+            let action = match decision.kind {
+                DecisionKind::Check { .. } => Action::FlipCheck { pending_id },
+                DecisionKind::AttackResponse { checks_left, .. } if checks_left > 0 => {
+                    Action::FlipBarrel { pending_id }
+                }
+                _ => break,
+            };
+            events.extend(self.act(decision.player.0, action));
+        }
+        events
+    }
+
     pub fn reject(&mut self, player: usize, action: Action, expected: ActionError) {
         let before = self.state.clone();
         let before_rng = self.rng.clone();
@@ -123,7 +142,7 @@ impl Scenario {
 
     pub fn shoot(&mut self, source: usize, target: usize) -> CardId {
         let card = self.give(source, CardKind::Bang);
-        self.act(
+        self.act_with_checks(
             source,
             Action::Play {
                 card,
@@ -137,7 +156,7 @@ impl Scenario {
         let frame = self.state.pending.last().unwrap();
         let player = frame.player().unwrap().0;
         let pending_id = frame.id;
-        self.act(player, Action::Respond { pending_id, card })
+        self.act_with_checks(player, Action::Respond { pending_id, card })
     }
 
     pub fn dying_child(&mut self, player: usize, source: Option<PlayerId>) {
@@ -164,7 +183,7 @@ impl Scenario {
 
     pub fn end(&mut self) -> Vec<Event> {
         let (player, action) = default_action(&self.state).unwrap();
-        self.act(player.0, action)
+        self.act_with_checks(player.0, action)
     }
 }
 
@@ -236,6 +255,11 @@ fn decision_actions(state: &GameState) -> Vec<Action> {
     let mut actions = vec![default];
     if let Some(frame) = state.pending.last() {
         let kind = match &frame.kind {
+            PendingKind::Check { .. } => {
+                return vec![Action::FlipCheck {
+                    pending_id: frame.id,
+                }];
+            }
             PendingKind::AttackResponse {
                 kind: AttackKind::Indians,
                 ..
@@ -293,6 +317,12 @@ fn decision_actions(state: &GameState) -> Vec<Action> {
             }
             PendingKind::ResolveTargets { .. } => panic!("Automatic frame must not await input"),
         };
+        if matches!(frame.kind, PendingKind::AttackResponse { checks_left, .. } if checks_left > 0)
+        {
+            actions.push(Action::FlipBarrel {
+                pending_id: frame.id,
+            });
+        }
         actions.extend(
             own.hand
                 .iter()

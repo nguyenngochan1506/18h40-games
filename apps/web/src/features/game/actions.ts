@@ -5,15 +5,28 @@ import { selectGameView } from './state.ts';
 export type ActionDraft = { storeSlot: number | null; card: CardId | null; target: number | null; selection: CardSelection | null; discarding: boolean; discard: CardId[]; healing: boolean; source: DrawSource; kept: CardId[] };
 export const emptyDraft: ActionDraft = { storeSlot: null, card: null, target: null, selection: null, discarding: false, discard: [], healing: false, source: 'deck', kept: [] };
 
-export function actionMode(game: GameSnapshot): 'view' | 'waiting' | 'turn' | 'response' | 'general_store' | 'draw_choice' | 'keep_cards' | 'choose_draw_result' {
+export function actionMode(game: GameSnapshot): 'view' | 'waiting' | 'turn' | 'response' | 'check' | 'general_store' | 'draw_choice' | 'keep_cards' | 'choose_draw_result' {
   const { table, you } = selectGameView(game.view);
   if (you === null || table.winner) return 'view';
   if (!table.waiting || table.waiting.player !== you) return 'waiting';
   switch (table.waiting.kind.type) {
     case 'turn': return 'turn';
     case 'attack_response': case 'duel': case 'dying': return 'response';
-    case 'general_store': case 'draw_choice': case 'keep_cards': case 'choose_draw_result': return table.waiting.kind.type;
+    case 'check': case 'general_store': case 'draw_choice': case 'keep_cards': case 'choose_draw_result': return table.waiting.kind.type;
   }
+}
+
+export function flipCheckAction(game: GameSnapshot, locked: boolean): Action | null {
+  const { table } = selectGameView(game.view);
+  if (locked || actionMode(game) !== 'check' || table.waiting?.pending_id == null) return null;
+  return { type: 'flip_check', pending_id: table.waiting.pending_id };
+}
+
+export function flipBarrelAction(game: GameSnapshot, locked: boolean): Action | null {
+  const { table } = selectGameView(game.view);
+  const waiting = table.waiting;
+  if (locked || actionMode(game) !== 'response' || waiting?.pending_id == null || waiting.kind.type !== 'attack_response' || !waiting.kind.checks_left) return null;
+  return { type: 'flip_barrel', pending_id: waiting.pending_id };
 }
 
 // These are input categories, not a client-side legality check (range, limits, etc.).

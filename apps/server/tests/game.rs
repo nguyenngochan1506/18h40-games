@@ -632,3 +632,162 @@ async fn blind_store_stays_private_for_all_connections_and_rejoin_snapshots() {
     }
     assert_eq!(bang::spectator_view(&table.state).store_slots, 0);
 }
+
+#[tokio::test(start_paused = true)]
+async fn manual_checks_are_routed_to_the_authenticated_owner_and_defaults_do_not_stall() {
+    let seed = (0..200_000)
+        .find(|seed| {
+            let (state, _) = bang::setup(
+                4,
+                bang::GameConfig::default(),
+                &mut ChaCha8Rng::seed_from_u64(*seed),
+            )
+            .unwrap();
+            let has = |player: usize, kind| {
+                state.players[player]
+                    .hand
+                    .iter()
+                    .any(|card| card.card().unwrap().kind == kind)
+            };
+            state.turn.player == PlayerId(0)
+                && matches!(state.decision().unwrap().kind, DecisionKind::Turn)
+                && has(0, CardKind::Dynamite)
+                && has(0, CardKind::Bang)
+                && has(1, CardKind::Barrel)
+                && state.players[1].character != bang::Character::LuckyDuke
+                && state.players[1].character != bang::Character::PaulRegret
+        })
+        .unwrap();
+    let mut table = Table::new(4, seed).await;
+    let held = |state: &GameState, player: usize, kind| {
+        *state.players[player]
+            .hand
+            .iter()
+            .find(|card| card.card().unwrap().kind == kind)
+            .unwrap()
+    };
+    let dynamite = held(&table.state, 0, CardKind::Dynamite);
+    let bang = held(&table.state, 0, CardKind::Bang);
+    table
+        .act(
+            PlayerId(0),
+            Action::Play {
+                card: dynamite,
+                target: None,
+            },
+        )
+        .await;
+    let own = &table.state.players[0];
+    let excess = own.hand.len().saturating_sub(own.health as usize);
+    let discard = own
+        .hand
+        .iter()
+        .copied()
+        .filter(|card| *card != bang)
+        .take(excess)
+        .collect();
+    table.act(PlayerId(0), Action::EndTurn { discard }).await;
+    for _ in 0..12 {
+        if table.state.turn.player == PlayerId(1)
+            && matches!(table.state.decision().unwrap().kind, DecisionKind::Turn)
+        {
+            break;
+        }
+        let (player, action) = bang::default_action(&table.state).unwrap();
+        table.act(player, action).await;
+    }
+    let barrel = held(&table.state, 1, CardKind::Barrel);
+    table
+        .act(
+            PlayerId(1),
+            Action::Play {
+                card: barrel,
+                target: None,
+            },
+        )
+        .await;
+    for _ in 0..24 {
+        if matches!(
+            table.state.decision().unwrap().kind,
+            DecisionKind::Check {
+                reason: CardKind::Dynamite
+            }
+        ) {
+            break;
+        }
+        let (player, action) = bang::default_action(&table.state).unwrap();
+        table.act(player, action).await;
+    }
+    let decision = table.state.decision().unwrap();
+    assert_eq!(decision.player, PlayerId(0));
+    assert_eq!(
+        decision.kind,
+        DecisionKind::Check {
+            reason: CardKind::Dynamite
+        }
+    );
+    let pending_id = decision.pending_id.unwrap();
+    for actor in [1, 0] {
+        let id = if actor == 0 {
+            bang::PendingId(pending_id.0 + 1)
+        } else {
+            pending_id
+        };
+        table.clients[actor]
+            .as_mut()
+            .unwrap()
+            .send(json!({"type":"game_action","action":Action::FlipCheck { pending_id:id }}))
+            .await;
+        rejected(table.clients[actor].as_mut().unwrap(), "illegal_action").await;
+    }
+    table
+        .spectator
+        .send(json!({"type":"game_action","action":Action::FlipCheck { pending_id }}))
+        .await;
+    rejected(&mut table.spectator, "illegal_action").await;
+    table.rejoin(0).await;
+    assert_eq!(table.state.decision().unwrap(), decision);
+    table
+        .act(PlayerId(0), Action::FlipCheck { pending_id })
+        .await;
+    while !matches!(table.state.decision().unwrap().kind, DecisionKind::Turn) {
+        let (player, action) = bang::default_action(&table.state).unwrap();
+        table.act(player, action).await;
+    }
+    table
+        .act(
+            PlayerId(0),
+            Action::Play {
+                card: bang,
+                target: Some(PlayerId(1)),
+            },
+        )
+        .await;
+    let decision = table.state.decision().unwrap();
+    assert!(
+        matches!(decision.kind, DecisionKind::AttackResponse { checks_left, .. } if checks_left > 0)
+    );
+    let pending_id = decision.pending_id.unwrap();
+    table.clients[0]
+        .as_mut()
+        .unwrap()
+        .send(json!({"type":"game_action","action":Action::FlipBarrel { pending_id }}))
+        .await;
+    rejected(table.clients[0].as_mut().unwrap(), "illegal_action").await;
+    table
+        .act(PlayerId(1), Action::FlipBarrel { pending_id })
+        .await;
+    if matches!(
+        table.state.decision().unwrap().kind,
+        DecisionKind::AttackResponse { .. }
+    ) {
+        assert!(matches!(
+            bang::default_action(&table.state).unwrap().1,
+            Action::Respond { card: None, .. }
+        ));
+        table.skip(0).await;
+    }
+    while !matches!(table.state.decision().unwrap().kind, DecisionKind::Turn) {
+        table.skip(0).await;
+    }
+}

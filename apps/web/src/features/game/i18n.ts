@@ -70,15 +70,15 @@ export const cards = {
   },
   "barrel": {
     "name": "Barrel",
-    "effect": "Khi bị bắn, lật 1 lá: ♥ thì coi như đã Missed!"
+    "effect": "Khi bị bắn, bạn có thể bấm lật 1 lá: ♥ thì coi như đã Missed!"
   },
   "dynamite": {
     "name": "Dynamite",
-    "effect": "Đầu lượt lật 1 lá: ♠ từ 2 đến 9 thì nổ, mất 3 máu. Không thì chuyền cho người kế"
+    "effect": "Đầu lượt, bấm lật 1 lá: ♠ từ 2 đến 9 thì nổ, mất 3 máu. Không thì chuyền cho người kế"
   },
   "jail": {
     "name": "Jail",
-    "effect": "Đặt lên người khác (không phải Cảnh sát trưởng). Đầu lượt họ lật 1 lá: ♥ thì thoát, không thì mất lượt"
+    "effect": "Đặt lên người khác (không phải Cảnh sát trưởng). Đầu lượt họ bấm lật 1 lá: ♥ thì thoát, không thì mất lượt"
   },
   "mustang": {
     "name": "Mustang",
@@ -133,7 +133,7 @@ export const characters = {
   },
   "jourdonnais": {
     "name": "Jourdonnais",
-    "ability": "Luôn có tác dụng như Barrel. Có thêm Barrel thật thì được lật thêm một lần"
+    "ability": "Có thể bấm lật kiểm tra như Barrel. Có thêm Barrel thật thì được lật thêm một lần"
   },
   "kit_carlson": {
     "name": "Kit Carlson",
@@ -141,7 +141,7 @@ export const characters = {
   },
   "lucky_duke": {
     "name": "Lucky Duke",
-    "ability": "Mỗi lần lật bài kiểm tra, lật 2 lá và chọn kết quả mình muốn"
+    "ability": "Bấm lật 2 lá khi kiểm tra, rồi chọn kết quả mình muốn"
   },
   "paul_regret": {
     "name": "Paul Regret",

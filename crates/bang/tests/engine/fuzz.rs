@@ -112,6 +112,7 @@ fn seeded_bots_cover_all_cards_frames_and_outcomes() {
                 for frame in &state.pending {
                     let name = match frame.kind {
                         PendingKind::AttackResponse { .. } => "attack_response",
+                        PendingKind::Check { .. } => "check",
                         PendingKind::Dying { .. } => "dying",
                         PendingKind::Duel { .. } => "duel",
                         PendingKind::ResolveTargets { .. } => "resolve_targets",

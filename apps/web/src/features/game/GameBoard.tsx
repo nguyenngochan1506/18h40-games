@@ -104,6 +104,7 @@ function waitText(table: SpectatorView, name: (id: number) => string): string {
     case 'duel': return `${who} Duel: bỏ 1 BANG! hoặc mất 1 máu.`;
     case 'dying': return `${who} Dùng Beer để sống, hoặc chấp nhận bị loại.${table.players.find((player) => player.id === decision.player)?.character === 'sid_ketchum' ? ' Hoặc bỏ 2 lá để hồi máu.' : ''}`;
     case 'general_store': return `${who} Chọn 1 lá úp.`;
+    case 'check': return `${who} Lật kiểm tra cho ${cards[decision.kind.reason].name}.`;
     case 'draw_choice': return `${who} Chọn nơi rút lá đầu.`;
     case 'keep_cards': return `${who} Chọn ${decision.kind.keep} lá để giữ.`;
     case 'choose_draw_result': return `${who} Chọn 1 lá lật kiểm tra.`;
