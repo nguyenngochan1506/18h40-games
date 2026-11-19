@@ -30,7 +30,7 @@ export function MotionCount({ value }: { value: number }) {
 export function MotionPanel({ children, className, label, role }: { children: ReactNode; className?: string; label?: string; role?: 'complementary' | 'status' }) {
   const animated = useTableMotion();
   const present = useIsPresent();
-  return <m.div className={className} role={role} aria-label={label} inert={!present} aria-hidden={!present || undefined} data-ui-motion="panel"
+  return <m.div className={className} role={role} aria-label={label} inert={!present} data-ui-motion="panel"
     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={animated ? { ...tableSpring, opacity: { duration: .15 } } : { duration: .1 }}>
     <m.div className="panel-surface" data-ui-motion="panel-surface" initial={{ y: animated ? 8 : 0 }} animate={{ y: 0 }} exit={{ y: animated ? 4 : 0 }} transition={animated ? tableSpring : { duration: .1 }}>{children}</m.div>
   </m.div>;
