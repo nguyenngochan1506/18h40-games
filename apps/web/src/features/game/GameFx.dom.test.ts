@@ -185,3 +185,35 @@ test('card flights end at measured anchor centers independently of card size', a
   assert.equal(flight[1].transform, 'translate(268px,210px) translate(-50%,-80%) rotate(8deg) scale(1.1)');
   assert.equal(flight[2].transform, 'translate(568px,500px) translate(-50%,-50%) rotate(-6deg) scale(.7)');
 });
+
+test('equipment arrivals use the actual public face rect inside the moved rack', async t => {
+  const fx = await mount(t);
+  const hand = document.createElement('div'); hand.dataset.animationRegion = 'hand'; fx.stage.append(hand);
+  t.mock.method(hand, 'getBoundingClientRect', () => ({ x: 400, y: 500, width: 200, height: 100 }) as DOMRect);
+  const rack = document.createElement('div'); rack.dataset.animationRegion = 'equipment-1'; fx.stage.append(rack);
+  t.mock.method(rack, 'getBoundingClientRect', () => ({ x: 100, y: 100, width: 180, height: 80 }) as DOMRect);
+  const target = document.createElement('button'); target.dataset.cardId = '66'; rack.append(target);
+  const face = document.createElement('span'); face.className = 'game-art'; target.append(face);
+  t.mock.method(face, 'getBoundingClientRect', () => ({ x: 120, y: 160, width: 40, height: 60 }) as DOMRect);
+  await fx.render({ batch: { id: 1, events: [{ type: 'card_played', player: 0, card: 66, target: 1 }, { type: 'card_equipped', player: 1, card: 66 }], waiting: null } });
+  await fx.tick(0);
+  const flight = fx.animationFrames.find(frames => Array.isArray(frames) && frames.length === 3 && String(frames[2].transform).includes('scale(.7)')) as Keyframe[];
+  assert.equal(flight[2].transform, 'translate(-360px,-360px) translate(-50%,-50%) rotate(-6deg) scale(.7)');
+});
+
+test('own Jail stays in the portrait while other players keep their actor cages', async t => {
+  const fx = await mount(t);
+  const players = structuredClone(ctx.players);
+  for (const player of players) { player.alive = true; player.in_play = player.id < 2 ? [66] : []; }
+  const own = document.createElement('span'); own.dataset.animationAnchor = '0'; fx.stage.append(own);
+  const other = document.createElement('span'); other.dataset.animationAnchor = '1'; fx.stage.append(other);
+  t.mock.method(own, 'getBoundingClientRect', () => ({ x: 100, y: 600, width: 1, height: 1 }) as DOMRect);
+  t.mock.method(other, 'getBoundingClientRect', () => ({ x: 200, y: 200, width: 1, height: 1 }) as DOMRect);
+  await fx.render({ ctx: { ...ctx, players } });
+  const cages = fx.stage.querySelectorAll<HTMLElement>('.fx-persistent-jail');
+  assert.equal(cages.length, 1, 'The own cage belongs to the portrait, never the full-table overlay');
+  assert.equal(cages[0].style.left, '200.5px');
+  assert.equal(cages[0].style.top, '200.5px');
+  await fx.render({ ctx: { ...ctx, players, you: null } });
+  assert.equal(fx.stage.querySelectorAll('.fx-persistent-jail').length, 2, 'Spectators still see every jailed actor');
+});

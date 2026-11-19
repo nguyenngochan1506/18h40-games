@@ -12,6 +12,9 @@ import { soundCues } from './soundCatalog';
 import type { SoundKind } from './soundCatalog';
 import { errorMessages } from '../../shared/lib/errors';
 import { selectGameView } from './state';
+import { cardCatalog } from './cardCatalog';
+
+const demoEquipment = (['volcanic', 'schofield', 'winchester', 'barrel', 'scope', 'mustang', 'dynamite', 'jail'] as const).map(kind => cardCatalog.findIndex(card => card.kind === kind));
 
 export default function GameDemo() {
   const soundLabels: Record<SoundKind, string> = { shot: 'BANG!', gatling: 'Súng liên thanh', missed: 'Đạn bật', explosion: 'Vụ nổ', card: 'Lật bài', draw: 'Rút bài', shuffle: 'Xáo bài', clink: 'Chạm chai', reload: 'Nạp đạn', neigh: 'Ngựa hí', turn: 'Chuông lượt', tap: 'Gõ bàn', hit: 'Trúng đạn', jail: 'Cửa Jail', gamestart: 'Bắt đầu ván', victory: 'Chiến thắng', death: 'Bị loại', duel: 'Đấu súng', indians: 'Thổ dân', generalstore: 'Cửa hàng', invalid: 'Hành động bị từ chối', dynamite: 'Ngòi Dynamite' };
@@ -20,7 +23,7 @@ export default function GameDemo() {
   const [ambientEnabled, setAmbientEnabled] = useState(true);
   const [fxBatch, setFxBatch] = useState<FxBatch | null>(null);
   const [soundSequence, setSoundSequence] = useState<number[]>([]);
-  const [ui, setUi] = useState({ hand: 0, equipment: false, health: false, stock: false });
+  const [ui, setUi] = useState(() => { const requested = Number(new URLSearchParams(window.location.search).get('hand') ?? 5); return { hand: Number.isInteger(requested) ? Math.max(-5, Math.min(8, requested - 5)) : 0, equipment: false, health: false, stock: false }; });
   const [trial, setTrial] = useState<{ id: number; action: Action } | null>(null);
   const [pending, setPending] = useState(false), [reject, setReject] = useState(false), [actionError, setActionError] = useState<string | null>(null);
   const [requestVersion, setRequestVersion] = useState(0);
@@ -107,6 +110,15 @@ export default function GameDemo() {
     if (ui.equipment) table.players[1].in_play = [67];
     if (ui.health) { table.players[1].health = 1; table.players[0].health = 2; }
     if (ui.stock) { table.draw_count = 31; table.discard_count = 30; table.discard_top = 37; }
+  }
+  const gearQuery = new URLSearchParams(window.location.search).get('gear');
+  const gear = gearQuery === null ? null : Number(gearQuery);
+  if (gear !== null && Number.isInteger(gear) && game.view.perspective === 'player') {
+    for (const player of game.view.view.table.players) {
+      player.in_play = demoEquipment.slice(0, Math.max(0, Math.min(8, gear)));
+      player.alive = true; player.health = 3; player.weapon_range = gear >= 3 ? 5 : gear === 2 ? 2 : 1;
+      player.jail_turns_left = gear >= 8 ? 2 : undefined;
+    }
   }
   const final = mode.startsWith('end_');
   if (final && game.view.perspective === 'player') {

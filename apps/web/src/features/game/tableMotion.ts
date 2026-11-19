@@ -17,11 +17,10 @@ export function dealPlan(players: Pick<PublicPlayer, 'id' | 'max_health' | 'hand
   return plan;
 }
 
-export function handPose(index: number, count: number, picked: boolean, active: boolean, reduced: boolean) {
-  const fan = Math.max(-12, Math.min(12, (index - (count - 1) / 2) * 4));
-  return reduced ? { y: 0, rotate: fan, scale: 1 } : { y: picked ? -20 : active ? -12 : 0, rotate: picked ? -3 : active ? 0 : fan, scale: active || picked ? 1.04 : 1 };
+export function handPose(_index: number, _count: number, picked: boolean, active: boolean, reduced: boolean) {
+  return reduced ? { y: 0, rotate: 0, scale: 1 } : { y: picked ? -20 : active ? -12 : 0, rotate: 0, scale: active || picked ? 1.04 : 1 };
 }
 
 export function cardFlight(hand: boolean, reduced: boolean) {
-  return reduced ? { x: 0, y: 0, rotate: 0 } : hand ? { x: 24, y: 40, rotate: 8 } : { x: 0, y: -12, rotate: -6 };
+  return reduced ? { x: 0, y: 0, rotate: 0 } : hand ? { x: 24, y: 40, rotate: 0 } : { x: 0, y: -12, rotate: -6 };
 }

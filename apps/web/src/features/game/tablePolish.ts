@@ -1,9 +1,10 @@
 import { cards, characters, roles } from './i18n.ts';
 import type { CardKind, Character, BangRole } from '../../generated/protocol.ts';
+import { assetUrl, cardFiles } from './assetMap.ts';
 
-export function tooltipContent(key: string) {
+export function tooltipContent(key: string): { title: string; text: string; image?: string } | null {
   const [type, value, max] = key.split(':');
-  if (type === 'card' && Object.hasOwn(cards, value)) { const card = cards[value as CardKind]; return { title: card.name, text: card.effect }; }
+  if (type === 'card' && Object.hasOwn(cards, value)) { const kind = value as CardKind, card = cards[kind]; return { title: card.name, text: card.effect, image: assetUrl(cardFiles[kind]) }; }
   if (type === 'character' && Object.hasOwn(characters, value)) { const character = characters[value as Character]; return { title: character.name, text: character.ability }; }
   if (type === 'role') {
     if (Object.hasOwn(roles, value)) { const role = roles[value as BangRole]; return { title: role.name, text: role.description }; }
@@ -18,13 +19,14 @@ export function tooltipPosition(anchor: Rect, tip: { width: number; height: numb
   const gap = 12;
   const candidates = [
     [anchor.left + (anchor.width - tip.width) / 2, anchor.top - tip.height - gap],
+    [anchor.left + (anchor.width - tip.width) / 2, anchor.top + anchor.height + gap],
     [anchor.left + anchor.width + gap, anchor.top],
     [anchor.left - tip.width - gap, anchor.top],
-    [anchor.left, anchor.top + anchor.height + gap],
     ...obstacles.map(r => [anchor.left + (anchor.width - tip.width) / 2, r.top - tip.height - gap]),
     [gap, gap], [viewport.width - tip.width - gap, gap],
   ];
   for (const [x, y] of candidates) {
+    if (y < gap || y + tip.height > viewport.height - gap) continue;
     const left = Math.max(gap, Math.min(viewport.width - tip.width - gap, x));
     const top = Math.max(gap, Math.min(viewport.height - tip.height - gap, y));
     if (!obstacles.some(r => left < r.left + r.width + gap && left + tip.width > r.left - gap && top < r.top + r.height + gap && top + tip.height > r.top - gap)) return { left, top };

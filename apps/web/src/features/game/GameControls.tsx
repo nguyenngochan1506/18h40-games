@@ -4,6 +4,7 @@ import type { ActionDraft } from './actions';
 import { cardFace } from './cardCatalog';
 import { cards } from './i18n';
 import { selectGameView } from './state';
+import { orderedEquipment } from './equipment';
 
 type Props = { game: GameSnapshot; draft: ActionDraft; disabled: boolean; setDraft: (draft: ActionDraft) => void; sendAction: (action: Action) => void };
 
@@ -64,7 +65,7 @@ function DecisionControls({ game, draft, disabled, setDraft, sendAction }: Props
     <p role="status">{cardName ? `Đã chọn ${cardName}.${needsTarget(game, draft.card!) ? target ? ` Nhắm tới ${game.seats.find((seat) => seat.player_id === target.id)?.nickname ?? 'người đã chọn'}.` : ' Chọn người nhắm tới trên bàn.' : ''}` : 'Chạm một lá trên tay để chọn, rồi xác nhận Chơi.'}</p>
     {affect && target && <fieldset className="affect-options" disabled={disabled}><legend>Chọn bài muốn tác động</legend>
       <label><input type="radio" name="affect-card" checked={draft.selection === 'hand'} disabled={target.hand_count === 0} onChange={() => setDraft({ ...draft, selection: 'hand' })} /> Chọn mù một lá trên tay ({target.hand_count} lá)</label>
-      {target.in_play.map((card) => <label key={card}><input type="radio" name="affect-card" checked={typeof draft.selection === 'object' && draft.selection?.in_play === card} onChange={() => setDraft({ ...draft, selection: { in_play: card } })} /> Bài trước mặt: {cards[cardFace(card)!.kind].name} ({cardFace(card)!.rank}{cardFace(card)!.suit})</label>)}
+      {orderedEquipment(target.in_play).map((card) => <label key={card}><input type="radio" name="affect-card" checked={typeof draft.selection === 'object' && draft.selection?.in_play === card} onChange={() => setDraft({ ...draft, selection: { in_play: card } })} /> Bài trước mặt: {cards[cardFace(card)!.kind].name} ({cardFace(card)!.rank}{cardFace(card)!.suit})</label>)}
     </fieldset>}
     <div className="control-buttons"><button type="button" className="action" data-primary-action="true" aria-keyshortcuts="Enter" disabled={!action} onClick={() => send(action)}>Chơi <kbd aria-hidden="true">Enter</kbd></button>{draft.card !== null && cancel}
       <button type="button" className="action secondary" data-primary-action={draft.card === null ? "true" : undefined} aria-keyshortcuts={draft.card === null ? "Enter" : undefined} disabled={disabled} onClick={() => discardCount(game) ? setDraft({ ...emptyDraft, discarding: true }) : send(endTurnAction(game, [], disabled))}>Kết thúc lượt{draft.card === null && <kbd aria-hidden="true">Enter</kbd>}</button></div>

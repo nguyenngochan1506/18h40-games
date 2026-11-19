@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { sceneStage } from './sceneStage.ts';
-import { sceneSeatLayout, sceneSeats } from './sceneSeats.ts';
+import { sceneStage, tableCenterY } from './sceneStage.ts';
+import { sceneSeatLayout, sceneSeats, sceneSeatGeometry } from './sceneSeats.ts';
 
 test('desktop scene letterboxes a 16:9 stage and leaves narrow layouts unchanged', () => {
   assert.equal(sceneStage(899, 1000), null);
@@ -26,7 +26,7 @@ for (const count of [4, 5, 6, 7] as const) {
     for (const [i, seat] of seats.entries()) {
       for (const value of [seat.x, seat.y, seat.cardsX, seat.cardsY]) assert.ok(value >= 0 && value <= 100);
       assert.ok(seat.x >= 0 && seat.x <= 100 && seat.y <= 100 && seat.y >= seat.actorHeight * 100);
-      assert.ok(seat.cardsX >= 18 && seat.cardsX <= 82 && seat.cardsY >= 30 && seat.cardsY <= 85);
+      assert.ok(seat.cardsX >= 8 && seat.cardsX <= 92 && seat.cardsY >= 18 && seat.cardsY <= 85);
       assert.ok(seat.actorHeight >= .22 && seat.actorHeight <= .30);
       assert.ok(seat.depth <= seats[0].depth);
       let angle = Math.atan2(seat.y - 50, seat.x - 50);
@@ -52,7 +52,7 @@ for (const count of [4, 5, 6, 7] as const) {
     for (let viewer = 0; viewer < count; viewer++) {
       const mapped = sceneSeatLayout(count, viewer);
       assert.equal(mapped[viewer].slot, 0);
-      assert.equal(mapped[viewer].cardsY, 62);
+      assert.equal(mapped[viewer].cardsY, sceneSeats[count][0].cardsY);
       for (let step = 0; step < count; step++) assert.equal(mapped[(viewer + step) % count].slot, step);
     }
     const spectator = sceneSeatLayout(count, null);
@@ -85,9 +85,37 @@ test('each painted chair uses an inward view, including side chairs in four and 
 
 test('near-side ribbons in six and seven seats leave the central hand tray clear', () => {
   for (const count of [6, 7] as const) {
-    for (const seat of sceneSeats[count].filter(seat => seat.cardsY === 69)) {
+    for (const seat of sceneSeats[count].filter(seat => seat.near)) {
       const halfWidth = 12 * seat.depth / 2;
-      assert.ok(seat.cardsX + halfWidth < 26 || seat.cardsX - halfWidth > 74);
+      assert.ok(seat.cardsX + halfWidth < 33 || seat.cardsX - halfWidth > 67);
+      assert.ok(seat.cardsX - halfWidth >= 3 && seat.cardsX + halfWidth <= 97, 'Near racks keep a scene-edge margin');
+      assert.ok(seat.cardsX >= 13 && seat.cardsX <= 87, 'Near racks move inward with their ribbons');
+    }
+  }
+});
+
+
+test('draw/discard center follows the free space between upper racks and the own tray', () => {
+  for (const height of [635, 642, 657, 720, 950, 1080]) {
+    const upper = height * .4, lower = height * .7;
+    const center = tableCenterY(height, upper, lower);
+    assert.ok(center > upper && center < lower);
+    assert.ok(tableCenterY(height, upper, lower + 30) > center, 'A smaller tray leaves more room below');
+    assert.ok(tableCenterY(height, upper + 20, lower) > center, 'Taller upper equipment moves the center down');
+  }
+});
+
+test('opponent badges stay on the torso below the face at every supported scene height', () => {
+  for (const count of [4, 5, 6, 7] as const) for (const height of [635, 657, 685, 720, 1080]) {
+    for (const seat of sceneSeats[count].slice(1)) {
+      const geometry = sceneSeatGeometry(seat, height);
+      const lift = height * seat.y / 100 - geometry.actorY;
+      assert.ok(lift >= height * .0149 && lift <= height * .0151, 'Chairs move up gently together');
+      assert.ok(Math.abs(height * seat.cardsY / 100 - geometry.badgeY - lift) < .01, 'Badges follow their actors');
+      const actorTop = geometry.actorY - height * seat.actorHeight;
+      const face = actorTop + height * seat.actorHeight * seat.faceY;
+      assert.ok(geometry.badgeY - 26 >= face + height * seat.actorHeight * .1 - .1, 'Badge clears the face');
+      assert.ok(geometry.badgeY + 26 <= geometry.actorY + 1, 'Badge stays over the torso');
     }
   }
 });

@@ -33,11 +33,11 @@ test('deal caps even excessive public counts, never invents a missing private fa
   assert.ok(plan.every(flight => flight.card === null));
 });
 
-test('hand fan is symmetric, bounded and selection lifts above hover; reduced motion has no translation/scale', () => {
+test('hand stays straight, bounded and selection lifts above hover; reduced motion has no translation/scale', () => {
   for (const count of [1, 4, 7, 20]) for (let index = 0; index < count; index++) {
     const pose = handPose(index, count, false, false, false);
     const mirrored = handPose(count - index - 1, count, false, false, false);
-    assert.equal(pose.rotate + mirrored.rotate, 0);
+    assert.equal(pose.rotate, 0); assert.equal(mirrored.rotate, 0);
     assert.ok(Math.abs(pose.rotate) <= 12);
     assert.ok(handPose(index, count, true, false, false).y < handPose(index, count, false, true, false).y);
     const reduced = handPose(index, count, true, true, true);

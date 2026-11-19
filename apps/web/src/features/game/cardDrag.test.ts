@@ -69,3 +69,17 @@ test('drop settlement uses server hand and request barrier, with rejection/timeo
   if (game.view.perspective === 'player') game.view.view.hand = game.view.view.hand.filter(card => card !== 1);
   assert.equal(settleDrop(1, game.seq + 1, game, ready), 'accepted');
 });
+
+test('Panic/Cat drops on an exposed equipment face use that public selection; Jail still targets the player', () => {
+  const game = turn(); if (game.view.perspective !== 'player') throw new Error('player');
+  const gear = game.view.view.table.players[1].in_play[0];
+  const zone = { ...actor, selection: { in_play: gear } };
+  for (const kind of ['panic', 'cat_balou']) {
+    const card = id(kind); game.view.view.hand = [card];
+    assert.deepEqual(dropAction(game, emptyDraft, card, zone, false)?.action, { type: 'affect_card', card, target: 1, selection: { in_play: gear } });
+    assert.equal(dropAction(game, emptyDraft, card, { ...zone, selection: { in_play: 255 } }, false)?.action, null);
+    assert.equal(dropAction(game, emptyDraft, card, zone, true), null);
+  }
+  const card = id('jail'); game.view.view.hand = [card];
+  assert.deepEqual(dropAction(game, emptyDraft, card, zone, false)?.action, { type: 'play', card, target: 1 });
+});

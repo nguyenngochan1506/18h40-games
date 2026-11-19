@@ -43,7 +43,16 @@ export function useCardDrag({ root, game, draft, locked, ready, requestVersion, 
       const zones: DropZone[] = [];
       if (destination === 'player') {
         const players = playTargets(game, card).map(p => p.id);
-        for (const node of root.current.querySelectorAll<HTMLElement>('[data-scene-player], [data-player-id] .seat-person')) {
+        for (const node of root.current.querySelectorAll<HTMLElement>('[data-player-id] .seat-person')) {
+          const player = Number(node.closest<HTMLElement>('[data-player-id]')?.dataset.playerId);
+          if (players.includes(player)) zones.push({ player, rect: node.getBoundingClientRect() });
+        }
+        const faces = [...root.current.querySelectorAll<HTMLElement>('[data-player-id] .equipment-card')].reverse().map(node => ({ node, z: Number(getComputedStyle(node).zIndex) || 0 })).sort((a, b) => b.z - a.z);
+        for (const { node } of faces) {
+          const player = Number(node.closest<HTMLElement>('[data-player-id]')?.dataset.playerId);
+          if (players.includes(player) && !node.closest('[inert]')) zones.push({ player, selection: { in_play: Number(node.dataset.cardId) }, rect: node.querySelector('.card-visual')!.getBoundingClientRect() });
+        }
+        for (const node of root.current.querySelectorAll<HTMLElement>('[data-scene-player], [data-player-id] .equipment-heading, [data-player-id] .equipment-rack')) {
           const player = Number(node.dataset.scenePlayer ?? node.closest<HTMLElement>('[data-player-id]')?.dataset.playerId);
           if (players.includes(player)) zones.push({ player, rect: node.getBoundingClientRect() });
         }

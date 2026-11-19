@@ -39,9 +39,10 @@ function sprite(kind: Sprite) {
   }
   return node;
 }
-function point(stage: HTMLElement, anchor: FxAnchor): Point {
+function point(stage: HTMLElement, anchor: FxAnchor, cardId?: number): Point {
   const selector = typeof anchor === 'number' ? `[data-animation-anchor="${anchor}"]` : `[data-animation-region="${anchor}"]`;
-  let target = stage.querySelector<HTMLElement>(selector);
+  let target = typeof anchor === 'string' && anchor.startsWith('equipment-') && cardId !== undefined ? stage.querySelector<HTMLElement>(`${selector} [data-card-id="${cardId}"] .game-art`) : null;
+  target ??= stage.querySelector<HTMLElement>(selector);
   if (typeof anchor === 'string' && /^(equipment|health)-/.test(anchor) && !target?.getClientRects().length) target = stage.querySelector<HTMLElement>(`[data-animation-anchor="${anchor.split('-')[1]}"]`);
   target ??= stage.querySelector<HTMLElement>('[data-animation-region="table"]') ?? stage;
   const s = stage.getBoundingClientRect(), r = target.getBoundingClientRect();
@@ -140,8 +141,8 @@ export default function GameFx({ batch, ctx, enabled, width, height, ambientEnab
     for (const job of jobs) timers.push(window.setTimeout(() => {
       if (document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       if (nodes.size >= FX_CONCURRENT) { const oldest = nodes.values().next().value!; oldest.remove(); nodes.delete(oldest); }
-      let from = point(stage, job.from);
-      const to = point(stage, job.to), stageBox = stage.getBoundingClientRect();
+      let from = point(stage, job.from, job.card);
+      const to = point(stage, job.to, job.card), stageBox = stage.getBoundingClientRect();
       const sourceElement = typeof job.from === 'number' ? stage.querySelector<HTMLElement>(`[data-scene-player="${job.from}"]`) : null;
       const sourceActor = sourceElement?.getBoundingClientRect();
       if (job.kind === 'shot') from = shotOrigin(from, to, sourceActor ? { x: sourceActor.x - stageBox.x, y: sourceActor.y - stageBox.y, width: sourceActor.width, height: sourceActor.height, handX: Number(sourceElement!.dataset.handX), handY: Number(sourceElement!.dataset.handY) } : undefined);
@@ -153,7 +154,7 @@ export default function GameFx({ batch, ctx, enabled, width, height, ambientEnab
       const winner = batch.events.find(event => event.type === 'game_ended');
       particles.current?.emit(job, from, to, depth(job.from), depth(job.to), job.duration, winner?.type === 'game_ended' ? winner.winner : null);
       const actorBox = typeof job.to === 'number' ? stage.querySelector(`[data-scene-player="${job.to}"]`)?.getBoundingClientRect() : undefined;
-      const jailBox = actorBox ?? stage.querySelector(`[data-player-id="${job.to}"] .seat-person`)?.getBoundingClientRect();
+      const jailBox = actorBox ?? stage.querySelector(`[data-animation-anchor="${job.to}"]`)?.closest('.own-character-tip')?.getBoundingClientRect() ?? stage.querySelector(`[data-player-id="${job.to}"] .seat-person`)?.getBoundingClientRect();
       if (jailBox) node.style.setProperty('--fx-jail-height', `${jailBox.height}px`);
       node.dataset.fx = job.kind; node.dataset.batch = String(batch.id); node.dataset.start = String(job.start);
       node.style.left = `${from.x}px`; node.style.top = `${from.y}px`;
@@ -243,7 +244,8 @@ export default function GameFx({ batch, ctx, enabled, width, height, ambientEnab
     root.replaceChildren();
     if (!active) return;
     for (const player of ctx.players) {
-      if (!player.alive) continue;
+      // The own cage is clipped to the portrait inside GameBoard, below the hand tray.
+      if (!player.alive || player.id === ctx.you) continue;
       for (const kind of ['jail'] as const) {  // Dynamite chỉ hiện bằng lá bài trước mặt, không dựng thêm hình quả bom
         if (!player.in_play.some(id => cardFace(id)?.kind === kind)) continue;
         const anchor = point(stage, player.id);
@@ -257,7 +259,7 @@ export default function GameFx({ batch, ctx, enabled, width, height, ambientEnab
       }
     }
     return () => root.replaceChildren();
-  }, [ctx.players, active, width, height]);
+  }, [ctx.players, ctx.you, active, width, height]);
 
   useEffect(() => {
     const animations = [...atmosphere.current!.getAnimations({ subtree: true }), ...persistent.current!.getAnimations({ subtree: true })];
@@ -272,7 +274,7 @@ export default function GameFx({ batch, ctx, enabled, width, height, ambientEnab
     tick();
     const timer = window.setInterval(tick, 500);
     return () => clearInterval(timer);
-  }, [ctx.players, active, width, height]);
+  }, [ctx.players, ctx.you, active, width, height]);
 
   return <>
     <div ref={particleHost} className="particle-layer" aria-hidden="true" />

@@ -8,13 +8,13 @@ import { act, createElement, useRef } from 'react';
 import type { Action, DecisionKind } from '../../generated/protocol.ts';
 import type { useCardDrag as DragHook } from './useCardDrag.tsx';
 import type GameBoardComponent from './GameBoard.tsx';
-import { emptyDraft } from './actions.ts';
+import { emptyDraft, type ActionDraft } from './actions.ts';
 import { demoGame, demoRoom } from './demo.ts';
 
 const dom = new Window({ url: 'http://localhost/', width: 375, height: 812, settings: { enableImageFileLoading: false, enableCSSFileLoading: false, disableJavaScriptFileLoading: true } });
 // Drive Motion's JS animation path with the test clock instead of Happy DOM's separate WAAPI clock.
 Reflect.deleteProperty(dom.Element.prototype, 'animate');
-const globals = { window: dom, document: dom.document, navigator: dom.navigator, HTMLElement: dom.HTMLElement, HTMLImageElement: dom.HTMLImageElement, SVGElement: dom.SVGElement, Element: dom.Element, Node: dom.Node, Image: dom.Image, Event: dom.Event, MouseEvent: dom.MouseEvent, KeyboardEvent: dom.KeyboardEvent, getComputedStyle: dom.getComputedStyle.bind(dom), matchMedia: dom.matchMedia.bind(dom), requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 16), cancelAnimationFrame: (id: number) => clearTimeout(id), IS_REACT_ACT_ENVIRONMENT: true };
+const globals = { window: dom, innerWidth: dom.innerWidth, innerHeight: dom.innerHeight, document: dom.document, navigator: dom.navigator, HTMLElement: dom.HTMLElement, HTMLImageElement: dom.HTMLImageElement, SVGElement: dom.SVGElement, Element: dom.Element, Node: dom.Node, Image: dom.Image, Event: dom.Event, MouseEvent: dom.MouseEvent, KeyboardEvent: dom.KeyboardEvent, getComputedStyle: dom.getComputedStyle.bind(dom), matchMedia: dom.matchMedia.bind(dom), requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 16), cancelAnimationFrame: (id: number) => clearTimeout(id), IS_REACT_ACT_ENVIRONMENT: true };
 const previous = Object.getOwnPropertyDescriptors(globalThis);
 for (const [name, value] of Object.entries(globals)) Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
@@ -34,12 +34,14 @@ after(async () => {
 async function host(t: TestContext) {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
   t.mock.method(performance, 'now', () => Date.now());
+  t.mock.method(window, 'setTimeout', (callback: (...args: unknown[]) => void, delay?: number, ...args: unknown[]) => setTimeout(callback, delay, ...args) as unknown as number);
+  t.mock.method(window, 'clearTimeout', (id: number | undefined) => clearTimeout(id));
   t.mock.method(dom.HTMLImageElement.prototype, 'decode', async () => {});
   const errors = t.mock.method(console, 'error'), warnings = t.mock.method(console, 'warn');
   const container = document.createElement('div'); document.body.append(container);
   const root = createRoot(container);
   t.after(async () => { await act(() => root.unmount()); container.remove(); assert.equal(errors.mock.callCount(), 0); assert.equal(warnings.mock.callCount(), 0); });
-  return { container, root, async settle() { for (let i = 0; i < 25; i++) await act(() => t.mock.timers.tick(20)); } };
+  return { container, root, async settle() { for (let i = 0; i < 25; i++) await act(async () => { t.mock.timers.tick(20); await Promise.resolve(); }); } };
 }
 
 const cases: { name: string; card: number; kind: DecisionKind; calamity?: boolean }[] = [
@@ -166,4 +168,111 @@ for (const kind of ['panic', 'cat_balou'] as const) test(`blind ${kind} tray hid
   await render();
   assert.ok([...container.querySelectorAll<HTMLButtonElement>('[data-hand-slot]')].every(button => button.disabled));
   assert.equal(sent.length, 1);
+});
+
+test('tidy equipment keeps grouped DOM order, authoritative chips, equal risk sizes and direct face selection', async t => {
+  const width = Object.getOwnPropertyDescriptor(window, 'innerWidth'), height = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });
+  t.after(() => { if (width) Object.defineProperty(window, 'innerWidth', width); else Reflect.deleteProperty(window, 'innerWidth'); if (height) Object.defineProperty(window, 'innerHeight', height); else Reflect.deleteProperty(window, 'innerHeight'); });
+  const { container, root, settle } = await host(t);
+  const { orderedEquipment } = await import('./equipment.ts');
+  const { cardCatalog } = await import('./cardCatalog.ts');
+  const id = (kind: string) => cardCatalog.findIndex(card => card.kind === kind);
+  const equipped = ['jail', 'scope', 'volcanic', 'dynamite', 'winchester', 'barrel', 'mustang', 'schofield'].map(id);
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Player fixture required');
+  const table = game.view.view.table;
+  game.view.view.hand = [43, 1, 26];
+  table.turn.player = 0; table.waiting = { player: 0, pending_id: null, kind: { type: 'turn' } };
+  table.players[0].in_play = [...equipped]; table.players[0].weapon_range = 5; table.players[0].jail_turns_left = 0;
+  table.players[1].in_play = [...equipped]; table.players[1].weapon_range = 4; table.players[1].jail_turns_left = 0;
+  const sent: Action[] = [];
+  await act(async () => root.render(createElement(GameBoard, { game, room: demoRoom, sendAction: action => sent.push(action) })));
+  await settle();
+  const own = container.querySelector('.own-hand .own-equipment')!;
+  assert.ok(own);
+  assert.equal(container.querySelector('.hud-jail')?.textContent, 'Bị Jail · 0 lượt');
+  assert.match(container.querySelector('.hud-jail')!.getAttribute('aria-label')!, /đã chờ đủ 3 lượt/);
+  assert.ok(container.querySelector('.own-character-tip.is-jailed .own-jail-cage'));
+  assert.ok(container.querySelector('.own-character-tip [data-animation-anchor="0"]'));
+  assert.equal(container.querySelector('.own-hand [data-animation-anchor="0"]'), null);
+  assert.ok(container.querySelector('.own-hand > .quiet-controls'), 'Quiet controls share the equipment stack');
+  assert.equal(own.querySelector('.equipment-heading')?.textContent, 'Trước mặt bạn · Tầm bắn 5');
+  const opponent = container.querySelector('[data-player-id="1"] .equipment-rack')!;
+  assert.equal(opponent.querySelector('.equipment-range')?.textContent, 'Tầm 4');
+  assert.equal(opponent.querySelector<HTMLElement>('.equipment-card')!.style.width, '44px', 'Keep the E equipment minimum size');
+  for (const rack of [own, opponent]) {
+    assert.deepEqual([...rack.querySelectorAll<HTMLElement>('.equipment-card')].map(card => Number(card.dataset.cardId)), orderedEquipment(equipped));
+    const sizes = [...rack.querySelectorAll<HTMLElement>('.equipment-card')].map(card => card.style.width);
+    assert.ok(sizes.every(size => size === sizes[0]), 'Dynamite/Jail use the same width as ordinary equipment');
+    assert.equal(rack.querySelector('.equipment-edges'), null, 'Risk borders stay inside their own cards');
+    assert.deepEqual([...rack.querySelectorAll<HTMLElement>('.equipment-card')].map(card => card.style.zIndex), equipped.map((_, index) => String(index + 1)), 'Risk cards follow the same stacking order as every card');
+  }
+  assert.equal(opponent.querySelector('.jail-turns')?.textContent, '0');
+  assert.match(opponent.querySelector('.equipment-jail')!.getAttribute('aria-description')!, /đã chờ đủ 3 lượt/);
+  assert.ok([...container.querySelectorAll('.game-card img')].every(img => img.getAttribute('loading') === 'eager'));
+  const barrel = opponent.querySelector<HTMLButtonElement>(`[data-card-id="${id('barrel')}"]`)!;
+  const jail = opponent.querySelector<HTMLButtonElement>('.equipment-jail')!;
+  await act(async () => { barrel.dispatchEvent(new MouseEvent('pointerover', { bubbles: true })); t.mock.timers.tick(100); });
+  assert.equal(document.querySelector('.card-preview'), null, 'Preview waits 120ms');
+  await act(async () => { jail.dispatchEvent(new MouseEvent('pointerover', { bubbles: true })); t.mock.timers.tick(100); });
+  assert.equal(document.querySelector('.card-preview'), null, 'Moving quickly restarts the preview delay');
+  await act(async () => { jail.dispatchEvent(new MouseEvent('pointerout', { bubbles: true })); t.mock.timers.tick(200); });
+  assert.equal(document.querySelector('.card-preview'), null, 'Leaving cancels the pending preview');
+  await act(() => barrel.focus()); await settle();
+  assert.equal(document.activeElement, barrel);
+  const preview = document.querySelector('.card-preview')!;
+  assert.ok(preview?.querySelector('img')?.getAttribute('src')?.includes('barile'));
+  assert.equal(preview.querySelector('strong')?.textContent, 'Barrel');
+  assert.equal(barrel.getAttribute('aria-describedby'), preview.id);
+  await act(() => opponent.querySelector('.equipment-jail')!.dispatchEvent(new MouseEvent('pointerout', { bubbles: true })));
+  assert.ok(document.querySelector('.card-preview'), 'A late leave event from another card must not hide the focused preview');
+  await act(() => container.querySelector('.board-scene')!.dispatchEvent(new Event('scroll', { bubbles: true })));
+  assert.equal(barrel.getAttribute('aria-describedby'), preview.id, 'Focus scroll repositions the preview without removing its description');
+  await act(() => container.querySelector('.bang-board')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  assert.equal(document.querySelector('.card-preview'), null, 'Escape also dismisses previews from the outer board shortcut target');
+  await act(() => { barrel.blur(); barrel.focus(); }); await settle();
+  assert.ok(document.querySelector('.card-preview'));
+  await act(() => { const board = container.querySelector<HTMLElement>('.bang-board')!; board.focus(); board.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true })); });
+  assert.equal(container.querySelector('.own-hand .hand-cards [data-card-id="43"]')?.getAttribute('aria-pressed'), 'true', '1 selects the first hand card, not the equipment above it');
+  assert.equal(document.querySelector('.card-preview'), null, 'Choosing a card dismisses its preview immediately');
+  assert.match(barrel.getAttribute('aria-label')!, /^Chọn Barrel/);
+  await act(() => barrel.click());
+  assert.equal(barrel.getAttribute('aria-pressed'), 'true');
+  await settle();
+  const confirm = [...container.querySelectorAll<HTMLButtonElement>('.game-controls [data-primary-action="true"]:not(:disabled)')].find(button => !button.closest('[inert]'))!;
+  assert.match(confirm.textContent!, /^Chơi/);
+  await act(() => confirm.click());
+  assert.deepEqual([...sent], [{ type: 'affect_card', card: 43, target: 1, selection: { in_play: id('barrel') } }]);
+});
+
+test('public equipment drops respect covering ribbons and raised faces above later cards', async t => {
+  const { container, root } = await host(t);
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Player fixture required');
+  game.view.view.hand = [43];
+  game.view.view.table.turn.player = 0;
+  game.view.view.table.waiting = { player: 0, pending_id: null, kind: { type: 'turn' } };
+  game.view.view.table.players[1].in_play = [63, 64];
+  let drag: ReturnType<typeof DragHook>;
+  const sent: Action[] = [];
+  const drafts: ActionDraft[] = [];
+  function Harness() {
+    const stage = useRef<HTMLDivElement>(null);
+    drag = useCardDrag({ root: stage, game, draft: emptyDraft, locked: false, ready: true, desktop: true, requestVersion: 0, error: null, setDraft: draft => drafts.push(draft), clearDetail() {}, send: action => sent.push(action) });
+    return createElement('div', { ref: stage }, createElement('div', { 'data-player-id': 1 }, createElement('button', { className: 'seat-person' }), ...[63, 64].map(id => createElement('button', { className: 'equipment-card', 'data-card-id': id, key: id, style: { zIndex: id === 63 ? 40 : 2 } }, createElement('span', { className: 'card-visual' })))));
+  }
+  await act(async () => root.render(createElement(Harness)));
+  for (const face of container.querySelectorAll('.card-visual')) t.mock.method(face, 'getBoundingClientRect', () => ({ x: 100, y: 100, width: 44, height: 70 }));
+  t.mock.method(container.querySelector('.seat-person')!, 'getBoundingClientRect', () => ({ x: 100, y: 90, width: 44, height: 30 }));
+  const home = { x: 400, y: 500, width: 56, height: 90 };
+  await act(() => drag.props(43).start(home));
+  await act(() => { assert.equal(drag.props(43).end({ x: 120, y: 110 }, home), true); });
+  assert.equal(drafts.at(-1)?.target, 1);
+  assert.equal(drafts.at(-1)?.selection, null);
+  assert.deepEqual(sent, [], 'The covering ribbon selects its player without guessing a hidden face');
+  await act(() => drag.props(43).start(home));
+  await act(() => { assert.equal(drag.props(43).end({ x: 120, y: 130 }, home), true); });
+  assert.deepEqual(sent, [{ type: 'affect_card', card: 43, target: 1, selection: { in_play: 63 } }]);
 });

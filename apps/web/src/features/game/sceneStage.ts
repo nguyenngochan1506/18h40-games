@@ -5,3 +5,7 @@ export function sceneStage(width: number, height: number) {
   const stageHeight = stageWidth * 9 / 16;
   return { width: stageWidth, height: stageHeight, left: (width - stageWidth) / 2, top: (height - stageHeight) / 2 };
 }
+
+export function tableCenterY(sceneHeight: number, upperBottom: number, lowerTop: number) {
+  return (Math.max(sceneHeight * .25, upperBottom) + lowerTop) / 2;
+}

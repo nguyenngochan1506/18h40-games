@@ -33,6 +33,9 @@ test('Vietnamese tooltips cover all 22 cards, 16 characters, every role and publ
     assert.match(content.text, /[áàảãạăắằẳẵặâấầẩẫậđéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ]/i, key);
   }
   assert.equal(tooltipContent('card:bang')?.title, 'BANG!');
+  for (const kind of Object.keys(cardFiles)) assert.ok(tooltipContent(`card:${kind}`)?.image?.startsWith('/bang/'));
+  assert.equal(tooltipContent('character:slab_the_killer')?.image, undefined);
+  assert.equal(tooltipContent('card:back'), null);
   assert.match(tooltipContent('character:slab_the_killer')!.text, /2 lá Missed!/);
   for (const role of ['sheriff', 'deputy', 'outlaw', 'renegade', 'hidden']) assert.ok(tooltipContent(`role:${role}`));
   assert.equal(tooltipContent('role:hidden')?.title, 'Vai chưa lộ');
@@ -50,6 +53,16 @@ test('tooltip stays inside the viewport and never covers the decision tray', () 
   const p = tooltipPosition({ left: 600, top: 620, width: 60, height: 80 }, tip, viewport, [obstacle])!;
   assert.ok(p.left + 300 <= obstacle.left - 12 || p.left >= obstacle.left + 320 + 12 || p.top + 130 <= obstacle.top - 12 || p.top >= obstacle.top + 240 + 12);
   assert.equal(tooltipPosition({ left: 600, top: 620, width: 60, height: 80 }, tip, viewport, [{ left: 0, top: 0, ...viewport }]), null);
+});
+
+test('large card previews prefer below a top-edge card and fit above the own tray', () => {
+  const viewport = { width: 1280, height: 720 }, tip = { width: 234, height: 380 };
+  const below = tooltipPosition({ left: 500, top: 30, width: 44, height: 70 }, tip, viewport)!;
+  assert.equal(below.top, 112);
+  const tray = { left: 333, top: 410, width: 614, height: 302 };
+  const above = tooltipPosition({ left: 600, top: tray.top, width: 80, height: 0 }, tip, viewport, [tray])!;
+  assert.equal(above.top, 18);
+  assert.ok(above.top + tip.height < tray.top);
 });
 
 test('preload includes only the selected desktop background and visible actors, never every scene or hidden cards', () => {
