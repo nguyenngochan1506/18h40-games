@@ -10,7 +10,7 @@ export const soundCues = {
   shot: cue(own('shot', 'bang'), 'hit', .9, .8, 130),
   gatling: cue(own('gatling', 'gatling'), 'hit', 2.2, .65, 900),
   missed: cue(own('missed'), 'ding', .8), explosion: cue(own('explosion', 'dynamite'), 'hit', 1.7, .7, 500),
-  card: cue(own('card'), 'click', .8, .55, 100), draw: cue(bang('draw'), 'click', .7, .6, 110),
+  card: cue(own('card'), 'click', .8, .55, 100), draw: cue(own('card'), 'click', .7, .6, 110),
   shuffle: cue(own('shuffle', 'shuffle'), 'click', 1.8, .6, 1000),
   clink: cue(own('clink'), 'ding', 1, .65, 150), reload: cue(own('reload'), 'click', 1),
   neigh: cue(own('neigh'), 'ding', 1.6, .6, 400), tap: cue(own('tap'), 'click', .7, .55, 160),
