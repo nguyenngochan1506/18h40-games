@@ -71,7 +71,7 @@ export default function WaitingRoom({ room, disabled, send }: Props) {
           {waiting && !host && <p>Chờ chủ phòng bắt đầu ván.</p>}
           {waiting && host && missing === 0 && <p>Đã đủ người. Bắt đầu khi mọi người sẵn sàng.</p>}
           {waiting && you?.role === 'spectator' && seats.length >= room.max_players && <p>Đã đủ ghế chơi. Hãy chờ một ghế trống.</p>}
-          {!waiting && <p>Đang nhận bàn chơi từ máy chủ.</p>}
+          {!waiting && <p>Đang tải cảnh bàn chơi. Bạn sẽ vào bàn khi ảnh đã sẵn sàng.</p>}
           {disabled && <p>Hãy chờ kết nối hoặc yêu cầu hiện tại hoàn tất.</p>}
         </div>
       </div>

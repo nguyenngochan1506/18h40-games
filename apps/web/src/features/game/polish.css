@@ -1,0 +1,32 @@
+.game-tooltip { position: fixed; z-index: 100; width: min(300px, calc(100vw - 24px)); padding: 12px 16px; border: 1px solid #ba9359; border-radius: 4px; background: #24180f; color: #fff0ca; box-shadow: 0 4px 12px #10090480; font: 14px/1.5 system-ui, sans-serif; animation: tooltip-reveal 100ms ease-out; }
+.game-tooltip strong { display: block; font: 700 17px/1.3 Georgia, serif; margin-bottom: 4px; }
+.game-tooltip p { margin: 0; }
+@keyframes tooltip-reveal { from { opacity: 0; } to { opacity: 1; } }
+.cowboy { display: block; }
+.cowboy > .decoded-image { width: 100%; height: 100%; object-fit: contain; }
+.own-character-tip { display: block; width: 40px; }
+.game-art:has(.decoded-image:not(.is-decoded)) { background: #d3b57e; box-shadow: inset 0 0 0 2px #b28b54; }
+@media (min-width: 900px) {
+  .saloon-app :is(button,a,summary):focus-visible, .bang-board :is(button,a,summary,input,[tabindex]):focus-visible { outline: 3px solid #fff0bf; outline-offset: 3px; box-shadow: 0 0 0 6px #24170f; }
+  .bang-board .parchment :focus-visible, .bang-board .decision-overlay :focus-visible, .bang-board .game-result :focus-visible, .saloon-app .saloon-poster :focus-visible { outline-color: #63391d; box-shadow: 0 0 0 6px #fff0bf; }
+  .saloon-app :is(button,a,summary), .bang-board :is(button,a,summary) { cursor: pointer; }
+  .saloon-app button:disabled, .bang-board button:disabled, .bang-board .action:disabled { cursor: not-allowed; }
+  .saloon-app :is(button,a.western-button):hover:not(:disabled), .bang-board :is(.action,.round-control,.game-card,.seat-person,.detail-close):hover:not(:disabled) { filter: brightness(1.1); }
+  .saloon-app :is(button,a):active:not(:disabled), .bang-board :is(button,a):active:not(:disabled) { opacity: .8; }
+  .bang-board .action, .bang-board .detail-close, .bang-board .game-card, .saloon-app :is(button,a.western-button) { min-width: 36px; min-height: 36px; }
+  .own-character-tip { float: right; margin: 0 0 4px 4px; border: 1px solid #c2a36e; }
+  .cinematic .in-play .game-card { min-width: 36px; }
+  .cinematic .game-eyebrow { background: #24180fe8; padding: 4px 8px; border-radius: 3px; color: #f8dfad; }
+  .cinematic .seat-person .bullets { color: #fff0c8; background: #24180feb; border-radius: 3px; padding-inline: 3px; height: 20px; }
+  .cinematic .seat-person .name-ribbon { background: #eed29a; color: #332013; text-shadow: none; }
+  .game-app > .connection-alert { position: fixed; z-index: 80; top: 48px; left: 50%; transform: translateX(-50%); max-width: min(620px, calc(100vw - 32px)); padding: 12px 16px; background: #f1d7a7; color: #632b19; border: 2px solid #a97445; }
+  .bang-board .action:disabled kbd { display: none; }
+  .bang-board kbd { display: inline-block; margin-left: 6px; padding: 1px 4px; border: 1px solid currentColor; border-radius: 3px; font: 11px/1.3 ui-monospace, monospace; opacity: .85; }
+  .bang-board .hand-shortcut { position: absolute; z-index: 2; bottom: 20px; right: 3px; margin: 0; background: #24180f; color: #fff0ca; pointer-events: none; }
+  .shortcut-help { margin: 16px 0; padding-top: 12px; border-top: 1px solid #8e7044; }
+  .room-menu .shortcut-help h3 { font-size: 18px; }
+  .room-menu .shortcut-help p { margin: 8px 0; }
+  .cinematic .hand-tray .section-heading > span { margin-right: 180px; }
+}
+@media (max-width: 899px) { .own-character-tip { display: none; } .hand-shortcut, .bang-board kbd, .game-tooltip { display: none; } }
+@media (prefers-reduced-motion: reduce) { .game-tooltip { animation: none; } }

@@ -9,7 +9,7 @@ export const errorMessages: Record<ErrorCode, string> = {
   invalid_token: 'Phiên vào phòng đã hết hiệu lực. Hãy nhập tên và vào lại.',
   already_in_room: 'Bạn đang ở trong một phòng. Hãy rời phòng trước khi vào phòng khác.',
   not_in_room: 'Bạn chưa ở trong phòng. Hãy tạo phòng hoặc nhập mã phòng.',
-  not_host: 'Chỉ chủ phòng mới có thể thực hiện thao tác này.',
+  not_host: 'Chỉ chủ phòng có thể thực hiện thao tác này. Hãy nhờ chủ phòng xác nhận.',
   wrong_phase: 'Trạng thái phòng đã thay đổi. Hãy kiểm tra lại các thao tác hiện có.',
   not_enough_players: 'Chưa đủ người chơi để bắt đầu. Hãy mời thêm bạn tham gia ván.',
   no_free_seat: 'Các ghế chơi đã đủ. Bạn vẫn có thể ở lại làm khán giả.',

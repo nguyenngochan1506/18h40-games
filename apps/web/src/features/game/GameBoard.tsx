@@ -2,6 +2,9 @@ import { Fragment, forwardRef, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m, useIsPresent, useDragControls } from 'motion/react';
 import { GameMotion, MotionCount, MotionPanel, tableSpring, useTableMotion } from './GameMotion';
 import GameDeal from './GameDeal';
+import GameTooltip from './GameTooltip';
+import { tableShortcut } from './tablePolish';
+import { DecodedImage } from '../../shared/SaloonScene';
 import { cardFlight, handPose } from './tableMotion';
 import type { CSSProperties, ReactNode } from 'react';
 import type { Action, CardId, CardKind, GameSnapshot, PublicPlayer, RoomView, SpectatorView } from '../../generated/protocol';
@@ -30,6 +33,7 @@ import './game.css';
 import './cinematic.css';
 import './tableMotion.css';
 import './cardDrag.css';
+import './polish.css';
 
 type Inspect = (kind: CardKind, scroll?: boolean, origin?: HTMLButtonElement) => void;
 
@@ -37,14 +41,14 @@ function Artwork({ file, label }: { file: string; label: string }) {
   const [missing, setMissing] = useState(false);
   return <span className="game-art">{missing
     ? <span className="game-art-fallback"><small>BANG!</small><strong>{label}</strong></span>
-    : <img src={assetUrl(file)} alt={label} onError={() => setMissing(true)} loading="lazy" draggable={false} />}</span>;
+    : <DecodedImage src={assetUrl(file)} alt={label} onError={() => setMissing(true)} loading="lazy" />}</span>;
 }
 
 function CowboyPortrait({ player, view, flip = false }: { player: PublicPlayer; view?: SeatView; flip?: boolean }) {
   const animated = useTableMotion();
   return <span className="actor-portrait" style={{ transform: (view ? flip : player.id % 2) ? 'scaleX(-1)' : undefined }}><AnimatePresence initial={false}>
-    <m.img key={player.alive ? 'cowboy' : 'ghost'} className={`cowboy${!player.alive ? ' ghost' : ''}`} src={view ? seatActorFile(player.id, view, !player.alive) : player.alive ? sceneFiles.cowboy : sceneFiles.ghost} onError={(event) => { if (player.alive && event.currentTarget.getAttribute('src') !== sceneFiles.cowboy) event.currentTarget.src = sceneFiles.cowboy; }} alt="" decoding="async" data-ui-motion="actor"
-      initial={{ opacity: 0 }} animate={{ opacity: player.alive ? 1 : .6 }} exit={{ opacity: 0 }} transition={{ duration: animated ? .2 : .1 }} />
+    <m.span key={player.alive ? 'cowboy' : 'ghost'} className={`cowboy${!player.alive ? ' ghost' : ''}`} data-ui-motion="actor"
+      initial={{ opacity: 0 }} animate={{ opacity: player.alive ? 1 : .6 }} exit={{ opacity: 0 }} transition={{ duration: animated ? .2 : .1 }}><DecodedImage src={view ? seatActorFile(player.id, view, !player.alive) : player.alive ? sceneFiles.cowboy : sceneFiles.ghost} onError={(event) => { if (player.alive && event.currentTarget.getAttribute('src') !== sceneFiles.cowboy) event.currentTarget.src = sceneFiles.cowboy; }} /></m.span>
   </AnimatePresence></span>;
 }
 
@@ -68,15 +72,15 @@ const Card = forwardRef<HTMLButtonElement, CardProps>(function Card({ id, inspec
   if (!face) return <span className="unknown-card">Lá bài chưa xác định</span>;
   const card = cards[face.kind];
   const hand = handIndex !== undefined;
-  return <m.button ref={node => { button.current = node; if (typeof ref === 'function') ref(node); else if (ref) ref.current = node; }} type="button" className={`game-card${animated ? ' ui-card' : ''}${picked ? ' is-picked' : ''}${dragCard ? ' can-drag' : ''}${dragging ? ' card-dragging' : ''}${returning ? ' card-returning' : ''}${hidden ? ' card-flight-source' : ''}`} style={{ ...style, visibility: hidden ? 'hidden' : undefined, touchAction: dragCard ? 'none' : undefined }} data-card-id={id} data-ui-motion="card" inert={!present} aria-hidden={!present || undefined} aria-pressed={pick ? picked : undefined} aria-label={`${pick ? 'Chọn' : 'Xem'} ${card.name}, ${face.rank}${face.suit}`} title={`${card.name}: ${card.effect}`}
+  return <m.button ref={node => { button.current = node; if (typeof ref === 'function') ref(node); else if (ref) ref.current = node; }} type="button" className={`game-card${animated ? ' ui-card' : ''}${picked ? ' is-picked' : ''}${dragCard ? ' can-drag' : ''}${dragging ? ' card-dragging' : ''}${returning ? ' card-returning' : ''}${hidden ? ' card-flight-source' : ''}`} style={{ ...style, visibility: hidden ? 'hidden' : undefined, touchAction: dragCard ? 'none' : undefined }} data-card-id={id} data-ui-motion="card" inert={!present} aria-hidden={!present || undefined} aria-pressed={pick ? picked : undefined} aria-label={`${pick ? 'Chọn' : 'Xem'} ${card.name}, ${face.rank}${face.suit}`} data-tip={`card:${face.kind}`}
     drag={!!dragCard} dragControls={dragControls} dragListener={false} dragMomentum={false} dragSnapToOrigin dragTransition={animated ? { bounceStiffness: 520, bounceDamping: 36 } : { timeConstant: 0, bounceStiffness: 100000, bounceDamping: 1000 }}
     onPointerDown={event => { if (dragCard && event.button === 0) { home.current = event.currentTarget.getBoundingClientRect(); dragControls.start(event, { distanceThreshold: 6 }); } }}
     onDragStart={() => { setDragging(true); dragCard?.start(home.current); }} onDrag={(_event, info) => dragCard?.move(info.point)} onDragEnd={(event, info) => { draggedAt.current = performance.now(); setDragging(false); setReturning(true); if (!dragCard?.end(event.type === 'pointercancel' ? { x: NaN, y: NaN } : info.point, button.current!.getBoundingClientRect()) && animated) setRejected(true); }}
     onDragTransitionEnd={() => setReturning(false)}
     layout={animated && hand && !dragging ? 'position' : false} initial={{ opacity: animated ? 0 : 1, ...cardFlight(hand, !animated) }} animate={{ opacity: 1, x: 0, y: 0, rotate: !animated && hand ? handPose(handIndex!, handCount, false, false, true).rotate : 0 }} exit={{ opacity: 0, x: 0, y: animated ? -32 : 0, rotate: animated ? 8 : 0 }} transition={animated ? { ...tableSpring, opacity: { duration: .15 } } : { duration: .1 }} whileTap={animated ? { scale: .97 } : undefined}
-    onMouseEnter={(event) => { setHovered(true); inspect(face.kind, false, event.currentTarget); }} onMouseLeave={() => setHovered(false)} onFocus={(event) => { setFocused(true); inspect(face.kind, false, event.currentTarget); }} onBlur={() => setFocused(false)} onClick={(event) => { if (event.detail > 0 && (dragging || performance.now() - draggedAt.current < 200)) return; inspect(face.kind, !pick, event.currentTarget); pick?.(); }}>
+    onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onClick={(event) => { if (event.detail > 0 && (dragging || performance.now() - draggedAt.current < 200)) return; if (pick) pick(); else inspect(face.kind, true, event.currentTarget); }}>
     <m.span className="card-visual" data-ui-motion="visual" onAnimationComplete={() => { if (rejected) setRejected(false); }} animate={{ x: animated && rejected ? [0, -4, 4, -2, 0] : 0, ...(animated ? dragging ? { y: 0, rotate: 0, scale: 1.04 } : hand ? handPose(handIndex!, handCount, picked, hovered || focused, false) : { y: hovered || focused || picked ? -3 : 0, rotate: 0, scale: 1 } : { y: 0, rotate: 0, scale: 1 }) }} transition={rejected ? { duration: .2 } : tableSpring}>
-      <Artwork file={cardFiles[face.kind]} label={card.name} />
+      {handIndex !== undefined && handIndex < 9 && <kbd className="hand-shortcut" aria-hidden="true">{handIndex + 1}</kbd>}<Artwork file={cardFiles[face.kind]} label={card.name} />
       <span className={face.suit === '♥' || face.suit === '♦' ? 'card-face red-suit' : 'card-face'}>{face.rank}{face.suit}</span>
       <span className="card-name">{card.name}</span>
     </m.span>
@@ -103,9 +107,9 @@ function waitText(table: SpectatorView, name: (id: number) => string): string {
   }
 }
 
-function Bullets({ player }: { player: PublicPlayer }) {
+function Bullets({ player, focusable = true }: { player: PublicPlayer; focusable?: boolean }) {
   const animated = useTableMotion();
-  return <div className="bullets" data-animation-region={`health-${player.id}`} aria-label={`${player.health} trên ${player.max_health} máu`}>
+  return <div className="bullets" role="img" data-tip={`health:${Math.max(0, player.health)}:${player.max_health}`} tabIndex={focusable ? 0 : undefined} data-animation-region={`health-${player.id}`} aria-label={`${player.health} trên ${player.max_health} máu`}>
     <span className="bullet-icons" aria-hidden="true">{Array.from({ length: player.max_health }, (_, i) => <m.i key={i} className={i < player.health ? '' : 'spent'} initial={false} animate={{ opacity: i < player.health ? 1 : .25, scaleY: animated ? i < player.health ? 1 : .55 : 1 }} transition={animated ? tableSpring : { duration: .1 }} style={{ originY: 1 }} data-ui-motion="bullet" />)}</span><span className="life-count"><MotionCount value={Math.max(0, player.health)} />/{player.max_health}</span>
   </div>;
 }
@@ -117,13 +121,13 @@ function Seat({ player, nickname, own, turn, waiting, presence, inspect, inspect
   return <article className={`game-seat${!player.alive ? ' eliminated' : ''}${own ? ' own-seat' : ''}${turn ? ' has-turn' : ''}${waiting ? ' is-waiting' : ''}${targetSelected ? ' is-targeted' : ''}`} aria-label={`${nickname}${own ? ', bạn' : ''}${!player.alive ? ', đã bị loại' : ''}${turn ? ', đang có lượt' : ''}${waiting ? ', đang chờ' : ''}`}>
     {!own && !scene && <div className="seat-actor" aria-hidden="true"><CowboyPortrait player={player} /></div>}<AnimatePresence>{(waiting || targetSelected) && (!scene || own) && <m.span key="crosshair" className="crosshair" data-ui-motion="crosshair" aria-hidden="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .15 }} />}</AnimatePresence>
     <span className="seat-anchor" data-animation-anchor={!scene || own ? player.id : undefined} aria-hidden="true" />
-    <button type="button" className={`seat-person${chooseTarget ? ' seat-target' : ''}`} aria-label={chooseTarget ? `Nhắm tới ${nickname}` : `Xem nhân vật ${nickname}`} aria-pressed={chooseTarget ? targetSelected : undefined} disabled={!!chooseTarget && disabled} onClick={(event) => chooseTarget ? chooseTarget() : inspectPlayer(player, event.currentTarget)}>
+    <button type="button" data-tip={`character:${player.character}`} className={`seat-person${chooseTarget ? ' seat-target' : ''}`} aria-label={chooseTarget ? `Nhắm tới ${nickname}` : `Xem nhân vật ${nickname}`} aria-pressed={chooseTarget ? targetSelected : undefined} disabled={!!chooseTarget && disabled} onClick={(event) => chooseTarget ? chooseTarget() : inspectPlayer(player, event.currentTarget)}>
       <AnimatePresence>{turn && <m.span className="ui-turn-badge" data-ui-motion="badge" layoutId={animated ? "turn-badge" : undefined} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={tableSpring} aria-hidden="true">✦</m.span>}</AnimatePresence><span className="seat-card-row"><span className="character-tile"><Artwork file={characterFiles[player.character]} label={characters[player.character].name} /></span>
-        <span className={`role-tile${player.role ? ' revealed' : ' concealed'}`}><Artwork key={player.role ?? 'hidden'} file={player.role ? roleFiles[player.role] : backFiles.role} label={player.role ? roles[player.role].name : 'Vai chưa lộ'} />{!player.role && <span className="role-question" aria-hidden="true"><Icon name="star" /><b>?</b></span>}{player.role === 'sheriff' && <span className="sheriff-stamp">SHERIFF</span>}</span>
+        <span data-tip={`role:${player.role ?? 'hidden'}`} className={`role-tile${player.role ? ' revealed' : ' concealed'}`}><Artwork key={player.role ?? 'hidden'} file={player.role ? roleFiles[player.role] : backFiles.role} label={player.role ? roles[player.role].name : 'Vai chưa lộ'} />{!player.role && <span className="role-question" aria-hidden="true"><Icon name="star" /><b>?</b></span>}{player.role === 'sheriff' && <span className="sheriff-stamp">CẢNH SÁT</span>}</span>
         <span className="hand-count" aria-label={`${player.hand_count} lá trên tay`}><i aria-hidden="true" /><MotionCount value={player.hand_count} /></span>
       </span>
       <span className="name-ribbon" title={`${characters[player.character].name} · ${nickname}`}><strong>{characters[player.character].name}</strong><small>{nickname}{own ? ' (bạn)' : ''}</small></span>
-      <Bullets player={player} />
+      <Bullets player={player} focusable={false} />
       <span className="seat-presence">{!player.alive ? 'Hồn ma' : turn ? 'Đang có lượt' : presence}</span>
       <span className="range-hint" title={`Tầm vũ khí của ${nickname}`}>Tầm bắn: {player.weapon_range}</span>
     </button>
@@ -161,11 +165,13 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
   const tableDrop = drag.dragging !== null && dragDestination(game, draft, drag.dragging, locked) === 'table';
   const chooseHand = (id: CardId) => {
     if (locked) return;
+    setSelected(null); setSelectedPlayer(null);
     if (draft.discarding || draft.healing) setDraft({ ...draft, discard: draft.discard.includes(id) ? draft.discard.filter((card) => card !== id) : [...draft.discard, id] });
     else setDraft({ ...emptyDraft, card: draft.card === id ? null : id });
   };
   const choosePool = (id: CardId) => {
     if (locked || draft.healing) return;
+    setSelected(null); setSelectedPlayer(null);
     if (mode === 'keep_cards') setDraft({ ...draft, kept: draft.kept.includes(id) ? draft.kept.filter((card) => card !== id) : [...draft.kept, id] });
     else setDraft({ ...draft, card: draft.card === id ? null : id });
   };
@@ -186,13 +192,30 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
   const distanceEffects = own ? [own.in_play.some((id) => cardFace(id)?.kind === 'mustang') && 'Mustang +1', own.in_play.some((id) => cardFace(id)?.kind === 'scope') && 'Scope −1', own.character === 'paul_regret' && 'Paul Regret +1', own.character === 'rose_doolan' && 'Rose Doolan −1'].filter(Boolean).join(' · ') : '';
   const name = (id: number) => `${game.seats.find((seat) => seat.player_id === id)?.nickname ?? `Ghế ${id + 1}`}${id === you ? ' (bạn)' : ''}`;
   const status = waitText(table, name);
-  return <GameMotion enabled={!!stage}><section className={`bang-board saloon-board seats-${table.players.length}${stage ? ' cinematic ui-motion' : ''}${journalOpen ? ' journal-open' : ''}${drag.dragging !== null ? ' is-dragging' : ''}${you === null ? ' spectator-board' : ''}`} aria-label="Bàn chơi BANG!" data-drag-card={drag.dragging ?? undefined} aria-busy={pending} onKeyDown={(event) => { if (event.key === 'Escape' && (selected || inspectingPlayer)) closeDetail(); }}>
+  useEffect(() => { if (stage) sceneRef.current?.querySelector<HTMLElement>('[data-scene-title]')?.focus({ preventScroll: true }); }, []);
+
+  return <GameMotion enabled={!!stage}><section className={`bang-board saloon-board seats-${table.players.length}${stage ? ' cinematic ui-motion' : ''}${journalOpen ? ' journal-open' : ''}${drag.dragging !== null ? ' is-dragging' : ''}${you === null ? ' spectator-board' : ''}`} tabIndex={-1} aria-label="Bàn chơi BANG!" data-drag-card={drag.dragging ?? undefined} aria-busy={pending} onKeyDown={event => {
+      const target = event.target as HTMLElement;
+      const overlay = !!document.querySelector(':popover-open,dialog[open],[aria-modal="true"]');
+      const shortcut = tableShortcut(event.key, { desktop: !!stage, editing: target.isContentEditable || !!target.closest('input,textarea,select'), overlay: overlay || (event.key !== 'Escape' && !!(selected || inspectingPlayer)), nativeControl: !!target.closest('button,a,summary,[role="button"]') && !target.closest('.game-card[aria-pressed="true"],.scene-actor[aria-pressed="true"],.seat-target[aria-pressed="true"]'), modified: event.altKey || event.ctrlKey || event.metaKey, repeat: event.repeat, locked: locked || !fxEnabled || !!table.winner, dragging: drag.dragging !== null });
+      if (shortcut === 'cancel') {
+        event.preventDefault();
+        if (selected || inspectingPlayer) closeDetail(); else if (journalOpen) toggleJournal(); else setDraft(emptyDraft);
+      } else if (shortcut === 'confirm') {
+        const primary = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('.game-input [data-primary-action="true"]:not(:disabled)')].find(button => !button.closest('[inert]'));
+        event.preventDefault();
+        primary?.click();
+      } else if (typeof shortcut === 'number') {
+        const card = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('.own-hand button[data-card-id]')].filter(button => !button.closest('[inert]'))[shortcut];
+        if (card) { event.preventDefault(); card.click(); event.currentTarget.focus({ preventScroll: true }); }
+      }
+    }}>
     <div ref={sceneRef} className="board-scene" style={stage ? { left: stage.left, top: stage.top, width: stage.width, height: stage.height, '--scene-width': `${stage.width}px`, '--scene-height': `${stage.height}px`, '--scene-left': `${stage.left}px`, '--scene-top': `${stage.top}px` } as CSSProperties : undefined}>
-    {stage ? <><img className="scene-backdrop" src={landscapeScenes[table.players.length as keyof typeof landscapeScenes]} alt="" aria-hidden="true" decoding="async" /><div className="scene-light" aria-hidden="true" /></> : <div className="saloon-scene" aria-hidden="true"><img className="saloon-room" src={sceneFiles.background} alt="" decoding="async" /><div className="saloon-vignette" /></div>}
-    <header className="board-heading"><p className="game-eyebrow">Phòng {room.code} · {table.players.length} người</p><h2>BANG!</h2><span className="view-label">{you === null ? 'Góc nhìn khán giả' : 'Miền Tây chờ bạn'}</span></header>
+    {stage ? <><DecodedImage className="scene-backdrop" src={landscapeScenes[table.players.length as keyof typeof landscapeScenes]} /><div className="scene-light" aria-hidden="true" /></> : <div className="saloon-scene" aria-hidden="true"><img className="saloon-room" src={sceneFiles.background} alt="" decoding="async" /><div className="saloon-vignette" /></div>}
+    <header className="board-heading"><p className="game-eyebrow">Phòng {room.code} · {table.players.length} người</p><h2 data-scene-title tabIndex={-1}>BANG!</h2><span className="view-label">{you === null ? 'Góc nhìn khán giả' : 'Miền Tây chờ bạn'}</span></header>
     {own && <aside className="player-hud" aria-label="Thông tin của bạn"><div className="hud-gun"><Icon name="gun" /><span>{gun ? cards[gun.kind].name : 'Colt .45'}<strong>Tầm bắn: {own.weapon_range}</strong></span></div><div className="hud-health"><span>Máu</span><Bullets player={own} /></div><div className="hud-distance" title={distanceEffects || 'Không có hiệu chỉnh'}><Icon name="horse" /><span>{distanceEffects || 'Không có hiệu chỉnh'}</span></div></aside>}
     <nav className="table-tools" aria-label="Công cụ bàn chơi"><button type="button" className="round-control" title="Mở nhật ký" aria-label="Mở nhật ký" aria-expanded={journalOpen} aria-controls="table-journal" ref={journalButton} onClick={toggleJournal}><Icon name="log" /></button><button type="button" className="round-control" popoverTarget="room-menu" title="Cài đặt phòng" aria-label="Cài đặt phòng"><Icon name="gear" /></button></nav>
-    <RoomMenu><SoundControls />{stage && <button type="button" className="action secondary" aria-pressed={effectsEnabled} onClick={() => setEffectsEnabled(!effectsEnabled)}>{effectsEnabled ? 'Tắt hiệu ứng' : 'Bật hiệu ứng'}</button>}{roomMenu ?? <><h3>Phòng {room.code}</h3><a className="action secondary" href="/">Về phòng</a></>}</RoomMenu>
+    <RoomMenu><SoundControls />{stage && <section className="shortcut-help" aria-label="Phím tắt"><h3>Phím tắt</h3><p><kbd>1–9</kbd> Chọn hoặc xem lá tương ứng trên tay</p><p><kbd>Enter</kbd> Xác nhận hành động đang sẵn sàng</p><p><kbd>Esc</kbd> Hủy chọn hoặc đóng bảng đang xem</p><p><kbd>Tab</kbd> / <kbd>Shift+Tab</kbd> Chuyển giữa các thao tác</p></section>}{stage && <button type="button" className="action secondary" aria-pressed={effectsEnabled} onClick={() => setEffectsEnabled(!effectsEnabled)}>{effectsEnabled ? 'Tắt hiệu ứng' : 'Bật hiệu ứng'}</button>}{roomMenu ?? <><h3>Phòng {room.code}</h3><a className="action secondary" href="/">Về phòng</a></>}</RoomMenu>
     <AnimatePresence initial={false}>{!table.winner && <MotionPanel key={status} className="game-wait" role="status"><span aria-hidden="true">✦</span><p>{status}</p></MotionPanel>}</AnimatePresence>
     <div className="table-stage">
       {!stage && <img className="wooden-table" src={sceneFiles.table} alt="" aria-hidden="true" decoding="async" />}
@@ -217,14 +240,14 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
           const chooseTarget = targetMode && targetIds.includes(player.id) ? () => { setDraft({ ...draft, target: player.id, selection: null }); setSelected(null); } : undefined;
           const nickname = seat?.nickname ?? `Ghế ${player.id + 1}`;
           return <Fragment key={player.id}>
-            {stage && painted && !ownSeat && <button type="button" className={`scene-actor${dropTargets.includes(player.id) ? ' drop-ready' : ''}${drag.over === player.id ? ' drop-over' : ''}${turn ? ' has-turn' : ''}${!player.alive ? ' eliminated' : ''}`} data-scene-player={player.id} data-scene-slot={painted.slot} data-seat-view={painted.view} data-seat-flip={painted.flip} data-hand-x={painted.handX} data-hand-y={painted.handY} style={{ '--face-x': `${painted.faceX * 100}%`, '--face-y': `${painted.faceY * 100}%`, left: `${painted.x}%`, top: `${painted.y}%`, height: `${painted.actorHeight * 100}%`, width: stage.height * painted.actorHeight * .75 } as CSSProperties} aria-label={chooseTarget ? `Nhắm tới ${nickname} trên ghế` : `Xem nhân vật ${nickname} trên ghế`} disabled={!!chooseTarget && locked} onClick={(event) => chooseTarget ? chooseTarget() : inspectPlayer(player, event.currentTarget)}><CowboyPortrait player={player} view={painted.view} flip={painted.flip} /><span className="actor-anchor" data-animation-anchor={player.id} aria-hidden="true" /><AnimatePresence>{turn && <m.span key="turn" className="ui-turn-glow" data-ui-motion="turn" aria-hidden="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .2 }} />}{(waiting || draft.target === player.id) && <m.span key="crosshair" className="crosshair" data-ui-motion="crosshair" aria-hidden="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .15 }} />}</AnimatePresence></button>}
+            {stage && painted && !ownSeat && <button type="button" className={`scene-actor${dropTargets.includes(player.id) ? ' drop-ready' : ''}${drag.over === player.id ? ' drop-over' : ''}${turn ? ' has-turn' : ''}${!player.alive ? ' eliminated' : ''}`} data-tip={`character:${player.character}`} aria-pressed={chooseTarget ? draft.target === player.id : undefined} data-scene-player={player.id} data-scene-slot={painted.slot} data-seat-view={painted.view} data-seat-flip={painted.flip} data-hand-x={painted.handX} data-hand-y={painted.handY} style={{ '--face-x': `${painted.faceX * 100}%`, '--face-y': `${painted.faceY * 100}%`, left: `${painted.x}%`, top: `${painted.y}%`, height: `${painted.actorHeight * 100}%`, width: stage.height * painted.actorHeight * .75 } as CSSProperties} aria-label={chooseTarget ? `Nhắm tới ${nickname} trên ghế` : `Xem nhân vật ${nickname} trên ghế`} disabled={!!chooseTarget && locked} onClick={(event) => chooseTarget ? chooseTarget() : inspectPlayer(player, event.currentTarget)}><CowboyPortrait player={player} view={painted.view} flip={painted.flip} /><span className="actor-anchor" data-animation-anchor={player.id} aria-hidden="true" /><AnimatePresence>{turn && <m.span key="turn" className="ui-turn-glow" data-ui-motion="turn" aria-hidden="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .2 }} />}{(waiting || draft.target === player.id) && <m.span key="crosshair" className="crosshair" data-ui-motion="crosshair" aria-hidden="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .15 }} />}</AnimatePresence></button>}
             <div className={`seat-position${dropTargets.includes(player.id) ? ' drop-ready' : ''}${drag.over === player.id ? ' drop-over' : ''}`} style={style} data-player-id={player.id} data-scene-slot={painted?.slot}><Seat player={player} nickname={nickname} own={ownSeat} turn={turn} waiting={waiting} presence={member ? member.online ? 'Đang kết nối' : 'Mất kết nối' : 'Đã rời phòng'} inspect={inspect} inspectPlayer={inspectPlayer} disabled={locked} targetSelected={draft.target === player.id} chooseTarget={chooseTarget} scene={!!stage} /></div>
           </Fragment>;
 
         })}
       </div>
     </div>
-    {own && <aside className="own-identity wood-panel" aria-label="Vai và nhân vật của bạn"><div className="role-medallion"><Icon name="star" /><strong>{own.role ? roles[own.role].name : 'Vai chưa lộ'}</strong></div><div className="identity-copy"><Artwork file={characterFiles[own.character]} label={characters[own.character].name} /><small>BẠN</small><h3>{characters[own.character].name}</h3><Bullets player={own} />{!own.alive && <span>Hồn ma</span>}</div></aside>}
+    {own && <aside className="own-identity wood-panel" aria-label="Vai và nhân vật của bạn"><div className="role-medallion" role="img" aria-label={own.role ? roles[own.role].name : 'Vai chưa lộ'} tabIndex={0} data-tip={`role:${own.role ?? 'hidden'}`}><Icon name="star" /><strong>{own.role ? roles[own.role].name : 'Vai chưa lộ'}</strong></div><div className="identity-copy"><span className="own-character-tip" role="img" tabIndex={0} data-tip={`character:${own.character}`} aria-label={`Kỹ năng ${characters[own.character].name}`}><Artwork file={characterFiles[own.character]} label={characters[own.character].name} /></span><small>BẠN</small><h3>{characters[own.character].name}</h3><Bullets player={own} />{!own.alive && <span>Hồn ma</span>}</div></aside>}
     {you === null && !own && <p className="spectator-plaque wood-panel">Bạn đang xem ván chơi</p>}
     {you !== null && <section className="own-hand hand-tray wood-panel" data-animation-region="hand" aria-label="Bài trên tay của bạn"><div className="section-heading"><h3>Bài trên tay của bạn</h3><span><MotionCount value={hand.length} /> lá</span></div><m.div className="hand-cards" data-ui-motion="hand-layout" layoutScroll><AnimatePresence initial={false} mode="popLayout">{hand.map((id, index) => <Card key={id} id={id} inspect={inspect} handIndex={index} handCount={hand.length} hidden={drag.flight?.card === id} dragCard={stage && dragDestination(game, draft, id, locked) ? drag.props(id) : undefined} style={{ '--fan-angle': `${Math.max(-12, Math.min(12, (index - (hand.length - 1) / 2) * 4))}deg` } as CSSProperties} picked={draft.discarding || draft.healing ? draft.discard.includes(id) : draft.card === id} pick={!locked && (draft.healing || (mode === 'turn' && (draft.discarding || playKind(game, id))) || (mode === 'response' && responseCard(game, id))) ? () => chooseHand(id) : undefined} />)}</AnimatePresence>{!hand.length && <p>Bạn chưa có bài trên tay.</p>}</m.div></section>}
     <AnimatePresence initial={false}>{(you !== null || table.store_pool.length > 0) && <MotionPanel key={`${mode}:${draft.discarding}:${draft.healing}:${mode === 'turn' && draft.card === null}`} className={`decision-overlay${mode === 'turn' && draft.card === null && !draft.discarding && !draft.healing ? ' quiet-controls' : ''}${mode === 'waiting' && !draft.healing ? ' waiting-controls' : ''}`}>
@@ -235,6 +258,7 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
     <AnimatePresence>{(selected || inspectingPlayer) && <MotionPanel key={selected ?? `player-${selectedPlayer}`} className="card-detail parchment" role="complementary" label="Chi tiết lá bài"><button type="button" className="detail-close" aria-label="Đóng chi tiết lá" onClick={closeDetail}>×</button>{selected ? <><Artwork key={selected} file={cardFiles[selected]} label={cards[selected].name} /><h3>{cards[selected].name}</h3><p>{cards[selected].effect}</p></> : inspectingPlayer && <><Artwork key={inspectingPlayer.character} file={characterFiles[inspectingPlayer.character]} label={characters[inspectingPlayer.character].name} /><h3>{characters[inspectingPlayer.character].name}</h3><p>{characters[inspectingPlayer.character].ability}</p><p>Tầm bắn: {inspectingPlayer.weapon_range} · {inspectingPlayer.hand_count} lá trên tay</p></>}</MotionPanel>}</AnimatePresence>
     {drag.dragging !== null && <span className="drag-hint" role="status">{tableDrop ? 'Thả vào giữa bàn để dùng lá bài' : 'Thả lên người chơi để chọn mục tiêu'}</span>}
     {drag.overlay}
+    <GameTooltip key={game.seq} root={sceneRef} enabled={!!stage} dragging={drag.dragging !== null} />
     {pending && <m.span className="request-pending" data-ui-motion="pending" role="status" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: .1, duration: .1 }}>Đang chờ máy chủ…</m.span>}
     <GameDeal root={sceneRef} batch={soundBatch} players={table.players} you={you} hand={hand} enabled={!!stage && fxEnabled} ownTurn={you !== null && table.waiting?.player === you} />
     <GameSound batch={soundBatch} ctx={{ players: table.players, seats: game.seats, you, waiting: table.waiting }} enabled={fxEnabled} />
