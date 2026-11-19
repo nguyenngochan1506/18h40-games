@@ -273,7 +273,8 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
         event.preventDefault();
         primary?.click();
       } else if (typeof shortcut === 'number') {
-        const card = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(mode === 'general_store' ? '.store-pool button[data-store-slot]' : mode === 'pick_hand_slot' ? '.store-pool button[data-hand-slot]' : '.own-hand .hand-cards button[data-card-id]')].filter(button => !button.closest('[inert]'))[shortcut];
+        const selector = draft.healing || draft.discarding ? '.own-hand .hand-cards button[data-card-id]' : mode === 'general_store' ? '.store-pool button[data-store-slot]' : mode === 'pick_hand_slot' ? '.store-pool button[data-hand-slot]' : '.own-hand .hand-cards button[data-card-id]';
+        const card = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(selector)].filter(button => !button.closest('[inert]'))[shortcut];
         if (card) { event.preventDefault(); card.click(); event.currentTarget.focus({ preventScroll: true }); }
       }
     }}>

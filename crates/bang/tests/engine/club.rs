@@ -535,58 +535,148 @@ fn club_weapons_stack_use_max_range_and_recompute_when_each_weapon_leaves() {
 #[test]
 fn club_seeded_games_preserve_cards_metadata_and_replay() {
     for count in 4..=7 {
-        for seed in 0..16 {
-            let mut rng = ChaCha8Rng::seed_from_u64(seed);
-            let (mut state, _) = setup(
-                count,
-                GameConfig {
-                    mode: GameMode::Club,
-                    roles: RoleCounts::standard(count),
-                },
-                &mut rng,
-            )
-            .unwrap();
-            let mut replay = state.clone();
-            let mut replay_rng = rng.clone();
-            let mut bot = ChaCha8Rng::seed_from_u64(seed + 500);
-            for step in 0..10_000 {
-                invariant(&state);
-                for player in &state.players {
-                    assert!(player.jail_turns_served <= 3);
-                    if !player.has_in_play(CardKind::Jail) {
-                        assert_eq!(player.jail_turns_served, 0);
+        for roles in [
+            RoleCounts::standard(count),
+            RoleCounts {
+                deputy: 0,
+                outlaw: count as u8 - 3,
+                renegade: 2,
+            },
+            RoleCounts {
+                deputy: 1,
+                outlaw: 0,
+                renegade: count as u8 - 2,
+            },
+            RoleCounts {
+                deputy: 1,
+                outlaw: count as u8 - 2,
+                renegade: 0,
+            },
+        ] {
+            let (mut bounties, mut penalties) = (0, 0);
+            for seed in 0..16 {
+                let mut rng = ChaCha8Rng::seed_from_u64(seed);
+                let (mut state, _) = setup(
+                    count,
+                    GameConfig {
+                        mode: GameMode::Club,
+                        roles,
+                    },
+                    &mut rng,
+                )
+                .unwrap();
+                assert_eq!(
+                    state
+                        .players
+                        .iter()
+                        .filter(|p| p.role == Role::Deputy)
+                        .count(),
+                    usize::from(roles.deputy)
+                );
+                assert_eq!(
+                    state
+                        .players
+                        .iter()
+                        .filter(|p| p.role == Role::Outlaw)
+                        .count(),
+                    usize::from(roles.outlaw)
+                );
+                assert_eq!(
+                    state
+                        .players
+                        .iter()
+                        .filter(|p| p.role == Role::Renegade)
+                        .count(),
+                    usize::from(roles.renegade)
+                );
+                let mut replay = state.clone();
+                let mut replay_rng = rng.clone();
+                let mut bot = ChaCha8Rng::seed_from_u64(seed + 500);
+                for step in 0..10_000 {
+                    invariant(&state);
+                    for player in &state.players {
+                        assert!(player.jail_turns_served <= 3);
+                        if !player.has_in_play(CardKind::Jail) {
+                            assert_eq!(player.jail_turns_served, 0);
+                        }
+                    }
+                    if let Some(round) = &state.dynamite_round {
+                        assert_eq!(
+                            state
+                                .players
+                                .iter()
+                                .filter(|p| p.in_play.contains(&round.card))
+                                .count(),
+                            1
+                        );
+                    }
+                    if state.winner.is_some() {
+                        break;
+                    }
+                    let actions = legal_actions(&state);
+                    let (player, action) = actions[bot.random_range(0..actions.len())].clone();
+                    let events = apply(&mut state, player, action.clone(), &mut rng).unwrap();
+                    for event in &events {
+                        match event.kind {
+                            EventKind::BountyAwarded { player, victim } => {
+                                assert_eq!(state.players[victim.0].role, Role::Outlaw);
+                                assert!(state.players[player.0].alive);
+                                bounties += 1;
+                            }
+                            EventKind::SheriffPenalized { player, victim } => {
+                                assert_eq!(state.players[player.0].role, Role::Sheriff);
+                                assert_eq!(state.players[victim.0].role, Role::Deputy);
+                                penalties += 1;
+                            }
+                            _ => {}
+                        }
+                    }
+                    assert_eq!(
+                        events,
+                        apply(&mut replay, player, action, &mut replay_rng).unwrap()
+                    );
+                    assert_eq!(state, replay);
+                    if step % 17 == 0 {
+                        state =
+                            serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
                     }
                 }
-                if let Some(round) = &state.dynamite_round {
-                    assert_eq!(
-                        state
-                            .players
-                            .iter()
-                            .filter(|p| p.in_play.contains(&round.card))
-                            .count(),
-                        1
-                    );
-                }
-                if state.winner.is_some() {
-                    break;
-                }
-                let actions = legal_actions(&state);
-                let (player, action) = actions[bot.random_range(0..actions.len())].clone();
-                let events = apply(&mut state, player, action.clone(), &mut rng).unwrap();
-                assert_eq!(
-                    events,
-                    apply(&mut replay, player, action, &mut replay_rng).unwrap()
+                assert!(
+                    state.winner.is_some(),
+                    "Club game count={count} roles={roles:?} seed={seed} must finish"
                 );
-                assert_eq!(state, replay);
-                if step % 17 == 0 {
-                    state = serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+                let living: Vec<_> = state.players.iter().filter(|p| p.alive).collect();
+                match state.winner.unwrap() {
+                    Winner::SheriffAndDeputies => {
+                        assert!(living.iter().any(|p| p.role == Role::Sheriff));
+                        assert!(
+                            living
+                                .iter()
+                                .all(|p| matches!(p.role, Role::Sheriff | Role::Deputy))
+                        );
+                    }
+                    Winner::Outlaws => {
+                        assert!(living.iter().all(|p| p.role != Role::Sheriff));
+                        assert!(!(living.len() == 1 && living[0].role == Role::Renegade));
+                    }
+                    Winner::Renegade { player } => {
+                        assert_eq!(living.len(), 1);
+                        assert!(state.players[player.0].alive);
+                        assert_eq!(state.players[player.0].role, Role::Renegade);
+                    }
                 }
+                invariant(&state);
             }
-            assert!(
-                state.winner.is_some(),
-                "Club game count={count} seed={seed} must finish"
+            assert_eq!(
+                bounties > 0,
+                roles.outlaw > 0,
+                "Exercise bounty eligibility for {roles:?}"
             );
-            invariant(&state);
+            assert_eq!(
+                penalties > 0,
+                roles.deputy > 0,
+                "Exercise Sheriff penalties for {roles:?}"
+            );
         }
     }
 }

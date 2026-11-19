@@ -211,6 +211,53 @@ test('claimed store fan cards retain public recipients while available buttons u
   assert.equal(pool.querySelectorAll('[data-animation-region="store-1"]').length, 1, 'Repeated demo recipients keep a unique latest flight origin');
 });
 
+for (const kind of [{ type: 'pick_hand_slot', target: 1, kind: 'panic', count: 3 }, { type: 'general_store' }] as const) test(`Sid keyboard healing takes priority over ${kind.type} slots and Escape restores the tray`, async t => {
+  const width = Object.getOwnPropertyDescriptor(window, 'innerWidth'), height = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });
+  t.after(() => { if (width) Object.defineProperty(window, 'innerWidth', width); else Reflect.deleteProperty(window, 'innerWidth'); if (height) Object.defineProperty(window, 'innerHeight', height); else Reflect.deleteProperty(window, 'innerHeight'); });
+  const { container, root, settle } = await host(t);
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Player fixture required');
+  game.view.view.hand = [1, 26, 37];
+  const table = game.view.view.table;
+  table.players[0].character = 'sid_ketchum'; table.players[0].health = 2; table.players[0].hand_count = 3;
+  table.store_slots = kind.type === 'general_store' ? 4 : 0;
+  table.waiting = { player: 0, pending_id: 501, kind };
+  const sent: Action[] = [];
+  await act(async () => root.render(createElement(GameBoard, { game, room: demoRoom, sendAction: action => sent.push(action) })));
+  await settle();
+  const board = container.querySelector<HTMLElement>('.bang-board')!;
+  const key = async (key: string) => { await act(() => { board.focus(); board.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true })); }); await settle(); };
+  const heal = () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Bỏ 2 lá để hồi máu')!;
+  await act(() => heal().click()); await settle();
+  assert.equal(container.querySelectorAll('.store-slot:not(:disabled)').length, 0);
+  await key('1'); await key('2');
+  assert.deepEqual([...container.querySelectorAll<HTMLElement>('.own-hand .hand-cards [aria-pressed="true"]')].map(e => Number(e.dataset.cardId)), [1, 26]);
+  assert.equal(container.querySelector('.store-slot.is-picked'), null);
+  assert.deepEqual(sent, []);
+  await key('Escape');
+  assert.equal(container.querySelectorAll('.own-hand .hand-cards [aria-pressed="true"]').length, 0);
+  assert.ok(container.querySelector('.store-slot:not(:disabled)'));
+  await key('1');
+  assert.ok(container.querySelector('.store-slot.is-picked'));
+  assert.deepEqual(sent, []);
+  await act(() => heal().click()); await settle();
+  await key('1'); await key('2'); await key('Enter');
+  assert.deepEqual(sent, [{ type: 'sid_heal', pending_id: null, discard: [1, 26] }]);
+});
+
+for (const reason of ['dynamite', 'jail'] as const) for (const lucky of [false, true]) test(`${reason} instructions describe ${lucky ? 'Lucky Duke choosing from two draws' : 'one draw'}`, async t => {
+  const { container, root, settle } = await host(t);
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Player fixture required');
+  game.view.view.table.players[0].character = lucky ? 'lucky_duke' : 'sid_ketchum';
+  game.view.view.table.waiting = { player: 0, pending_id: 502, kind: { type: 'check', reason } };
+  await act(async () => root.render(createElement(GameBoard, { game, room: demoRoom })));
+  await settle();
+  assert.ok(container.querySelector('.check-controls [role="status"]')!.textContent!.includes(lucky ? 'lật 2 lá, chọn 1 lá' : 'lật 1 lá'));
+});
+
 test('tidy equipment keeps grouped DOM order, authoritative chips, equal risk sizes and direct face selection', async t => {
   const width = Object.getOwnPropertyDescriptor(window, 'innerWidth'), height = Object.getOwnPropertyDescriptor(window, 'innerHeight');
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });

@@ -1,4 +1,4 @@
-use super::support::Scenario;
+use super::support::{Scenario, legal_actions};
 use bang::*;
 
 fn events_count(events: &[Event]) -> usize {
@@ -170,7 +170,7 @@ fn manual_dynamite_checks_the_draw_only_after_flip_and_jail_keeps_mode_rules() {
 }
 
 #[test]
-fn barrel_never_draws_before_choice_and_timeout_or_missed_can_skip_it() {
+fn barrel_never_draws_before_choice_and_explicit_response_can_skip_it() {
     for missed in [false, true] {
         let mut game = Scenario::new(4);
         game.equip(1, CardKind::Barrel);
@@ -180,13 +180,27 @@ fn barrel_never_draws_before_choice_and_timeout_or_missed_can_skip_it() {
         assert_eq!(events_count(&events), 0);
         assert_eq!(game.state.draw_pile.len(), deck);
         assert_eq!(attack_state(&game), (1, 1));
+        let actions = legal_actions(&game.state);
+        assert_eq!(
+            actions
+                .iter()
+                .filter(|(_, action)| matches!(action, Action::FlipBarrel { .. }))
+                .count(),
+            1
+        );
+        assert!(actions.contains(&(
+            PlayerId(1),
+            Action::Respond {
+                pending_id: id(&game),
+                card: None
+            }
+        )));
         assert_eq!(
             default_action(&game.state),
             Some((
                 PlayerId(1),
-                Action::Respond {
-                    pending_id: id(&game),
-                    card: None
+                Action::FlipBarrel {
+                    pending_id: id(&game)
                 }
             ))
         );
@@ -233,6 +247,157 @@ fn barrel_never_draws_before_choice_and_timeout_or_missed_can_skip_it() {
             );
             response(&mut game, None);
             assert_eq!(game.state.players[1].health, 3);
+        }
+    }
+}
+
+fn timeout(game: &mut Scenario, expected: impl FnOnce(PendingId) -> Action) -> Vec<Event> {
+    let old_id = id(game);
+    let (player, action) = default_action(&game.state).unwrap();
+    assert_eq!(action, expected(old_id));
+    let mut replay = serde_json::from_str(&serde_json::to_string(&game.state).unwrap()).unwrap();
+    let mut rng = game.rng.clone();
+    let events = game.act(player.0, action.clone());
+    assert_eq!(
+        events,
+        apply(&mut replay, player, action, &mut rng).unwrap()
+    );
+    assert_eq!(game.state, replay);
+    assert_eq!(game.rng, rng);
+    if let Some(next_id) = game
+        .state
+        .decision()
+        .and_then(|decision| decision.pending_id)
+    {
+        assert_ne!(next_id, old_id, "Each timeout opens a fresh pending window");
+    }
+    events
+}
+
+#[test]
+fn timeout_uses_each_barrel_and_jourdonnais_check_before_accepting_damage() {
+    for mode in [GameMode::Classic, GameMode::Club] {
+        for (character, slab, hearts, health) in [
+            (Character::SidKetchum, false, vec![true], 4),
+            (Character::SidKetchum, false, vec![false], 3),
+            (Character::Jourdonnais, false, vec![false, true], 4),
+            (Character::Jourdonnais, false, vec![false, false], 3),
+            (Character::SidKetchum, true, vec![true], 3),
+            (Character::Jourdonnais, true, vec![true, true], 4),
+        ] {
+            let mut game = Scenario::new(4);
+            game.state.config.mode = mode;
+            game.character(1, character);
+            if slab {
+                game.character(0, Character::SlabTheKiller);
+            }
+            game.equip(1, CardKind::Barrel);
+            attack(&mut game);
+            assert_eq!(
+                attack_state(&game),
+                (if slab { 2 } else { 1 }, hearts.len() as u8)
+            );
+            for (index, heart) in hearts.into_iter().enumerate() {
+                game.top_face(
+                    if heart {
+                        CardKind::Beer
+                    } else {
+                        CardKind::Missed
+                    },
+                    if heart { Suit::Hearts } else { Suit::Spades },
+                    if heart {
+                        if index == 0 { Rank::Six } else { Rank::Seven }
+                    } else if index == 0 {
+                        Rank::Two
+                    } else {
+                        Rank::Three
+                    },
+                );
+                let events = timeout(&mut game, |pending_id| Action::FlipBarrel { pending_id });
+                assert_eq!(events_count(&events), 1);
+            }
+            if !game.state.pending.is_empty() {
+                assert_eq!(attack_state(&game).1, 0);
+                let events = timeout(&mut game, |pending_id| Action::Respond {
+                    pending_id,
+                    card: None,
+                });
+                assert_eq!(events_count(&events), 0);
+            }
+            assert!(
+                game.state.pending.is_empty(),
+                "Timeouts must finish the attack"
+            );
+            assert_eq!(game.state.players[1].health, health);
+            assert!(matches!(
+                default_action(&game.state).unwrap().1,
+                Action::EndTurn { .. }
+            ));
+        }
+    }
+}
+
+#[test]
+fn lucky_timeout_flips_then_chooses_the_first_card_with_a_fresh_pending_id() {
+    for mode in [GameMode::Classic, GameMode::Club] {
+        for first_heart in [false, true] {
+            let mut game = Scenario::new(4);
+            game.state.config.mode = mode;
+            game.character(1, Character::LuckyDuke);
+            game.equip(1, CardKind::Barrel);
+            attack(&mut game);
+            game.top_face(
+                if first_heart {
+                    CardKind::Missed
+                } else {
+                    CardKind::Beer
+                },
+                if first_heart {
+                    Suit::Spades
+                } else {
+                    Suit::Hearts
+                },
+                if first_heart { Rank::Two } else { Rank::Six },
+            );
+            let first = game.top_face(
+                if first_heart {
+                    CardKind::Beer
+                } else {
+                    CardKind::Missed
+                },
+                if first_heart {
+                    Suit::Hearts
+                } else {
+                    Suit::Spades
+                },
+                if first_heart { Rank::Six } else { Rank::Two },
+            );
+            assert_eq!(
+                events_count(&timeout(&mut game, |pending_id| Action::FlipBarrel {
+                    pending_id
+                })),
+                0
+            );
+            assert_eq!(view(&game.state, PlayerId(1)).unwrap().choices[0], first);
+            assert_eq!(
+                events_count(&timeout(&mut game, |pending_id| Action::ChooseDrawResult {
+                    pending_id,
+                    card: first
+                })),
+                1
+            );
+            if !first_heart {
+                assert_eq!(attack_state(&game), (1, 0));
+                timeout(&mut game, |pending_id| Action::Respond {
+                    pending_id,
+                    card: None,
+                });
+            }
+            assert!(game.state.pending.is_empty());
+            assert_eq!(
+                game.state.players[1].health,
+                if first_heart { 4 } else { 3 }
+            );
         }
     }
 }

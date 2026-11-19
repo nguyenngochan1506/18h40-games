@@ -1035,6 +1035,9 @@ pub fn default_action(state: &GameState) -> Option<(PlayerId, Action)> {
                 card: *pool.first()?,
             },
             PendingKind::Check { .. } => Action::FlipCheck { pending_id },
+            PendingKind::AttackResponse { checks_left, .. } if *checks_left > 0 => {
+                Action::FlipBarrel { pending_id }
+            }
             _ => Action::Respond {
                 pending_id,
                 card: None,

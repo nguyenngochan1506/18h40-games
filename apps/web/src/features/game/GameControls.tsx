@@ -19,7 +19,8 @@ function DecisionControls({ game, draft, disabled, setDraft, sendAction }: Props
   if (mode === 'check' && table.waiting?.kind.type === 'check') {
     const reason = table.waiting.kind.reason;
     const action = flipCheckAction(game, disabled);
-    return <div className="game-controls check-controls" aria-label="Lật kiểm tra"><p role="status">{reason === 'dynamite' ? 'Dynamite: lật 1 lá. ♠ từ 2 đến 9 thì nổ, mất 3 máu.' : 'Jail: lật 1 lá. ♥ thì thoát, không thì mất lượt.'}</p>
+    const draw = table.players.find(player => player.id === table.waiting!.player)?.character === 'lucky_duke' ? 'lật 2 lá, chọn 1 lá' : 'lật 1 lá';
+    return <div className="game-controls check-controls" aria-label="Lật kiểm tra"><p role="status">{reason === 'dynamite' ? `Dynamite: ${draw}. ♠ từ 2 đến 9 thì nổ, mất 3 máu.` : `Jail: ${draw}. ♥ thì thoát, không thì mất lượt.`}</p>
       <div className="control-buttons"><button type="button" className="action" data-primary-action="true" aria-keyshortcuts="Enter" disabled={!action} onClick={() => send(action)}>Lật bài <kbd aria-hidden="true">Enter</kbd></button></div></div>;
   }
   if (mode === 'draw_choice') {

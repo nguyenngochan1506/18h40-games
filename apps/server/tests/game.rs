@@ -438,6 +438,165 @@ async fn offline_top_decisions_get_their_own_full_window_and_rejoin_cancels_dead
 }
 
 #[tokio::test(start_paused = true)]
+async fn host_skip_and_offline_timeout_flip_barrel_before_a_fresh_damage_window() {
+    let seed = (0..10_000)
+        .find(|seed| {
+            let mut rng = ChaCha8Rng::seed_from_u64(*seed);
+            let (mut state, _) = bang::setup(4, bang::GameConfig::default(), &mut rng).unwrap();
+            if state.decision().unwrap().kind != DecisionKind::Turn {
+                return false;
+            }
+            let defender = state.turn.player;
+            let Some(&barrel) = state.players[defender.0]
+                .hand
+                .iter()
+                .find(|id| id.card().unwrap().kind == CardKind::Barrel)
+            else {
+                return false;
+            };
+            bang::apply(
+                &mut state,
+                defender,
+                Action::Play {
+                    card: barrel,
+                    target: None,
+                },
+                &mut rng,
+            )
+            .unwrap();
+            for _ in 0..4 {
+                let (player, action) = bang::default_action(&state).unwrap();
+                bang::apply(&mut state, player, action, &mut rng).unwrap();
+                if state.pending.is_empty() {
+                    break;
+                }
+            }
+            let shooter = state.turn.player;
+            if shooter == defender || !state.pending.is_empty() {
+                return false;
+            }
+            let Some(&bang) = state.players[shooter.0]
+                .hand
+                .iter()
+                .find(|id| id.card().unwrap().kind == CardKind::Bang)
+            else {
+                return false;
+            };
+            bang::apply(
+                &mut state,
+                shooter,
+                Action::Play {
+                    card: bang,
+                    target: Some(defender),
+                },
+                &mut rng,
+            )
+            .is_ok()
+                && matches!(
+                    state.decision().unwrap().kind,
+                    DecisionKind::AttackResponse {
+                        remaining: 1,
+                        checks_left: 1,
+                        ..
+                    }
+                )
+                && state.players[defender.0].character != bang::Character::LuckyDuke
+                && state.draw_pile.last().unwrap().card().unwrap().suit != bang::Suit::Hearts
+        })
+        .expect("A seeded real deal with Barrel and a failed draw");
+    for offline in [false, true] {
+        let mut table = Table::new(4, seed).await;
+        let defender = table.state.turn.player;
+        let barrel = *table.state.players[defender.0]
+            .hand
+            .iter()
+            .find(|id| id.card().unwrap().kind == CardKind::Barrel)
+            .unwrap();
+        table
+            .act(
+                defender,
+                Action::Play {
+                    card: barrel,
+                    target: None,
+                },
+            )
+            .await;
+        for _ in 0..4 {
+            table.skip(0).await;
+            if table.state.pending.is_empty() {
+                break;
+            }
+        }
+        let shooter = table.state.turn.player;
+        let bang = *table.state.players[shooter.0]
+            .hand
+            .iter()
+            .find(|id| id.card().unwrap().kind == CardKind::Bang)
+            .unwrap();
+        table
+            .act(
+                shooter,
+                Action::Play {
+                    card: bang,
+                    target: Some(defender),
+                },
+            )
+            .await;
+        let health = table.state.players[defender.0].health;
+        let mut previous_id = table.state.decision().unwrap().pending_id.unwrap();
+        if offline {
+            table.disconnect(defender.0).await;
+        }
+        for flip in [true, false] {
+            let (player, action) = bang::default_action(&table.state).unwrap();
+            assert_eq!(player, defender);
+            assert_eq!(
+                action,
+                if flip {
+                    Action::FlipBarrel {
+                        pending_id: previous_id,
+                    }
+                } else {
+                    Action::Respond {
+                        pending_id: previous_id,
+                        card: None,
+                    }
+                }
+            );
+            if offline {
+                tokio::time::advance(Duration::from_secs(59)).await;
+                table
+                    .spectator
+                    .send(json!({"type":"game_action","action":Action::EndTurn{discard:vec![]}}))
+                    .await;
+                rejected(&mut table.spectator, "illegal_action").await;
+                tokio::time::advance(Duration::from_secs(1)).await;
+                let events = bang::apply(&mut table.state, player, action, &mut table.rng).unwrap();
+                table.updates(&events).await;
+            } else {
+                table.skip(0).await;
+            }
+            assert_eq!(
+                table.state.players[defender.0].health,
+                health - i16::from(!flip)
+            );
+            if flip {
+                let decision = table.state.decision().unwrap();
+                assert!(matches!(
+                    decision.kind,
+                    DecisionKind::AttackResponse { checks_left: 0, .. }
+                ));
+                let next_id = decision.pending_id.unwrap();
+                assert_ne!(next_id, previous_id);
+                previous_id = next_id;
+            }
+        }
+        assert!(table.state.pending.is_empty());
+        assert_eq!(table.state.decision().unwrap().kind, DecisionKind::Turn);
+    }
+}
+
+#[tokio::test(start_paused = true)]
 async fn leaving_a_game_defaults_the_reserved_seat_immediately_and_invalidates_its_token() {
     let mut table = Table::new(4, 42).await;
     let leaving = table.state.decision().unwrap().player.0;

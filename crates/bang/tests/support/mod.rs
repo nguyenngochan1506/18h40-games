@@ -331,8 +331,9 @@ fn decision_actions(state: &GameState) -> Vec<Action> {
         };
         if matches!(frame.kind, PendingKind::AttackResponse { checks_left, .. } if checks_left > 0)
         {
-            actions.push(Action::FlipBarrel {
+            actions.push(Action::Respond {
                 pending_id: frame.id,
+                card: None,
             });
         }
         actions.extend(
