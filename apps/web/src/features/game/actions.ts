@@ -29,6 +29,12 @@ export function needsTarget(game: GameSnapshot, card: CardId): boolean {
   return ['bang', 'panic', 'cat_balou', 'duel', 'jail'].includes(playKind(game, card) ?? '');
 }
 
+export function playTargets(game: GameSnapshot, card: CardId) {
+  const { table, you } = selectGameView(game.view);
+  const self = ['panic', 'cat_balou'].includes(playKind(game, card) ?? '');
+  return needsTarget(game, card) ? table.players.filter(player => player.alive && (player.id !== you || self)) : [];
+}
+
 export function responseKind(game: GameSnapshot): CardKind | null {
   const { table } = selectGameView(game.view);
   if (actionMode(game) !== 'response') return null;

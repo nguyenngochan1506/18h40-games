@@ -27,6 +27,7 @@ export default function App() {
   const [restoring, setRestoring] = useState(Boolean(initialSession));
   const [status, setStatus] = useState<ConnectionStatus>(initialSession ? 'Đang kết nối lại…' : 'Đang kết nối');
   const [pending, setPending] = useState(false);
+  const [requestVersion, setRequestVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const [requests] = useState(() => createRequestTracker<WebSocket>((connection) => {
@@ -85,7 +86,7 @@ export default function App() {
           const before = gameRef.current;
           const next = receiveGameState(before, message);
           setGameSync(next);
-          if (requests.finish(connection, message)) setPending(false);
+          if (requests.finish(connection, message)) { setPending(false); setRequestVersion(value => value + 1); }
           if (next.desynced && !before.desynced) {
             clearRequest(connection);
             connection.close();
@@ -182,7 +183,7 @@ export default function App() {
       {gameState.desynced && <p className="connection-alert mt-5 border-l-2 border-amber-700 pl-3 text-sm text-amber-900" role="alert">Bàn chơi đang mất đồng bộ. Đang kết nối lại để lấy trạng thái mới; tạm khóa thao tác.</p>}
       {error && <p className="connection-alert mt-5 border-l-2 border-red-700 pl-3 text-sm text-red-800" role="alert">{error}</p>}
       <div className="app-scenes"><AnimatePresence initial={false}><SceneTransition key={sceneKey}>
-      {room ? <Room room={room} game={game} log={gameState.log} fxBatch={gameState.fxBatch} soundBatch={gameState.soundBatch} fxEnabled={status === 'Đã kết nối' && !restoring && !gameState.desynced} viewer={gameState.viewer} disabled={disabled} pending={pending} send={send} /> : restoring ? <section className="saloon-restoring"><SaloonBackdrop /><div className="saloon-poster"><h2 data-scene-title tabIndex={-1}>Đang vào lại phòng</h2><p role="status">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p></div></section> : <Lobby disabled={disabled} send={send} />}
+      {room ? <Room room={room} game={game} log={gameState.log} fxBatch={gameState.fxBatch} soundBatch={gameState.soundBatch} fxEnabled={status === 'Đã kết nối' && !restoring && !gameState.desynced} viewer={gameState.viewer} disabled={disabled} pending={pending} requestVersion={requestVersion} actionError={error} send={send} /> : restoring ? <section className="saloon-restoring"><SaloonBackdrop /><div className="saloon-poster"><h2 data-scene-title tabIndex={-1}>Đang vào lại phòng</h2><p role="status">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p></div></section> : <Lobby disabled={disabled} send={send} />}
       </SceneTransition></AnimatePresence></div>
     </main>
     </LazyMotion>
