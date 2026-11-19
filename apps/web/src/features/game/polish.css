@@ -41,5 +41,4 @@
 .ui-turn-glow { box-shadow: 0 0 34px #f3b64acc, inset 0 0 26px #f8c35a88 !important; animation: turn-banner-pulse 1.8s ease-in-out infinite; }
 .cinematic .game-seat:not(.has-turn):not(.own-seat) .seat-person { opacity: .86; }
 .own-hand.is-my-turn { border-color: #ffdf7f; box-shadow: 0 0 0 2px #7a4f1a, 0 0 28px #f3b64acc; }
-.my-turn-chip { margin-left: 10px; padding: 1px 10px; border-radius: 3px; background: #c7421f; color: #fff4d6; font: 800 12px/18px system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
 @media (prefers-reduced-motion: reduce) { .turn-banner.is-own, .ui-turn-glow { animation: none; } }
