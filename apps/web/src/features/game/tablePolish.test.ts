@@ -11,11 +11,18 @@ test('table shortcuts preserve native controls and block typing, overlays, repea
   assert.equal(tableShortcut('Escape', ready), 'cancel');
   for (let i = 1; i <= 9; i++) assert.equal(tableShortcut(String(i), ready), i - 1);
   for (const key of ['0', 'a', 'Tab', 'ArrowRight', '!']) assert.equal(tableShortcut(key, ready), null);
-  for (const state of [{ desktop: false }, { editing: true }, { overlay: true }, { modified: true }, { repeat: true }, { dragging: true }]) for (const key of ['Enter', 'Escape', '1']) assert.equal(tableShortcut(key, { ...ready, ...state }), null);
+  for (const state of [{ editing: true }, { overlay: true }, { modified: true }, { repeat: true }, { dragging: true }]) for (const key of ['Enter', 'Escape', '1']) assert.equal(tableShortcut(key, { ...ready, ...state }), null);
   assert.equal(tableShortcut('Enter', { ...ready, nativeControl: true }), null);
   assert.equal(tableShortcut('Enter', { ...ready, locked: true }), null);
   assert.equal(tableShortcut('1', { ...ready, locked: true }), null);
   assert.equal(tableShortcut('Escape', { ...ready, locked: true }), 'cancel');
+});
+
+test('Escape works on narrow viewports while Enter and card shortcuts remain desktop-only', () => {
+  const narrow = { ...ready, desktop: false };
+  assert.equal(tableShortcut('Escape', narrow), 'cancel');
+  assert.equal(tableShortcut('Escape', { ...narrow, locked: true }), 'cancel');
+  for (const key of ['Enter', '1', '2', '3', '4', '5', '6', '7', '8', '9']) assert.equal(tableShortcut(key, narrow), null);
 });
 
 test('Vietnamese tooltips cover all 22 cards, 16 characters, every role and public health without leaking a hidden role', () => {

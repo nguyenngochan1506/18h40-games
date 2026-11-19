@@ -5,7 +5,7 @@ import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import type { Action, CardId, GameSnapshot } from '../../generated/protocol';
 import type { ActionDraft } from './actions';
 import { playTargets } from './actions';
-import { dropAction, dropZoneAt, settleDrop } from './cardDrag';
+import { dragDestination, dropAction, dropZoneAt, settleDrop } from './cardDrag';
 import type { DropRect, DropZone, Point } from './cardDrag';
 import { assetUrl, cardFiles } from './assetMap';
 import { cardFace } from './cardCatalog';
@@ -38,11 +38,15 @@ export function useCardDrag({ root, game, draft, locked, ready, requestVersion, 
     active: dragging === card,
     start(home) {
       if (locked || !desktop || !root.current) return;
-      const players = playTargets(game, card).map(p => p.id);
+      const destination = dragDestination(game, draft, card, locked);
+      if (!destination) return;
       const zones: DropZone[] = [];
-      if (players.length) for (const node of root.current.querySelectorAll<HTMLElement>('[data-scene-player], [data-player-id] .seat-person')) {
-        const player = Number(node.dataset.scenePlayer ?? node.closest<HTMLElement>('[data-player-id]')?.dataset.playerId);
-        if (players.includes(player)) zones.push({ player, rect: node.getBoundingClientRect() });
+      if (destination === 'player') {
+        const players = playTargets(game, card).map(p => p.id);
+        for (const node of root.current.querySelectorAll<HTMLElement>('[data-scene-player], [data-player-id] .seat-person')) {
+          const player = Number(node.dataset.scenePlayer ?? node.closest<HTMLElement>('[data-player-id]')?.dataset.playerId);
+          if (players.includes(player)) zones.push({ player, rect: node.getBoundingClientRect() });
+        }
       }
       else { const table = root.current.querySelector('.table-center'); if (table) zones.push({ player: null, rect: table.getBoundingClientRect() }); }
       setFlight(null); current.current = { card, seq: game.seq, home, zones }; setDragging(card); clearDetail();

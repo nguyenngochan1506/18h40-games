@@ -161,8 +161,9 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
   const targetMode = !locked && mode === 'turn' && !draft.discarding && !draft.healing && draft.card !== null && needsTarget(game, draft.card);
   const targetIds = draft.card === null ? [] : playTargets(game, draft.card).map(player => player.id);
   const drag = useCardDrag({ root: sceneRef, game, draft, locked, ready: fxEnabled, requestVersion, error: actionError, desktop: !!stage, setDraft, send: action => sendAction?.(action), clearDetail: () => { setSelected(null); setSelectedPlayer(null); } });
-  const dropTargets = drag.dragging === null ? [] : playTargets(game, drag.dragging).map(player => player.id);
-  const tableDrop = drag.dragging !== null && dragDestination(game, draft, drag.dragging, locked) === 'table';
+  const dropDestination = drag.dragging === null ? null : dragDestination(game, draft, drag.dragging, locked);
+  const dropTargets = dropDestination === 'player' && drag.dragging !== null ? playTargets(game, drag.dragging).map(player => player.id) : [];
+  const tableDrop = dropDestination === 'table';
   const chooseHand = (id: CardId) => {
     if (locked) return;
     setSelected(null); setSelectedPlayer(null);

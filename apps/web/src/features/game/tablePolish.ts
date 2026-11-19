@@ -33,9 +33,9 @@ export function tooltipPosition(anchor: Rect, tip: { width: number; height: numb
 }
 
 export function tableShortcut(key: string, state: { desktop: boolean; editing: boolean; overlay: boolean; nativeControl: boolean; modified: boolean; repeat: boolean; locked: boolean; dragging: boolean }) {
-  if (!state.desktop || state.editing || state.overlay || state.modified || state.repeat || state.dragging) return null;
+  if (state.editing || state.overlay || state.modified || state.repeat || state.dragging) return null;
   if (key === 'Escape') return 'cancel';
-  if (state.locked) return null;
+  if (!state.desktop || state.locked) return null;
   if (key === 'Enter') return state.nativeControl ? null : 'confirm';
   if (/^[1-9]$/.test(key)) return Number(key) - 1;
   return null;
