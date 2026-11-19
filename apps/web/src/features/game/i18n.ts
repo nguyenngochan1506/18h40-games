@@ -50,7 +50,7 @@ export const cards = {
   },
   "general_store": {
     "name": "General Store",
-    "effect": "Lật số lá bằng số người sống. Lần lượt mỗi người chọn 1 lá, bạn chọn trước"
+    "effect": "Xáo úp theo người sống; chọn mù, bạn trước"
   },
   "gatling": {
     "name": "Gatling",

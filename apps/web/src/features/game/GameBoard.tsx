@@ -1,4 +1,4 @@
-import { Fragment, forwardRef, useEffect, useRef, useState } from 'react';
+import { Fragment, forwardRef, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m, useIsPresent, useDragControls } from 'motion/react';
 import { GameMotion, MotionCount, MotionPanel, tableSpring, useTableMotion } from './GameMotion';
 import GameDeal from './GameDeal';
@@ -20,7 +20,6 @@ import { useCardDrag } from './useCardDrag';
 import type { CardDrag } from './useCardDrag';
 import GameControls from './GameControls';
 import GameLog from './GameLog';
-import GameResult from './GameResult';
 import GameFx from './GameFx';
 import GameSound, { SoundControls } from './GameSound';
 import type { FxBatch } from './fx';
@@ -35,6 +34,9 @@ import './cinematic.css';
 import './tableMotion.css';
 import './cardDrag.css';
 import './polish.css';
+
+const StorePool = lazy(() => import('./StorePool'));
+const GameResult = lazy(() => import('./GameResult'));
 
 type Inspect = (kind: CardKind, scroll?: boolean, origin?: HTMLButtonElement) => void;
 
@@ -101,7 +103,7 @@ function waitText(table: SpectatorView, name: (id: number) => string): string {
     case 'attack_response': return `${who} ${decision.kind.kind === 'indians' ? 'Bỏ 1 BANG! hoặc mất 1 máu' : decision.kind.remaining > 1 ? `Cần thêm ${decision.kind.remaining} lá Missed! nữa` : 'Đỡ bằng Missed!, hoặc chịu đòn'}`;
     case 'duel': return `${who} Duel: bỏ 1 BANG! hoặc mất 1 máu.`;
     case 'dying': return `${who} Dùng Beer để sống, hoặc chấp nhận bị loại.${table.players.find((player) => player.id === decision.player)?.character === 'sid_ketchum' ? ' Hoặc bỏ 2 lá để hồi máu.' : ''}`;
-    case 'general_store': return `${who} Chọn 1 lá.`;
+    case 'general_store': return `${who} Chọn 1 lá úp.`;
     case 'draw_choice': return `${who} Chọn nơi rút lá đầu.`;
     case 'keep_cards': return `${who} Chọn ${decision.kind.keep} lá để giữ.`;
     case 'choose_draw_result': return `${who} Chọn 1 lá lật kiểm tra.`;
@@ -208,7 +210,7 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
         event.preventDefault();
         primary?.click();
       } else if (typeof shortcut === 'number') {
-        const card = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('.own-hand button[data-card-id]')].filter(button => !button.closest('[inert]'))[shortcut];
+        const card = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(mode === 'general_store' ? '.store-pool button[data-store-slot]' : '.own-hand button[data-card-id]')].filter(button => !button.closest('[inert]'))[shortcut];
         if (card) { event.preventDefault(); card.click(); event.currentTarget.focus({ preventScroll: true }); }
       }
     }}>
@@ -222,7 +224,7 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
     <AnimatePresence initial={false}>{!table.winner && <MotionPanel key={status} className="game-wait" role="status"><span aria-hidden="true">✦</span><p>{status}</p></MotionPanel>}</AnimatePresence>
     <div className="table-stage">
       {!stage && <img className="wooden-table" src={sceneFiles.table} alt="" aria-hidden="true" decoding="async" />}
-      <section data-animation-region="table" data-drop-zone="table" className={`table-center${tableDrop ? ' drop-ready' : ''}${drag.over === 'table' ? ' drop-over' : ''}`} aria-label="Bộ rút và chồng bỏ"><span className="map-compass" aria-hidden="true">✥</span><div className="pile-row"><div className="draw-pile" data-animation-region="draw"><Artwork file={backFiles.card} label="Bộ rút" /><strong>Bộ rút</strong><span><MotionCount value={table.draw_count} /> lá</span></div><div className="discard-pile" data-animation-region="discard"><div className="pile-top"><AnimatePresence initial={false} mode="popLayout">{table.discard_top !== null ? <Card key={table.discard_top} id={table.discard_top} inspect={inspect} /> : <span key="empty" className="empty-pile">{table.discard_count ? 'Lá đỉnh giữ kín' : 'Chưa có lá bỏ'}</span>}</AnimatePresence></div><strong>Chồng bỏ</strong><span><MotionCount value={table.discard_count} /> lá</span></div></div></section>
+      <section data-animation-region="table" data-drop-zone="table" className={`table-center${table.store_slots ? ' has-store' : ''}${tableDrop ? ' drop-ready' : ''}${drag.over === 'table' ? ' drop-over' : ''}`} aria-label={table.store_slots ? "General Store" : "Bộ rút và chồng bỏ"}>{table.store_slots ? <Suspense fallback={<p>General Store · {table.store_slots} lá úp</p>}><StorePool game={game} draft={draft} locked={locked} desktop={!!stage} setDraft={setDraft} send={action => sendAction?.(action)} /></Suspense> : <><span className="map-compass" aria-hidden="true">✥</span><div className="pile-row"><div className="draw-pile" data-animation-region="draw"><Artwork file={backFiles.card} label="Bộ rút" /><strong>Bộ rút</strong><span><MotionCount value={table.draw_count} /> lá</span></div><div className="discard-pile" data-animation-region="discard"><div className="pile-top"><AnimatePresence initial={false} mode="popLayout">{table.discard_top !== null ? <Card key={table.discard_top} id={table.discard_top} inspect={inspect} /> : <span key="empty" className="empty-pile">{table.discard_count ? 'Lá đỉnh giữ kín' : 'Chưa có lá bỏ'}</span>}</AnimatePresence></div><strong>Chồng bỏ</strong><span><MotionCount value={table.discard_count} /> lá</span></div></div></>}</section>
       <div className="game-arena">
         {table.players.map((player, i) => {
           const seat = game.seats.find((seat) => seat.player_id === player.id);
@@ -253,8 +255,7 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
     {own && <aside className="own-identity wood-panel" aria-label="Vai và nhân vật của bạn"><div className="role-medallion" role="img" aria-label={own.role ? roles[own.role].name : 'Vai chưa lộ'} tabIndex={0} data-tip={`role:${own.role ?? 'hidden'}`}><Icon name="star" /><strong>{own.role ? roles[own.role].name : 'Vai chưa lộ'}</strong></div><div className="identity-copy"><span className="own-character-tip" role="img" tabIndex={0} data-tip={`character:${own.character}`} aria-label={`Kỹ năng ${characters[own.character].name}`}><Artwork file={characterFiles[own.character]} label={characters[own.character].name} /></span><small>BẠN</small><h3>{characters[own.character].name}</h3><Bullets player={own} />{!own.alive && <span>Hồn ma</span>}</div></aside>}
     {you === null && !own && <p className="spectator-plaque wood-panel">Bạn đang xem ván chơi</p>}
     {you !== null && <section className={`own-hand hand-tray wood-panel${!table.winner && table.turn.player === viewer ? ' is-my-turn' : ''}`} data-animation-region="hand" aria-label="Bài trên tay của bạn"><div className="section-heading"><h3>Bài trên tay của bạn</h3><span><MotionCount value={hand.length} /> lá</span></div><m.div className="hand-cards" data-ui-motion="hand-layout" layoutScroll><AnimatePresence initial={false} mode="popLayout">{hand.map((id, index) => <Card key={id} id={id} inspect={inspect} handIndex={index} handCount={hand.length} hidden={drag.flight?.card === id} dragCard={stage && dragDestination(game, draft, id, locked) ? drag.props(id) : undefined} style={{ '--fan-angle': `${Math.max(-12, Math.min(12, (index - (hand.length - 1) / 2) * 4))}deg` } as CSSProperties} picked={draft.discarding || draft.healing ? draft.discard.includes(id) : draft.card === id} pick={!locked && (draft.healing || (mode === 'turn' && (draft.discarding || playKind(game, id))) || (mode === 'response' && responseCard(game, id))) ? () => chooseHand(id) : undefined} />)}</AnimatePresence>{!hand.length && <p>Bạn chưa có bài trên tay.</p>}</m.div></section>}
-    <AnimatePresence initial={false}>{(you !== null || table.store_pool.length > 0) && <MotionPanel key={`${mode}:${draft.discarding}:${draft.healing}:${mode === 'turn' && draft.card === null}`} className={`decision-overlay${mode === 'turn' && draft.card === null && !draft.discarding && !draft.healing ? ' quiet-controls' : ''}${mode === 'waiting' && !draft.healing ? ' waiting-controls' : ''}`}>
-      {!!table.store_pool.length && <section className="decision-pool" aria-label="General Store"><h3>General Store · Bài công khai</h3><div className="hand-cards">{table.store_pool.map((id) => <Card key={id} id={id} inspect={inspect} picked={mode === 'general_store' && draft.card === id} pick={!locked && !draft.healing && mode === 'general_store' ? () => choosePool(id) : undefined} />)}</div></section>}
+    <AnimatePresence initial={false}>{you !== null && <MotionPanel key={`${mode}:${draft.discarding}:${draft.healing}:${mode === 'turn' && draft.card === null}`} className={`decision-overlay${mode === 'turn' && draft.card === null && !draft.discarding && !draft.healing ? ' quiet-controls' : ''}${mode === 'waiting' && !draft.healing ? ' waiting-controls' : ''}`}>
       {!!choices.length && <section className="decision-pool" aria-label="Bài đang xem riêng"><h3>Bài đang xem riêng</h3><p>Chỉ bạn thấy các lá này. Chạm để chọn rồi xác nhận.</p><div className="hand-cards">{choices.map((id) => <Card key={id} id={id} inspect={inspect} picked={mode === 'keep_cards' ? draft.kept.includes(id) : draft.card === id} pick={!locked && !draft.healing && (mode === 'keep_cards' || mode === 'choose_draw_result') ? () => choosePool(id) : undefined} />)}</div></section>}
       {you !== null && <div className="game-input"><GameControls game={game} draft={draft} disabled={locked} setDraft={setDraft} sendAction={(action) => { setSelected(null); setSelectedPlayer(null); sendAction?.(action); }} /></div>}
     </MotionPanel>}</AnimatePresence>
@@ -267,7 +268,7 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
     <GameSound batch={soundBatch} ctx={{ players: table.players, seats: game.seats, you, waiting: table.waiting }} enabled={fxEnabled} />
     {stage && <GameFx batch={fxBatch} ctx={{ players: table.players, seats: game.seats, you, waiting: table.waiting }} enabled={fxEnabled && effectsEnabled} width={stage.width} height={stage.height} ambientEnabled={ambientEnabled && !table.winner} />}
     <m.div id="table-journal" data-ui-motion="journal-layout" layout={stage ? "position" : false} layoutDependency={journalOpen} transition={tableSpring}><AnimatePresence initial={false} mode="popLayout"><GameLog key={journalOpen ? 'expanded' : 'compact'} entries={log} scrollState={journalScroll} expanded={journalOpen} onToggle={toggleJournal} /></AnimatePresence></m.div>
-    <AnimatePresence>{table.winner && <MotionPanel key="result" className="result-overlay"><GameResult game={game} room={room} viewer={viewer} disabled={disabled} endGame={endGame} /></MotionPanel>}</AnimatePresence>
+    <AnimatePresence>{table.winner && <MotionPanel key="result" className="result-overlay"><Suspense fallback={<p role="status">Đang tải kết quả…</p>}><GameResult game={game} room={room} viewer={viewer} disabled={disabled} endGame={endGame} /></Suspense></MotionPanel>}</AnimatePresence>
     </div>
   </section></GameMotion>;
 }

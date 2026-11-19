@@ -52,9 +52,9 @@ pub enum Action {
         target: PlayerId,
         selection: CardSelection,
     },
-    ChooseCard {
+    ChooseStoreSlot {
         pending_id: PendingId,
-        card: CardId,
+        slot: u8,
     },
     Respond {
         pending_id: PendingId,
@@ -216,12 +216,14 @@ pub(crate) fn validate(
                     _ => Err(ActionError::WrongAction),
                 }
             }
-            Action::ChooseCard { pending_id, card } => {
+            Action::ChooseStoreSlot { pending_id, slot } => {
                 if *pending_id != frame.id {
                     return Err(ActionError::StalePending);
                 }
                 match &frame.kind {
-                    PendingKind::GeneralStore { pool, .. } if pool.contains(card) => Ok(()),
+                    PendingKind::GeneralStore { pool, .. } if usize::from(*slot) < pool.len() => {
+                        Ok(())
+                    }
                     PendingKind::GeneralStore { .. } => Err(ActionError::InvalidCard),
                     _ => Err(ActionError::WrongAction),
                 }
@@ -243,7 +245,7 @@ pub(crate) fn validate(
     }
     match action {
         Action::Respond { .. }
-        | Action::ChooseCard { .. }
+        | Action::ChooseStoreSlot { .. }
         | Action::ChooseDrawSource { .. }
         | Action::KeepCards { .. }
         | Action::ChooseDrawResult { .. } => Err(ActionError::StalePending),

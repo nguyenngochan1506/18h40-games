@@ -29,7 +29,7 @@ pub struct SpectatorView {
     pub discard_count: usize,
     pub discard_top: Option<CardId>,
     pub winner: Option<Winner>,
-    pub store_pool: Vec<CardId>,
+    pub store_slots: u8,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -71,15 +71,14 @@ pub fn spectator_view(state: &GameState) -> SpectatorView {
             .copied()
             .filter(|card| !state.hidden_discards.contains(card)),
         winner: state.winner,
-        store_pool: state
+        store_slots: state
             .pending
             .iter()
-            .flat_map(|frame| match &frame.kind {
-                crate::state::PendingKind::GeneralStore { pool, .. } => pool.as_slice(),
-                _ => &[],
+            .map(|frame| match &frame.kind {
+                crate::state::PendingKind::GeneralStore { pool, .. } => pool.len() as u8,
+                _ => 0,
             })
-            .copied()
-            .collect(),
+            .sum(),
     }
 }
 

@@ -23,7 +23,7 @@ export const demoGame: GameSnapshot = {
         ],
         turn: { player: 1, step: 'play', bangs_played: 1 },
         waiting: { player: 0, pending_id: 12, kind: { type: 'attack_response', kind: 'bang', remaining: 2 } },
-        draw_count: 40, discard_count: 21, discard_top: 58, store_pool: [], winner: null,
+        draw_count: 40, discard_count: 21, discard_top: 58, store_slots: 0, winner: null,
       },
     },
   },

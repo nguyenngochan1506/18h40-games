@@ -173,7 +173,12 @@ export default function GameFx({ batch, ctx, enabled, width, height, ambientEnab
       } else if (job.kind === 'card' || job.kind === 'reveal') {
         node.append(card(job.card));
         const mid = point(stage, 'table');
-        animate(node, [
+        if (job.kind === 'reveal' && job.from === 'hand' && job.to === 'hand') animate(node, [
+          { transform: 'translate(-50%, -50%) rotateY(90deg)', opacity: 0 },
+          { transform: 'translate(-50%, -80%) rotateY(0deg)', opacity: 1, offset: .25 },
+          { transform: 'translate(-50%, -50%) rotateY(0deg)', opacity: 0 },
+        ], job.duration);
+        else animate(node, [
           { transform: 'translate(-50%,-50%) rotate(-12deg) scale(.7)', opacity: 0 },
           { transform: `translate(${(job.kind === 'reveal' ? dx : mid.x - from.x) - 30}px,${(job.kind === 'reveal' ? dy : mid.y - from.y) - 75}px) rotate(8deg) scale(1.1)`, opacity: 1, offset: .5 },
           { transform: `translate(${dx - 30}px,${dy - 42}px) rotate(-6deg) scale(.7)`, opacity: 0 },

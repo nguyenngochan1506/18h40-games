@@ -112,3 +112,23 @@ test('rejoin starts a bounded history without replay, preserves own nickname aft
   assert.equal(receiveGameState(state, { v: 1, type: 'left' }).log.length, 0);
   assert.equal(receiveGameState(state, { v: 1, type: 'room_state', room: { ...demoRoom, phase: 'waiting' } }).log.length, 0);
 });
+
+test('blind store snapshots retain only slot counts and rejoin never replays a private reveal', async () => {
+  const { receiveGameState } = await import('./state.ts');
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Player fixture required');
+  game.view.view.table.store_slots = 3;
+  game.view.view.table.waiting = { player: 0, pending_id: 104, kind: { type: 'general_store' } };
+  game.view.view.choices = [];
+  const joined = { v: 1, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game } satisfies ServerMessage;
+  const state = receiveGameState(initialGameState, joined);
+  assert.equal(selectGameView(state.game!.view).table.store_slots, 3);
+  assert.deepEqual(selectGameView(state.game!.view).choices, []);
+  assert.equal(state.fxBatch, null); assert.equal(state.soundBatch, null);
+  const own = receiveGameState(state, { v: 1, type: 'game_update', seq: game.seq + 1, view: game.view, events: [{ type: 'store_card_claimed', player: 0, slot: 1 }, { type: 'store_card_received', card: 37 }] });
+  assert.ok(own.log.some(entry => entry.text.includes('Beer')));
+  const other = receiveGameState(state, { v: 1, type: 'game_update', seq: game.seq + 1, view: game.view, events: [{ type: 'store_card_claimed', player: 1, slot: 1 }] });
+  assert.ok(other.log.some(entry => entry.text === 'Minh chọn một lá General Store.'));
+  assert.ok(other.log.every(entry => !entry.text.includes('Beer')));
+  assert.equal(receiveGameState(own, joined).fxBatch, null);
+});

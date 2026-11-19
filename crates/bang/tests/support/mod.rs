@@ -276,9 +276,9 @@ fn decision_actions(state: &GameState) -> Vec<Action> {
                 return actions;
             }
             PendingKind::GeneralStore { pool, .. } => {
-                actions.extend(pool.iter().map(|&card| Action::ChooseCard {
+                actions.extend((0..pool.len() as u8).map(|slot| Action::ChooseStoreSlot {
                     pending_id: frame.id,
-                    card,
+                    slot,
                 }));
                 return actions;
             }

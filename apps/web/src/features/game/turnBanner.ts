@@ -9,7 +9,8 @@ export function turnBanner(table: Pick<SpectatorView, 'turn' | 'waiting' | 'winn
   const waiting = table.waiting;
   if (waiting && waiting.kind.type !== 'turn') {
     const own = waiting.player === viewer;
-    return { own, key: `wait:${waiting.player}`, text: own ? 'Chờ bạn phản ứng' : `${name(waiting.player)} đang phản ứng` };
+    const verb = waiting.kind.type === 'general_store' ? 'chọn' : 'phản ứng';
+    return { own, key: `wait:${waiting.player}`, text: own ? `Chờ bạn ${verb}` : `${name(waiting.player)} đang ${verb}` };
   }
   const own = table.turn.player === viewer;
   return { own, key: `turn:${table.turn.player}`, text: own ? 'Đến lượt bạn!' : `Lượt của ${name(table.turn.player)}` };

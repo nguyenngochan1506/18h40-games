@@ -39,6 +39,7 @@ fn check_wire(message: &Value) {
         "pending",
         "next_pending_id",
         "hidden_discards",
+        "store_pool",
         "visibility",
     ] {
         assert!(
@@ -524,4 +525,86 @@ async fn ping_barrier_follows_the_same_connections_action_update_or_error() {
     })
     .await
     .expect("The action/pong barrier timed out");
+}
+
+#[tokio::test]
+async fn blind_store_stays_private_for_all_connections_and_rejoin_snapshots() {
+    let seed = (0..10000)
+        .find(|seed| {
+            let (state, _) = bang::setup(4, &mut ChaCha8Rng::seed_from_u64(*seed)).unwrap();
+            let player = state.turn.player;
+            state
+                .decision()
+                .is_some_and(|d| d.kind == DecisionKind::Turn)
+                && state.players[player.0]
+                    .hand
+                    .iter()
+                    .any(|id| id.card().unwrap().kind == CardKind::GeneralStore)
+        })
+        .unwrap();
+    let mut table = Table::new(4, seed).await;
+    let owner = table.state.turn.player;
+    let card = *table.state.players[owner.0]
+        .hand
+        .iter()
+        .find(|id| id.card().unwrap().kind == CardKind::GeneralStore)
+        .unwrap();
+    table.act(owner, Action::Play { card, target: None }).await;
+    assert_eq!(bang::spectator_view(&table.state).store_slots, 4);
+    let pool = match &table.state.pending.last().unwrap().kind {
+        bang::PendingKind::GeneralStore { pool, .. } => pool.clone(),
+        _ => unreachable!(),
+    };
+    for player in 0..4 {
+        let own = bang::view(&table.state, PlayerId(player)).unwrap();
+        assert!(own.choices.is_empty());
+        assert!(!own.hand.iter().any(|id| pool.contains(id)));
+        table.rejoin(player).await;
+    }
+    let (_late_watcher, watcher_joined) = table
+        .server
+        .join(
+            table.joined[0]["room_code"].as_str().unwrap(),
+            "LateWatcher",
+        )
+        .await;
+    check_wire(&watcher_joined);
+    assert_eq!(
+        watcher_joined["game"],
+        game_snapshot(&table.state, None, table.seq, &table.seats)
+    );
+    let mut watcher_rejoined = table.server.connect().await;
+    watcher_rejoined.send(json!({"type":"rejoin_room","room_code":table.joined[0]["room_code"],"token":watcher_joined["token"]})).await;
+    let snapshot = watcher_rejoined.until("joined").await;
+    check_wire(&snapshot);
+    assert_eq!(
+        snapshot["game"],
+        game_snapshot(&table.state, None, table.seq, &table.seats)
+    );
+    for remaining in (1..=4).rev() {
+        let decision = table.state.decision().unwrap();
+        assert_eq!(bang::spectator_view(&table.state).store_slots, remaining);
+        let slot = remaining - 1;
+        let selected = match &table.state.pending.last().unwrap().kind {
+            bang::PendingKind::GeneralStore { pool, .. } => pool[usize::from(slot)],
+            _ => unreachable!(),
+        };
+        // Table::act checks every real client's filtered events and view against the engine,
+        // including the spectator, so a public receipt or raw store IDs fail the wire check.
+        table
+            .act(
+                decision.player,
+                Action::ChooseStoreSlot {
+                    pending_id: decision.pending_id.unwrap(),
+                    slot,
+                },
+            )
+            .await;
+        assert!(
+            table.state.players[decision.player.0]
+                .hand
+                .contains(&selected)
+        );
+    }
+    assert_eq!(bang::spectator_view(&table.state).store_slots, 0);
 }

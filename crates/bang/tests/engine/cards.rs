@@ -1,5 +1,7 @@
 use super::support::{Scenario, invariant};
 use bang::*;
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
 fn play(
     game: &mut Scenario,
@@ -671,37 +673,38 @@ fn gatling_stops_immediately_after_sheriff_elimination() {
 }
 
 #[test]
-fn general_store_owns_public_cards_and_each_player_chooses_once_in_order() {
+fn general_store_hides_cards_and_each_player_chooses_once_in_order() {
     let mut game = Scenario::new(4);
     play(&mut game, 0, CardKind::GeneralStore, None);
-    let pool = spectator_view(&game.state).store_pool;
+    let pool = match &game.state.pending.last().unwrap().kind {
+        PendingKind::GeneralStore { pool, .. } => pool.clone(),
+        _ => unreachable!(),
+    };
     assert_eq!(pool.len(), 4);
-    assert_eq!(
-        view(&game.state, PlayerId(2)).unwrap().table.store_pool,
-        pool
-    );
+    assert_eq!(spectator_view(&game.state).store_slots, 4);
+    assert_eq!(view(&game.state, PlayerId(2)).unwrap().table.store_slots, 4);
     let old_id = game.state.pending.last().unwrap().id;
     game.reject(
         1,
-        Action::ChooseCard {
+        Action::ChooseStoreSlot {
             pending_id: old_id,
-            card: pool[0],
+            slot: 0,
         },
         ActionError::NotYourDecision,
     );
     game.reject(
         0,
-        Action::ChooseCard {
+        Action::ChooseStoreSlot {
             pending_id: PendingId(old_id.0 + 1),
-            card: pool[0],
+            slot: 0,
         },
         ActionError::StalePending,
     );
     game.reject(
         0,
-        Action::ChooseCard {
+        Action::ChooseStoreSlot {
             pending_id: old_id,
-            card: CardId(255),
+            slot: 255,
         },
         ActionError::InvalidCard,
     );
@@ -717,34 +720,34 @@ fn general_store_owns_public_cards_and_each_player_chooses_once_in_order() {
         default_action(&game.state),
         Some((
             PlayerId(0),
-            Action::ChooseCard {
+            Action::ChooseStoreSlot {
                 pending_id: old_id,
-                card: pool[0]
+                slot: 0
             }
         ))
     );
     game.act(
         0,
-        Action::ChooseCard {
+        Action::ChooseStoreSlot {
             pending_id: old_id,
-            card: pool[3],
+            slot: 3,
         },
     );
     assert_eq!(game.state.players[0].hand, vec![pool[3]]);
     let next_id = game.state.pending.last().unwrap().id;
     game.reject(
         1,
-        Action::ChooseCard {
+        Action::ChooseStoreSlot {
             pending_id: old_id,
-            card: pool[0],
+            slot: 0,
         },
         ActionError::StalePending,
     );
     game.reject(
         1,
-        Action::ChooseCard {
+        Action::ChooseStoreSlot {
             pending_id: next_id,
-            card: pool[3],
+            slot: 3,
         },
         ActionError::InvalidCard,
     );
@@ -753,7 +756,7 @@ fn general_store_owns_public_cards_and_each_player_chooses_once_in_order() {
         game.end();
     }
     assert!(game.state.pending.is_empty());
-    assert!(spectator_view(&game.state).store_pool.is_empty());
+    assert_eq!(spectator_view(&game.state).store_slots, 0);
     assert!(game.state.players.iter().all(|p| p.hand.len() == 1));
 }
 
@@ -779,7 +782,10 @@ fn finishing_with_general_store_pool_returns_every_card_before_clearing_pending(
     let mut game = Scenario::new(4);
     game.state.turn.player = PlayerId(1);
     play(&mut game, 1, CardKind::GeneralStore, None);
-    let pool = spectator_view(&game.state).store_pool;
+    let pool = match &game.state.pending.last().unwrap().kind {
+        PendingKind::GeneralStore { pool, .. } => pool.clone(),
+        _ => unreachable!(),
+    };
     game.dying_child(0, Some(PlayerId(1)));
     let events = roundtrip_step(&mut game);
     assert_eq!(game.state.winner, Some(Winner::Outlaws));
@@ -1000,4 +1006,150 @@ fn every_new_pending_frame_serializes_and_continues_with_identical_rng_and_event
         targets.state.pending[0].kind,
         PendingKind::ResolveTargets { cursor: 2, .. }
     ));
+}
+
+#[test]
+fn blind_store_exposes_only_counts_and_receivers_private_card() {
+    let mut game = Scenario::new(4);
+    let (_, events) = play(&mut game, 0, CardKind::GeneralStore, None);
+    let pool = match &game.state.pending.last().unwrap().kind {
+        PendingKind::GeneralStore { pool, .. } => pool.clone(),
+        _ => unreachable!(),
+    };
+    for recipient in [
+        None,
+        Some(PlayerId(0)),
+        Some(PlayerId(1)),
+        Some(PlayerId(2)),
+        Some(PlayerId(3)),
+    ] {
+        let filtered = filter_events(&events, recipient);
+        assert!(
+            filtered
+                .iter()
+                .any(|e| matches!(e.kind, EventKind::StoreOpened { count: 4 }))
+        );
+        assert!(!filtered.iter().any(|e| matches!(
+            e.kind,
+            EventKind::StoreCardReceived { .. }
+                | EventKind::ChoiceOffered { .. }
+                | EventKind::CardShown { .. }
+        )));
+        let table = recipient
+            .map(|p| view(&game.state, p).unwrap().table)
+            .unwrap_or_else(|| spectator_view(&game.state));
+        assert_eq!(table.store_slots, 4);
+        let json = serde_json::to_value(&table).unwrap();
+        assert!(json.get("store_pool").is_none());
+        // The serialized snapshot cannot encode an unclaimed card anywhere in this empty-hand scenario.
+        fn contains_id(value: &serde_json::Value, id: u8) -> bool {
+            match value {
+                serde_json::Value::Number(n) => n.as_u64() == Some(u64::from(id)),
+                serde_json::Value::Array(xs) => xs.iter().any(|v| contains_id(v, id)),
+                serde_json::Value::Object(xs) => xs.values().any(|v| contains_id(v, id)),
+                _ => false,
+            }
+        }
+        for card in &pool {
+            assert!(!contains_id(&json, card.0));
+        }
+    }
+    for player in 0..4 {
+        let own = view(&game.state, PlayerId(player)).unwrap();
+        assert!(own.choices.is_empty());
+        assert!(own.hand.is_empty());
+    }
+    let events = game.act(
+        0,
+        Action::ChooseStoreSlot {
+            pending_id: game.state.pending.last().unwrap().id,
+            slot: 2,
+        },
+    );
+    assert_eq!(game.state.players[0].hand, vec![pool[2]]);
+    for recipient in [
+        None,
+        Some(PlayerId(0)),
+        Some(PlayerId(1)),
+        Some(PlayerId(2)),
+        Some(PlayerId(3)),
+    ] {
+        let filtered = filter_events(&events, recipient);
+        assert!(filtered.iter().any(|e| matches!(
+            e.kind,
+            EventKind::StoreCardClaimed {
+                player: PlayerId(0),
+                slot: 2
+            }
+        )));
+        assert_eq!(
+            filtered
+                .iter()
+                .filter(
+                    |e| matches!(e.kind, EventKind::StoreCardReceived { card } if card == pool[2])
+                )
+                .count(),
+            usize::from(recipient == Some(PlayerId(0)))
+        );
+        assert!(!filtered.iter().any(|e| matches!(
+            e.kind,
+            EventKind::CardsReceived { .. } | EventKind::CardShown { .. }
+        )));
+    }
+    let remaining = match &game.state.pending.last().unwrap().kind {
+        PendingKind::GeneralStore { pool, .. } => pool,
+        _ => unreachable!(),
+    };
+    assert_eq!(
+        remaining,
+        &[pool[0], pool[1], pool[3]],
+        "Removing one slot preserves all other positions"
+    );
+    let restored: GameState =
+        serde_json::from_str(&serde_json::to_string(&game.state).unwrap()).unwrap();
+    for player in 0..4 {
+        assert_eq!(
+            view(&restored, PlayerId(player)),
+            view(&game.state, PlayerId(player))
+        );
+    }
+    assert_eq!(spectator_view(&restored), spectator_view(&game.state));
+}
+
+#[test]
+fn blind_store_shuffle_is_seeded_and_clockwise_default_consumes_each_slot_once() {
+    let mut orders = std::collections::BTreeSet::new();
+    for seed in 0..24 {
+        let mut first = Scenario::new(4);
+        first.rng = ChaCha8Rng::seed_from_u64(seed);
+        first.state.turn.player = PlayerId(2);
+        let mut second = Scenario {
+            state: first.state.clone(),
+            rng: first.rng.clone(),
+        };
+        play(&mut first, 2, CardKind::GeneralStore, None);
+        play(&mut second, 2, CardKind::GeneralStore, None);
+        assert_eq!(first.state, second.state);
+        let pool = match &first.state.pending.last().unwrap().kind {
+            PendingKind::GeneralStore { pool, .. } => pool.clone(),
+            _ => unreachable!(),
+        };
+        orders.insert(pool.clone());
+        for (index, player) in [2, 3, 0, 1].into_iter().enumerate() {
+            assert_eq!(first.state.decision().unwrap().player, PlayerId(player));
+            assert_eq!(spectator_view(&first.state).store_slots as usize, 4 - index);
+            assert!(matches!(
+                default_action(&first.state),
+                Some((_, Action::ChooseStoreSlot { slot: 0, .. }))
+            ));
+            first.end();
+            assert_eq!(first.state.players[player].hand, vec![pool[index]]);
+        }
+        assert_eq!(spectator_view(&first.state).store_slots, 0);
+        invariant(&first.state);
+    }
+    assert!(
+        orders.len() > 1,
+        "Different seeds must actually shuffle the store pool"
+    );
 }

@@ -2,24 +2,29 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { DecisionKind, GameSnapshot } from '../../generated/protocol.ts';
 import { demoGame } from './demo.ts';
-import { actionMode, chooseCardAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, sidHealAction, isSid } from './actions.ts';
+import { actionMode, chooseStoreSlotAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, sidHealAction, isSid } from './actions.ts';
 
 function fixture(kind: DecisionKind) {
   const game = structuredClone(demoGame);
   if (game.view.perspective !== 'player') throw new Error('Expected player fixture');
   game.view.view.table.waiting = { player: 0, pending_id: 101, kind };
   game.view.view.choices = [5, 33, 60];
-  game.view.view.table.store_pool = [6, 34, 61];
+  game.view.view.table.store_slots = 3;
   return { game, view: game.view.view, table: game.view.view.table };
 }
 
-test('General Store chooses exactly one physical card from the public pool with its current pending id', () => {
+test('General Store chooses an opaque remaining slot with the current pending id', () => {
   const { game, table } = fixture({ type: 'general_store' });
   assert.equal(actionMode(game), 'general_store');
-  assert.deepEqual(chooseCardAction(game, 34, false), { type: 'choose_card', pending_id: 101, card: 34 });
-  for (const card of [null, 33, 1, 255]) assert.equal(chooseCardAction(game, card, false), null);
+  assert.deepEqual(chooseStoreSlotAction(game, 1, false), { type: 'choose_store_slot', pending_id: 101, slot: 1 });
+  for (const slot of [null, -1, 3, 34, 255, 1.5, NaN, Infinity]) assert.equal(chooseStoreSlotAction(game, slot, false), null);
+  assert.equal(chooseStoreSlotAction(game, 1, true), null);
   table.waiting!.pending_id = 102;
-  assert.deepEqual(chooseCardAction(game, 34, false), { type: 'choose_card', pending_id: 102, card: 34 });
+  assert.deepEqual(chooseStoreSlotAction(game, 1, false), { type: 'choose_store_slot', pending_id: 102, slot: 1 });
+  table.store_slots = 1;
+  assert.equal(chooseStoreSlotAction(game, 1, false), null);
+  table.waiting!.player = 1;
+  assert.equal(chooseStoreSlotAction(game, 0, false), null);
 });
 
 test('draw source defaults to deck; Jesse selects another living hand and Pedro can take a hidden discard top', () => {
@@ -87,7 +92,7 @@ test('Sid can heal across any waiting frame, uses only his own Dying nonce, and 
 
 test('all new decision builders reject a locked input, wrong actor, spectator, dead player and missing or wrong pending kind', () => {
   const builders = [
-    { kind: { type: 'general_store' }, build: (g: GameSnapshot, locked: boolean) => chooseCardAction(g, 34, locked) },
+    { kind: { type: 'general_store' }, build: (g: GameSnapshot, locked: boolean) => chooseStoreSlotAction(g, 0, locked) },
     { kind: { type: 'draw_choice' }, build: (g: GameSnapshot, locked: boolean) => chooseDrawSourceAction(g, 'deck', locked) },
     { kind: { type: 'keep_cards', keep: 2 }, build: (g: GameSnapshot, locked: boolean) => keepCardsAction(g, [5, 33], locked) },
     { kind: { type: 'choose_draw_result', reason: 'barrel' }, build: (g: GameSnapshot, locked: boolean) => chooseDrawResultAction(g, 5, locked) },

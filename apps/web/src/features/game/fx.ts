@@ -78,8 +78,14 @@ export function eventsToFx(events: EventKind[], ctx: FxContext): FxCue[] {
         if (event.reason === 'jail') cues.push({ kind: 'escape', from: event.player, to: event.player, label: face?.suit === '♥' ? 'THOÁT!' : 'HẾT LƯỢT' });
         break;
       }
-      case 'store_opened': event.pool.slice(0, 3).forEach((card, i) => fly('draw', 'table', card, i * 90)); break;
-      case 'store_card_claimed': fly('table', hand(event.player), event.card); break;
+      case 'store_opened': for (let i = 0; i < event.count; i++) fly('draw', 'table', undefined, i * 90); break;
+      case 'store_card_claimed': {
+        fly('table', hand(event.player));
+        const received = events.find(e => e.type === 'store_card_received');
+        if (event.player === ctx.you && received?.type === 'store_card_received') cues.push({ kind: 'reveal', from: 'hand', to: 'hand', card: received.card, delay: 750 });
+        break;
+      }
+      case 'store_card_received': break;
       case 'pool_discarded': event.cards.slice(0, 3).forEach((card, i) => fly('table', 'discard', card, i * 90)); break;
       case 'card_shown': cues.push({ kind: 'reveal', from: event.player, to: 'table', card: event.card }); break;
       case 'player_eliminated': cues.push({ kind: 'eliminate', from: event.player, to: event.player, label: 'BỊ LOẠI' }); break;

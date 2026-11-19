@@ -22,9 +22,11 @@ const vite = await createServer({ root: fileURLToPath(new URL('../../../', impor
 let useCardDrag: typeof DragHook, GameBoard: typeof GameBoardComponent;
 try {
   useCardDrag = (await vite.ssrLoadModule('/src/features/game/useCardDrag.tsx')).useCardDrag;
+  await vite.ssrLoadModule('/src/features/game/StorePool.tsx');
   GameBoard = (await vite.ssrLoadModule('/src/features/game/GameBoard.tsx')).default;
-} finally { await vite.close(); }
+} catch (error) { await vite.close(); throw error; }
 after(async () => {
+  await vite.close();
   await dom.happyDOM.close();
   for (const name of Object.keys(globals)) { if (previous[name]) Object.defineProperty(globalThis, name, previous[name]); else Reflect.deleteProperty(globalThis, name); }
 });
@@ -99,6 +101,32 @@ test('GameBoard narrow Escape closes card details and restores focus without ena
     container.querySelector<HTMLElement>('.bang-board')!.focus();
     for (const key of ['2', 'Enter']) document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
   });
-  assert.deepEqual(sent, []);
+  assert.equal(sent.length, 0);
   assert.equal(container.querySelector('.own-hand [aria-pressed="true"]'), null);
+});
+
+test('blind store renders only backs and clicking a slot confirms the current pending id once', async t => {
+  const { container, root, settle } = await host(t);
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Player fixture required');
+  game.view.view.table.store_slots = 4;
+  game.view.view.table.waiting = { player: 0, pending_id: 110, kind: { type: 'general_store' } };
+  const sent: Action[] = [];
+  await act(async () => root.render(createElement(GameBoard, { game, room: demoRoom, sendAction: action => sent.push(action) })));
+  await settle();
+  const pool = container.querySelector('.store-pool')!;
+  assert.equal(pool.querySelectorAll('button[data-store-slot]').length, 4);
+  assert.equal(pool.querySelectorAll('[data-card-id], [data-tip], .card-face, .card-name').length, 0);
+  assert.ok([...pool.querySelectorAll('img')].every(img => img.alt === '' && img.getAttribute('src')?.includes('/back')));
+  const slot = pool.querySelector<HTMLButtonElement>('[data-store-slot="2"]')!;
+  await act(() => slot.click());
+  assert.equal(slot.getAttribute('aria-pressed'), 'true');
+  assert.equal(sent.length, 0);
+  const confirm = [...container.querySelectorAll<HTMLButtonElement>('.game-controls button')].find(b => b.textContent?.startsWith('Lấy lá đã chọn'))!;
+  assert.ok(!confirm.disabled);
+  await act(() => confirm.click());
+  assert.deepEqual([...sent], [{ type: 'choose_store_slot', pending_id: 110, slot: 2 }]);
+  game.view.view.table.waiting.player = 1;
+  await act(async () => root.render(createElement(GameBoard, { game, room: demoRoom, sendAction: action => sent.push(action) })));
+  assert.ok([...container.querySelectorAll<HTMLButtonElement>('.store-slot')].every(button => button.disabled));
 });

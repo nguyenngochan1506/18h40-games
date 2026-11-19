@@ -1,0 +1,22 @@
+.table-center.has-store { z-index: 3; width: min(420px, 72%); padding: 16px; transform: translate(-50%, -50%); clip-path: none; border-radius: 4px; }
+.cinematic .table-center.has-store { top: 53%; width: min(420px, 48%); padding: 16px; transform: translate(-50%, -50%); }
+.store-pool { position: relative; text-align: center; color: #382515; }
+.store-pool h3 { font: 700 18px/1.2 Georgia, serif; margin: 0 0 6px; padding-inline: 28px; }
+.store-pool p { font: 13px/1.4 system-ui, sans-serif; margin: 0 0 12px; }
+.store-slots { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.store-slot { position: relative; width: 46px; min-height: 84px; padding: 3px; border: 2px solid #79552e; border-radius: 4px; background: #362217; color: #f3d69c; cursor: pointer; }
+.store-slot img { display: block; width: 100%; border-radius: 2px; pointer-events: none; }
+.store-slot > span { display: block; font: 12px/1.4 system-ui, sans-serif; }
+.store-slot kbd { position: absolute; top: 4px; left: 4px; background: #2d1c11; border: 1px solid #c6a365; padding: 0 3px; font: 12px/1.4 system-ui, sans-serif; }
+.store-slot:disabled { cursor: default; }
+.store-slot:not(:disabled):hover, .store-slot.is-picked { outline: 3px solid #6e461e; outline-offset: 2px; background: #6b4524; }
+.store-pool > small { display: block; margin-top: 8px; font: 12px/1.4 system-ui, sans-serif; }
+.store-pool .store-deck { position: absolute; top: -4px; left: 0; width: 24px; pointer-events: none; }
+@media (max-width: 899px) {
+ .table-center.has-store { top: 78%; width: min(340px, 96%); padding: 10px; }
+ .store-slots { gap: 6px; }
+ .store-slot { width: 44px; min-height: 76px; }
+ .store-pool h3 { font-size: 16px; }
+ .store-pool p { margin-bottom: 8px; }
+ .store-pool > small { display: none; }
+}

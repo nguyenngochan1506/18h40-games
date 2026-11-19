@@ -23,7 +23,7 @@ test('sound maps every public cue, including equipment, shuffle, start and local
   assert.deepEqual(kinds([{ type: 'game_started', sheriff: 0 }]), ['gamestart']);
   assert.deepEqual(kinds([{ type: 'game_started', sheriff: 0 }, { type: 'turn_started', player: 0 }]), ['gamestart', 'turn']);
   assert.deepEqual(kinds([{ type: 'deck_reshuffled', count: 40 }]), ['shuffle']);
-  assert.ok(kinds([{ type: 'store_opened', pool: [1] }]).includes('generalstore'));
+  assert.ok(kinds([{ type: 'store_opened', count: 1 }]).includes('generalstore'));
   assert.ok(kinds([{ type: 'card_passed', source: 0, target: 1, card: card('dynamite') }]).includes('dynamite'));
   assert.deepEqual(kinds([{ type: 'turn_started', player: 1 }]), []);
   assert.deepEqual(kinds([{ type: 'turn_started', player: 0 }]), ['turn']);

@@ -21,3 +21,9 @@ test('hết ván không có băng rôn; thiếu nickname dùng ghế', () => {
   assert.equal(turnBanner(table(0, null, 'outlaws'), names, 0), null);
   assert.equal(turnBanner(table(5), names, 0)?.text, 'Lượt của Ghế 6');
 });
+
+test('General Store announces a blind choice rather than an attack response', () => {
+  const store = table(0, { player: 0, pending_id: 8, kind: { type: 'general_store' } });
+  assert.equal(turnBanner(store, names, 0)?.text, 'Chờ bạn chọn');
+  assert.equal(turnBanner(store, names, 1)?.text, 'Hân đang chọn');
+});

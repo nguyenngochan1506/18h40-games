@@ -514,7 +514,7 @@ fn kit_private_pool_exact_selection_defaults_and_short_deck_preserve_all_cards()
         let events = begin_turn(&mut game, 1);
         assert!(private_cards(&events, None).is_empty());
         assert!(view(&game.state, PlayerId(0)).unwrap().choices.is_empty());
-        assert!(spectator_view(&game.state).store_pool.is_empty());
+        assert_eq!(spectator_view(&game.state).store_slots, 0);
         if available == 0 {
             assert!(game.state.pending.is_empty());
             continue;

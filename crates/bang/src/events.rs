@@ -123,10 +123,13 @@ pub enum EventKind {
         card: CardId,
     },
     StoreOpened {
-        pool: Vec<CardId>,
+        count: u8,
     },
     StoreCardClaimed {
         player: PlayerId,
+        slot: u8,
+    },
+    StoreCardReceived {
         card: CardId,
     },
     PoolDiscarded {

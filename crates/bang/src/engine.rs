@@ -146,8 +146,11 @@ pub fn apply<R: Rng + ?Sized>(
                     }
                     CardKind::GeneralStore => {
                         let order = turn_order(state, player, true);
-                        let pool = take_draw(state, order.len(), rng, &mut events);
-                        events.push(Event::public(EventKind::StoreOpened { pool: pool.clone() }));
+                        let mut pool = take_draw(state, order.len(), rng, &mut events);
+                        pool.shuffle(rng);
+                        events.push(Event::public(EventKind::StoreOpened {
+                            count: pool.len() as u8,
+                        }));
                         state.push_pending(PendingKind::GeneralStore {
                             pool,
                             order,
@@ -177,16 +180,21 @@ pub fn apply<R: Rng + ?Sized>(
                 &mut events,
             );
         }
-        Action::ChooseCard { card, .. } => {
-            if let PendingKind::GeneralStore { pool, cursor, .. } =
+        Action::ChooseStoreSlot { slot, .. } => {
+            let card = if let PendingKind::GeneralStore { pool, cursor, .. } =
                 &mut state.pending.last_mut().unwrap().kind
             {
-                let index = pool.iter().position(|id| *id == card).unwrap();
-                pool.remove(index);
                 *cursor += 1;
-            }
+                pool.remove(usize::from(slot))
+            } else {
+                unreachable!("validated store slot")
+            };
             state.players[player.0].hand.push(card);
-            events.push(Event::public(EventKind::StoreCardClaimed { player, card }));
+            events.push(Event::public(EventKind::StoreCardClaimed { player, slot }));
+            events.push(Event {
+                visibility: Visibility::Player(player),
+                kind: EventKind::StoreCardReceived { card },
+            });
             state.renew_pending_id();
         }
         Action::Respond { card, .. } => {
@@ -831,10 +839,13 @@ pub fn default_action(state: &GameState) -> Option<(PlayerId, Action)> {
     let decision = state.decision()?;
     let action = if let Some(pending_id) = decision.pending_id {
         match &state.pending.last()?.kind {
-            PendingKind::GeneralStore { pool, .. } => Action::ChooseCard {
-                pending_id,
-                card: *pool.first()?,
-            },
+            PendingKind::GeneralStore { pool, .. } => {
+                pool.first()?;
+                Action::ChooseStoreSlot {
+                    pending_id,
+                    slot: 0,
+                }
+            }
             PendingKind::DrawChoice { .. } => Action::ChooseDrawSource {
                 pending_id,
                 source: crate::actions::DrawSource::Deck,

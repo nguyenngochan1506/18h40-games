@@ -334,7 +334,7 @@ mod tests {
             discard_count: 0,
             discard_top: None,
             winner: None,
-            store_pool: vec![],
+            store_slots: 0,
         };
         let player = GameView::Player(bang::PlayerView {
             you: bang::PlayerId(0),

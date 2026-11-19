@@ -1,5 +1,5 @@
 import type { Action, GameSnapshot } from '../../generated/protocol';
-import { actionMode, discardCount, emptyDraft, endTurnAction, playAction, playKind, needsTarget, respondAction, responseKind, chooseCardAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, isSid, sidHealAction } from './actions';
+import { actionMode, discardCount, emptyDraft, endTurnAction, playAction, playKind, needsTarget, respondAction, responseKind, chooseStoreSlotAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, isSid, sidHealAction } from './actions';
 import type { ActionDraft } from './actions';
 import { cardFace } from './cardCatalog';
 import { cards } from './i18n';
@@ -26,9 +26,9 @@ function DecisionControls({ game, draft, disabled, setDraft, sendAction }: Props
       </fieldset><div className="control-buttons"><button type="button" className="action" data-primary-action="true" aria-keyshortcuts="Enter" disabled={!action} onClick={() => send(action)}>Rút bài <kbd aria-hidden="true">Enter</kbd></button>{cancel}</div></div>;
   }
   if (mode === 'general_store' || mode === 'keep_cards' || mode === 'choose_draw_result') {
-    const action = mode === 'general_store' ? chooseCardAction(game, draft.card, disabled) : mode === 'keep_cards' ? keepCardsAction(game, draft.kept, disabled) : chooseDrawResultAction(game, draft.card, disabled);
+    const action = mode === 'general_store' ? chooseStoreSlotAction(game, draft.storeSlot, disabled) : mode === 'keep_cards' ? keepCardsAction(game, draft.kept, disabled) : chooseDrawResultAction(game, draft.card, disabled);
     const reason = table.waiting?.kind.type === 'choose_draw_result' ? cards[table.waiting.kind.reason].name : '';
-    return <div className="game-controls" aria-label="Chọn bài"><p role="status">{mode === 'general_store' ? 'Chọn 1 lá từ General Store.' : mode === 'keep_cards' ? `Chọn ${keepCount(game)} trong ${selectGameView(game.view).choices.length} lá để giữ · Đã chọn ${draft.kept.length}/${keepCount(game)}. Lá còn lại sẽ úp lên đỉnh bộ rút.` : `Lật kiểm tra cho ${reason}. Chọn 1 lá làm kết quả.`}</p>
+    return <div className="game-controls" aria-label="Chọn bài"><p role="status">{mode === 'general_store' ? 'Chọn 1 lá úp.' : mode === 'keep_cards' ? `Chọn ${keepCount(game)} trong ${selectGameView(game.view).choices.length} lá để giữ · Đã chọn ${draft.kept.length}/${keepCount(game)}. Lá còn lại sẽ úp lên đỉnh bộ rút.` : `Lật kiểm tra cho ${reason}. Chọn 1 lá làm kết quả.`}</p>
       <div className="control-buttons"><button type="button" className="action" data-primary-action="true" aria-keyshortcuts="Enter" disabled={!action} onClick={() => send(action)}>{mode === 'general_store' ? 'Lấy lá đã chọn' : mode === 'keep_cards' ? 'Giữ bài' : 'Chọn kết quả'} <kbd aria-hidden="true">Enter</kbd></button>{cancel}</div></div>;
   }
   if (mode === 'response') {

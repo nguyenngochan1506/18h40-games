@@ -2,8 +2,8 @@ import type { Action, CardId, CardKind, CardSelection, DrawSource, GameSnapshot 
 import { cardFace } from './cardCatalog.ts';
 import { selectGameView } from './state.ts';
 
-export type ActionDraft = { card: CardId | null; target: number | null; selection: CardSelection | null; discarding: boolean; discard: CardId[]; healing: boolean; source: DrawSource; kept: CardId[] };
-export const emptyDraft: ActionDraft = { card: null, target: null, selection: null, discarding: false, discard: [], healing: false, source: 'deck', kept: [] };
+export type ActionDraft = { storeSlot: number | null; card: CardId | null; target: number | null; selection: CardSelection | null; discarding: boolean; discard: CardId[]; healing: boolean; source: DrawSource; kept: CardId[] };
+export const emptyDraft: ActionDraft = { storeSlot: null, card: null, target: null, selection: null, discarding: false, discard: [], healing: false, source: 'deck', kept: [] };
 
 export function actionMode(game: GameSnapshot): 'view' | 'waiting' | 'turn' | 'response' | 'general_store' | 'draw_choice' | 'keep_cards' | 'choose_draw_result' {
   const { table, you } = selectGameView(game.view);
@@ -92,10 +92,10 @@ export function endTurnAction(game: GameSnapshot, discard: CardId[], locked: boo
   return { type: 'end_turn', discard };
 }
 
-export function chooseCardAction(game: GameSnapshot, card: CardId | null, locked: boolean): Action | null {
+export function chooseStoreSlotAction(game: GameSnapshot, slot: number | null, locked: boolean): Action | null {
   const { table } = selectGameView(game.view);
-  if (locked || actionMode(game) !== 'general_store' || table.waiting?.pending_id == null || card === null || !table.store_pool.includes(card)) return null;
-  return { type: 'choose_card', pending_id: table.waiting.pending_id, card };
+  if (locked || actionMode(game) !== 'general_store' || table.waiting?.pending_id == null || slot === null || !Number.isInteger(slot) || slot < 0 || slot >= table.store_slots) return null;
+  return { type: 'choose_store_slot', pending_id: table.waiting.pending_id, slot };
 }
 
 export function chooseDrawSourceAction(game: GameSnapshot, source: DrawSource, locked: boolean): Action | null {

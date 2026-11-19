@@ -45,7 +45,7 @@ test('equipment, inherited cards, Store and dynamite transfer use the correct pu
   const equip = eventsToFx(demoFx.jail.events, ctx);
   assert.equal(equip.filter(e => e.kind === 'card').length, 1);
   assert.equal(equip[0].from, 'hand'); assert.equal(equip[0].to, 'equipment-1');
-  const transfers = eventsToFx([{ type: 'card_passed', source: 1, target: 2, card: 65 }, { type: 'cards_inherited', player: 0, victim: 3, count: 2 }, { type: 'store_card_claimed', player: 0, card: 37 }], ctx);
+  const transfers = eventsToFx([{ type: 'card_passed', source: 1, target: 2, card: 65 }, { type: 'cards_inherited', player: 0, victim: 3, count: 2 }, { type: 'store_card_claimed', player: 0, slot: 1 }, { type: 'store_card_received', card: 37 }], ctx);
   assert.deepEqual(transfers[0], { kind: 'card', from: 'equipment-1', to: 'equipment-2', card: 65, delay: 0 });
   assert.equal(transfers[1].from, 3); assert.equal(transfers[1].card, undefined);
   const inherited = eventsToFx([{ type: 'cards_inherited', player: 0, victim: 3, count: 2 }, { type: 'cards_drawn', player: 0, count: 2 }, { type: 'cards_received', player: 0, cards: [1, 26] }], ctx);
@@ -145,5 +145,20 @@ test('angled muzzle stays on the inward hand regardless of the target side', () 
     const expected = { x: 10 + 100 * handX, y: 30 + 200 * handY };
     assert.deepEqual(shotOrigin(from, { x: 0, y: 0 }, actor), expected);
     assert.deepEqual(shotOrigin(from, { x: 300, y: 300 }, actor), expected);
+  }
+});
+
+test('blind store FX expose no faces until the receiving player reveals the claimed card at their hand', () => {
+  const opened = eventsToFx([{ type: 'store_opened', count: 7 }], ctx);
+  assert.equal(opened.length, 7);
+  assert.ok(opened.every(cue => cue.card === undefined && cue.from === 'draw' && cue.to === 'table'));
+  const events: EventKind[] = [{ type: 'store_card_claimed', player: 0, slot: 2 }, { type: 'store_card_received', card: 37 }];
+  const own = eventsToFx(events, ctx);
+  assert.equal(own[0].card, undefined);
+  assert.deepEqual(own[1], { kind: 'reveal', from: 'hand', to: 'hand', card: 37, delay: 750 });
+  for (const you of [1, null]) {
+    const other = eventsToFx(events.slice(0, 1), { ...ctx, you });
+    assert.ok(other.every(cue => cue.card === undefined));
+    assert.equal(other[0].to, 0);
   }
 });

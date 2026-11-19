@@ -64,8 +64,9 @@ export function eventsToLog(events: EventKind[], ctx: LogContext): string[] {
       case 'hand_card_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${event.kind === 'panic' ? 'lấy' : 'buộc bỏ'} ${cardName(event.card)} từ tay ${name(event.target)}.`;
       case 'in_play_card_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${event.kind === 'panic' ? 'lấy' : 'bỏ'} ${cardName(event.card)} trước mặt ${name(event.target)}.`;
       case 'draw_revealed': return `${name(event.player)} lật kiểm tra cho ${cards[event.reason].name}: ${cardName(event.card)}.`;
-      case 'store_opened': return `General Store mở: ${list(event.pool)}.`;
-      case 'store_card_claimed': return `${name(event.player)} chọn ${cardName(event.card)} từ General Store.`;
+      case 'store_opened': return `General Store mở ${event.count} lá úp.`;
+      case 'store_card_claimed': return `${name(event.player)} chọn một lá General Store.`
+      case 'store_card_received': return `Bạn nhận ${cardName(event.card)}.`;
       case 'pool_discarded': return `Bỏ các lá còn lại: ${list(event.cards)}.`;
       case 'bounty_awarded': return `${name(event.player)} được thưởng rút 3 lá vì hạ ${name(event.victim)} (Tội phạm).`;
       case 'sheriff_penalized': return `${name(event.player)} bị phạt bỏ hết bài vì hạ ${name(event.victim)} (Phó cảnh sát).`;
