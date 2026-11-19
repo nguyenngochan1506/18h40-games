@@ -156,6 +156,7 @@ test('blind store FX expose no faces until the receiving player reveals the clai
   const events: EventKind[] = [{ type: 'store_card_claimed', player: 0, slot: 2 }, { type: 'store_card_received', card: 37 }];
   const own = eventsToFx(events, ctx);
   assert.equal(own[0].card, undefined);
+  assert.equal(own[0].from, 'store-0');
   assert.deepEqual(own[1], { kind: 'reveal', from: 'hand', to: 'hand', card: 37, delay: 750 });
   for (const you of [1, null]) {
     const other = eventsToFx(events.slice(0, 1), { ...ctx, you });

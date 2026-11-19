@@ -201,6 +201,18 @@ test('equipment arrivals use the actual public face rect inside the moved rack',
   assert.equal(flight[2].transform, 'translate(-360px,-360px) translate(-50%,-50%) rotate(-6deg) scale(.7)');
 });
 
+test('blind store flights start at the measured claimed fan card without a face', async t => {
+  const fx = await mount(t);
+  const slot = document.createElement('button'); slot.dataset.animationRegion = 'store-1'; fx.stage.append(slot);
+  t.mock.method(slot, 'getBoundingClientRect', () => ({ x: 350, y: 250, width: 64, height: 100 }) as DOMRect);
+  await fx.render({ batch: { id: 1, events: [{ type: 'store_card_claimed', player: 1, slot: 2 }], waiting: null } });
+  await fx.tick(0);
+  const flight = fx.layer.querySelector<HTMLElement>('.fx-cue-card')!;
+  assert.equal(flight.style.left, '382px');
+  assert.equal(flight.style.top, '300px');
+  assert.ok(flight.querySelector('img')!.src.includes('/back'));
+});
+
 test('own Jail stays in the portrait while other players keep their actor cages', async t => {
   const fx = await mount(t);
   const players = structuredClone(ctx.players);

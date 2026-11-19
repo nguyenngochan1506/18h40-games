@@ -6,6 +6,7 @@ import { Window } from 'happy-dom';
 import { createServer } from 'vite';
 import { act, createElement, useRef } from 'react';
 import type { Action, DecisionKind } from '../../generated/protocol.ts';
+import type { FxBatch } from './fx.ts';
 import type { useCardDrag as DragHook } from './useCardDrag.tsx';
 import type GameBoardComponent from './GameBoard.tsx';
 import { emptyDraft, type ActionDraft } from './actions.ts';
@@ -150,6 +151,13 @@ for (const kind of ['panic', 'cat_balou'] as const) test(`blind ${kind} tray hid
   await act(() => pool.querySelector<HTMLButtonElement>('[data-hand-slot="2"]')!.click());
   assert.equal(sent.length, 0);
   assert.equal(pool.querySelector('[aria-pressed="true"]')?.getAttribute('data-hand-slot'), '2');
+  const second = pool.querySelector<HTMLButtonElement>('[data-hand-slot="1"]')!;
+  await act(() => {
+    second.focus();
+    second.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  });
+  assert.equal(document.activeElement?.getAttribute('data-hand-slot'), '2');
+  assert.equal(sent.length, 0, 'Arrow focus never sends an action');
   const confirm = () => container.querySelector<HTMLButtonElement>('.game-controls [data-primary-action]')!;
   assert.equal(confirm().disabled, false);
   await act(() => confirm().click());
@@ -168,6 +176,39 @@ for (const kind of ['panic', 'cat_balou'] as const) test(`blind ${kind} tray hid
   await render();
   assert.ok([...container.querySelectorAll<HTMLButtonElement>('[data-hand-slot]')].every(button => button.disabled));
   assert.equal(sent.length, 1);
+});
+
+test('claimed store fan cards retain public recipients while available buttons use compact server indices', async t => {
+  const { container, root, settle } = await host(t);
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Player fixture required');
+  const table = game.view.view.table;
+  table.store_slots = 4;
+  table.waiting = { player: 0, pending_id: 130, kind: { type: 'general_store' } };
+  const sent: Action[] = [];
+  const render = async (fxBatch: FxBatch) => { await act(async () => root.render(createElement(GameBoard, { game, room: demoRoom, fxBatch, fxEnabled: false, sendAction: action => sent.push(action) }))); await settle(); };
+  await render({ id: 1, events: [{ type: 'store_opened', count: 4 }], waiting: table.waiting });
+  table.store_slots = 3; game.seq++; table.waiting.pending_id = 131;
+  const batch: FxBatch = { id: 2, events: [{ type: 'store_card_claimed', player: 1, slot: 1 }], waiting: table.waiting };
+  await render(batch);
+  const pool = container.querySelector('.store-pool')!;
+  assert.equal(pool.querySelectorAll('.store-slot').length, 4);
+  assert.equal(pool.querySelectorAll('[data-store-slot]').length, 3);
+  const claimed = pool.querySelector<HTMLButtonElement>('.is-claimed')!;
+  assert.ok(claimed.disabled);
+  assert.match(claimed.getAttribute('aria-label')!, /Minh/);
+  assert.equal(claimed.dataset.animationRegion, 'store-1');
+  assert.equal(pool.querySelectorAll('[data-card-id],[data-tip],.card-face,.card-name').length, 0);
+  await act(() => pool.querySelector<HTMLButtonElement>('[data-store-slot="1"]')!.click());
+  await render(batch);
+  assert.equal(pool.querySelectorAll('.is-claimed').length, 1, 'A repeated render never replays a claim');
+  assert.equal(sent.length, 0);
+  await act(() => container.querySelector<HTMLButtonElement>('.game-controls [data-primary-action]')!.click());
+  assert.deepEqual(sent, [{ type: 'choose_store_slot', pending_id: 131, slot: 1 }]);
+  table.store_slots = 2; game.seq++; table.waiting.pending_id = 132;
+  await render({ id: 3, events: [{ type: 'store_card_claimed', player: 1, slot: 1 }], waiting: table.waiting });
+  assert.equal(pool.querySelectorAll('.is-claimed').length, 2);
+  assert.equal(pool.querySelectorAll('[data-animation-region="store-1"]').length, 1, 'Repeated demo recipients keep a unique latest flight origin');
 });
 
 test('tidy equipment keeps grouped DOM order, authoritative chips, equal risk sizes and direct face selection', async t => {

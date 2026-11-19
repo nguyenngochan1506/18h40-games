@@ -15,6 +15,7 @@ import { selectGameView } from './state';
 import { cardCatalog } from './cardCatalog';
 
 const demoEquipment = (['volcanic', 'schofield', 'winchester', 'barrel', 'scope', 'mustang', 'dynamite', 'jail'] as const).map(kind => cardCatalog.findIndex(card => card.kind === kind));
+const demoStoreCards = [5, 33, 60, 71, 10, 11, 12];
 
 export default function GameDemo() {
   const soundLabels: Record<SoundKind, string> = { shot: 'BANG!', gatling: 'Súng liên thanh', missed: 'Đạn bật', explosion: 'Vụ nổ', card: 'Lật bài', draw: 'Rút bài', shuffle: 'Xáo bài', clink: 'Chạm chai', reload: 'Nạp đạn', neigh: 'Ngựa hí', turn: 'Chuông lượt', tap: 'Gõ bàn', hit: 'Trúng đạn', jail: 'Cửa Jail', gamestart: 'Bắt đầu ván', victory: 'Chiến thắng', death: 'Bị loại', duel: 'Đấu súng', indians: 'Thổ dân', generalstore: 'Cửa hàng', invalid: 'Hành động bị từ chối', dynamite: 'Ngòi Dynamite' };
@@ -30,6 +31,8 @@ export default function GameDemo() {
   const [played, setPlayed] = useState<number[]>([]);
   const [handPicked, setHandPicked] = useState(false);
   const [storePicked, setStorePicked] = useState<number[]>([]);
+  const requestedSlots = Number(new URLSearchParams(window.location.search).get('slots') ?? 4);
+  const handSlots = Number.isInteger(requestedSlots) ? Math.max(1, Math.min(12, requestedSlots)) : 4;
   useEffect(() => {
     if (!trial) return;
     const timer = window.setTimeout(() => {
@@ -37,7 +40,7 @@ export default function GameDemo() {
       if (reject) setActionError(errorMessages.illegal_action);
       else if (trial.action.type === 'choose_store_slot') {
         const { slot } = trial.action;
-        const card = [5, 33, 60, 71].filter(id => !storePicked.includes(id))[slot];
+        const card = demoStoreCards.slice(0, count).filter(id => !storePicked.includes(id))[slot];
         setStorePicked(current => [...current, card]);
         setFxBatch(current => ({ id: (current?.id ?? 0) + 1, events: [{ type: 'store_card_claimed', player: 0, slot }, { type: 'store_card_received', card }], waiting: null }));
       }
@@ -77,13 +80,13 @@ export default function GameDemo() {
     if (mode === 'duel') table.waiting = { player: 0, pending_id: 14, kind: { type: 'duel' } };
     if (mode === 'dying') { table.players[0].health = 0; table.waiting = { player: 0, pending_id: 15, kind: { type: 'dying', needed: 1 } }; }
     if (mode === 'hand_panic' || mode === 'hand_cat') {
-      table.turn.player = 0; table.players[1].hand_count = handPicked ? 3 : 4;
-      table.waiting = handPicked ? { player: 0, pending_id: null, kind: { type: 'turn' } } : { player: 0, pending_id: 22, kind: { type: 'pick_hand_slot', target: 1, kind: mode === 'hand_cat' ? 'cat_balou' : 'panic', count: 4 } };
+      table.turn.player = 0; table.players[1].hand_count = handPicked ? handSlots - 1 : handSlots;
+      table.waiting = handPicked ? { player: 0, pending_id: null, kind: { type: 'turn' } } : { player: 0, pending_id: 22, kind: { type: 'pick_hand_slot', target: 1, kind: mode === 'hand_cat' ? 'cat_balou' : 'panic', count: handSlots } };
       if (handPicked && mode === 'hand_panic') game.view.view.hand.push(26);
       if (handPicked && mode === 'hand_cat') { table.discard_count += 1; table.discard_top = null; }
       game.seq += Number(handPicked);
     }
-    if (mode === 'store') { game.view.view.hand.push(...storePicked); game.seq += storePicked.length; table.store_slots = 4 - storePicked.length; table.waiting = table.store_slots ? { player: 0, pending_id: 16 + storePicked.length, kind: { type: 'general_store' } } : { player: 0, pending_id: null, kind: { type: 'turn' } }; }
+    if (mode === 'store') { game.view.view.hand.push(...storePicked); game.seq += storePicked.length; for (const player of table.players) { player.alive = true; player.health = Math.max(2, player.health); } table.store_slots = count - storePicked.length; table.waiting = table.store_slots ? { player: 0, pending_id: 16 + storePicked.length, kind: { type: 'general_store' } } : { player: 0, pending_id: null, kind: { type: 'turn' } }; }
     if (mode === 'jesse' || mode === 'pedro') { table.players[0].character = mode === 'jesse' ? 'jesse_jones' : 'pedro_ramirez'; table.waiting = { player: 0, pending_id: 17, kind: { type: 'draw_choice' } }; }
     if (mode === 'kit' || mode === 'kit_short') { table.players[0].character = 'kit_carlson'; game.view.view.choices = mode === 'kit_short' ? [5] : [5, 33, 60]; table.waiting = { player: 0, pending_id: 18, kind: { type: 'keep_cards', keep: Math.min(2, game.view.view.choices.length) } }; }
     if (mode.startsWith('lucky')) { table.players[0].character = 'lucky_duke'; game.view.view.choices = [5, 33]; table.waiting = { player: 0, pending_id: 19, kind: { type: 'choose_draw_result', reason: mode === 'lucky_jail' ? 'jail' : mode === 'lucky_dynamite' ? 'dynamite' : 'barrel' } }; }

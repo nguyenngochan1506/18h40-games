@@ -1,7 +1,7 @@
 import type { CardId, Decision, EventKind, GameSeat, PublicPlayer } from '../../generated/protocol.ts';
 import { cardFace } from './cardCatalog.ts';
 
-export type FxAnchor = number | 'draw' | 'discard' | 'hand' | 'table' | `equipment-${number}` | `health-${number}`;
+export type FxAnchor = number | 'draw' | 'discard' | 'hand' | 'table' | `equipment-${number}` | `health-${number}` | `store-${number}`;
 export type FxKind = 'shot' | 'deflect' | 'damage' | 'heal' | 'card' | 'equip' | 'explosion' | 'jail' | 'escape' | 'duel' | 'indians' | 'eliminate' | 'reveal' | 'turn' | 'win';
 export type FxCue = { kind: FxKind; from: FxAnchor; to: FxAnchor; card?: CardId; label?: string; delay?: number };
 export type FxBatch = { id: number; events: EventKind[]; waiting: Decision | null };
@@ -80,7 +80,7 @@ export function eventsToFx(events: EventKind[], ctx: FxContext): FxCue[] {
       }
       case 'store_opened': for (let i = 0; i < event.count; i++) fly('draw', 'table', undefined, i * 90); break;
       case 'store_card_claimed': {
-        fly('table', hand(event.player));
+        fly(`store-${event.player}`, hand(event.player));
         const received = events.find(e => e.type === 'store_card_received');
         if (event.player === ctx.you && received?.type === 'store_card_received') cues.push({ kind: 'reveal', from: 'hand', to: 'hand', card: received.card, delay: 750 });
         break;

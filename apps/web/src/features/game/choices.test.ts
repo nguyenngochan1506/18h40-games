@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { DecisionKind, GameSnapshot } from '../../generated/protocol.ts';
 import { demoGame } from './demo.ts';
+import { storeOwners } from './choiceFan.ts';
 import { actionMode, chooseHandSlotAction, chooseStoreSlotAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, sidHealAction, isSid } from './actions.ts';
 
 function fixture(kind: DecisionKind) {
@@ -25,6 +26,14 @@ test('General Store chooses an opaque remaining slot with the current pending id
   assert.equal(chooseStoreSlotAction(game, 1, false), null);
   table.waiting!.player = 1;
   assert.equal(chooseStoreSlotAction(game, 0, false), null);
+});
+
+test('a retained claimed fan position never changes the remaining server slot index', () => {
+  const { game } = fixture({ type: 'general_store' });
+  const owners = storeOwners([null, null, null, null], 3, [{ type: 'store_card_claimed', player: 1, slot: 1 }]);
+  const available = owners.flatMap((owner, index) => owner === null ? [index] : []);
+  assert.deepEqual(available, [0, 2, 3]);
+  assert.deepEqual(chooseStoreSlotAction(game, available.indexOf(2), false), { type: 'choose_store_slot', pending_id: 101, slot: 1 });
 });
 
 test('draw source defaults to deck; Jesse selects another living hand and Pedro can take a hidden discard top', () => {
