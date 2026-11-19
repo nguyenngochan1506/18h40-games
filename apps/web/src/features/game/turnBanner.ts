@@ -1,0 +1,16 @@
+import type { SpectatorView } from '../../generated/protocol';
+
+export type TurnBanner = { text: string; own: boolean; key: string };
+
+// Chỉ đọc dữ liệu đã có trong view: ai có lượt, ai đang bị chờ phản ứng.
+export function turnBanner(table: Pick<SpectatorView, 'turn' | 'waiting' | 'winner'>, nicknames: Map<number, string>, viewer: number | null): TurnBanner | null {
+  if (table.winner) return null;
+  const name = (id: number) => nicknames.get(id) ?? `Ghế ${id + 1}`;
+  const waiting = table.waiting;
+  if (waiting && waiting.kind.type !== 'turn') {
+    const own = waiting.player === viewer;
+    return { own, key: `wait:${waiting.player}`, text: own ? 'Chờ bạn phản ứng' : `${name(waiting.player)} đang phản ứng` };
+  }
+  const own = table.turn.player === viewer;
+  return { own, key: `turn:${table.turn.player}`, text: own ? 'Đến lượt bạn!' : `Lượt của ${name(table.turn.player)}` };
+}
