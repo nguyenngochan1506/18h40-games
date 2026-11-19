@@ -42,3 +42,7 @@
 .cinematic .game-seat:not(.has-turn):not(.own-seat) .seat-person { opacity: .86; }
 .own-hand.is-my-turn { border-color: #ffdf7f; box-shadow: 0 0 0 2px #7a4f1a, 0 0 28px #f3b64acc; }
 @media (prefers-reduced-motion: reduce) { .turn-banner.is-own, .ui-turn-glow { animation: none; } }
+
+/* Lá bài trong tay được phép nhô lên trên khay (không bị cắt đỉnh) */
+.cinematic .hand-tray .hand-cards { overflow: visible; }
+.cinematic .hand-tray { overflow: visible; }
