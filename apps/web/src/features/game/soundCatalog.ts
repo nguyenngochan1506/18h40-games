@@ -14,7 +14,7 @@ export const soundCues = {
   shuffle: cue(own('shuffle', 'shuffle'), 'click', 1.8, .6, 1000),
   clink: cue(own('clink'), 'ding', 1, .65, 150), reload: cue(own('reload'), 'click', 1),
   neigh: cue(own('neigh'), 'ding', 1.6, .6, 400), tap: cue(own('tap'), 'click', .7, .55, 160),
-  hit: cue([], 'hit', .2, .75), jail: cue([], 'jail', .8, .65, 400),
+  hit: cue([], 'hit', .2, .75), turn: cue([], 'ding', .7, .4, 400), jail: cue([], 'jail', .8, .65, 400),
   gamestart: { ...cue(bang('gamestart'), 'ding', 2.2, .5, 2000), offset: 2 }, victory: cue(bang('victory'), 'ding', 3.9, .6, 2000),
   death: cue(bang('death'), 'hit', 1.7, .5, 600), duel: cue(bang('duel'), 'ding', 1.6, .55, 600),
   indians: cue(bang('indians'), 'ding', 1.6, .55, 600), generalstore: cue(bang('generalstore'), 'ding', 1.2, .55, 500),

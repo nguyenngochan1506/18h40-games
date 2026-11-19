@@ -21,7 +21,7 @@ export function eventsToSounds(events: EventKind[], ctx: FxContext, congested = 
   }
   // The opening fanfare replaces the initial deal; setup is accepted only once by the reducer.
   if (events.some(e => e.type === 'game_started')) {
-    if (events.some(e => e.type === 'turn_started' && e.player === ctx.you)) jobs.push({ kind: 'tap', start: 400 });
+    if (events.some(e => e.type === 'turn_started' && e.player === ctx.you)) jobs.push({ kind: 'turn', start: 400 });
     return jobs.slice(0, SOUND_BATCH_LIMIT);
   }
   let gatling = false;
@@ -41,7 +41,7 @@ export function eventsToSounds(events: EventKind[], ctx: FxContext, congested = 
       case 'indians': kind = 'indians'; break;
       case 'eliminate': kind = 'death'; break;
       case 'win': kind = 'victory'; break;
-      case 'turn': kind = job.to === ctx.you ? 'tap' : null; break;
+      case 'turn': kind = job.to === ctx.you ? 'turn' : null; break;
       case 'card': kind = job.from === 'draw' && job.to === 'hand' ? 'draw' : 'card'; break;
       case 'reveal': kind = 'card'; break;
       case 'equip': {

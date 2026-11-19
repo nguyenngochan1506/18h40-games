@@ -13,7 +13,7 @@ import { errorMessages } from '../../shared/lib/errors';
 import { selectGameView } from './state';
 
 export default function GameDemo() {
-  const soundLabels: Record<SoundKind, string> = { shot: 'BANG!', gatling: 'Súng liên thanh', missed: 'Đạn bật', explosion: 'Vụ nổ', card: 'Lật bài', draw: 'Rút bài', shuffle: 'Xáo bài', clink: 'Chạm chai', reload: 'Nạp đạn', neigh: 'Ngựa hí', tap: 'Gõ bàn', hit: 'Trúng đạn', jail: 'Cửa Jail', gamestart: 'Bắt đầu ván', victory: 'Chiến thắng', death: 'Bị loại', duel: 'Đấu súng', indians: 'Thổ dân', generalstore: 'Cửa hàng', invalid: 'Hành động bị từ chối', dynamite: 'Ngòi Dynamite' };
+  const soundLabels: Record<SoundKind, string> = { shot: 'BANG!', gatling: 'Súng liên thanh', missed: 'Đạn bật', explosion: 'Vụ nổ', card: 'Lật bài', draw: 'Rút bài', shuffle: 'Xáo bài', clink: 'Chạm chai', reload: 'Nạp đạn', neigh: 'Ngựa hí', turn: 'Chuông lượt', tap: 'Gõ bàn', hit: 'Trúng đạn', jail: 'Cửa Jail', gamestart: 'Bắt đầu ván', victory: 'Chiến thắng', death: 'Bị loại', duel: 'Đấu súng', indians: 'Thổ dân', generalstore: 'Cửa hàng', invalid: 'Hành động bị từ chối', dynamite: 'Ngòi Dynamite' };
   const [mode, setMode] = useState(() => new URLSearchParams(window.location.search).get('mode') ?? 'turn');
   const [count, setCount] = useState(() => { const n = Number(new URLSearchParams(window.location.search).get('players')); return [4, 5, 6, 7].includes(n) ? n : 5; });
   const [ambientEnabled, setAmbientEnabled] = useState(true);

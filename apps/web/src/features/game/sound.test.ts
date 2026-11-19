@@ -21,12 +21,12 @@ test('sound maps every public cue, including equipment, shuffle, start and local
   assert.equal(kinds(demoFx.gatling.events).includes('shot'), false);
   for (const [face, sound] of [['volcanic', 'reload'], ['winchester', 'reload'], ['mustang', 'neigh'], ['barrel', 'tap'], ['scope', 'tap'], ['dynamite', 'dynamite'], ['jail', 'jail']] as const) assert.ok(kinds([{ type: 'card_equipped', player: 1, card: card(face) }]).includes(sound), face);
   assert.deepEqual(kinds([{ type: 'game_started', sheriff: 0 }]), ['gamestart']);
-  assert.deepEqual(kinds([{ type: 'game_started', sheriff: 0 }, { type: 'turn_started', player: 0 }]), ['gamestart', 'tap']);
+  assert.deepEqual(kinds([{ type: 'game_started', sheriff: 0 }, { type: 'turn_started', player: 0 }]), ['gamestart', 'turn']);
   assert.deepEqual(kinds([{ type: 'deck_reshuffled', count: 40 }]), ['shuffle']);
   assert.ok(kinds([{ type: 'store_opened', pool: [1] }]).includes('generalstore'));
   assert.ok(kinds([{ type: 'card_passed', source: 0, target: 1, card: card('dynamite') }]).includes('dynamite'));
   assert.deepEqual(kinds([{ type: 'turn_started', player: 1 }]), []);
-  assert.deepEqual(kinds([{ type: 'turn_started', player: 0 }]), ['tap']);
+  assert.deepEqual(kinds([{ type: 'turn_started', player: 0 }]), ['turn']);
   assert.deepEqual(kinds([{ type: 'turn_started', player: 0 }], null), []);
   assert.ok(kinds([{ type: 'draw_revealed', player: 1, reason: 'barrel', card: 37 }]).includes('missed'));
 });
