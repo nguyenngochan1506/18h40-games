@@ -114,3 +114,8 @@ export function shotOrigin(from: { x: number; y: number }, to: { x: number; y: n
   if (!actor) return from;
   return { x: actor.x + actor.width * (actor.handX ?? (to.x >= actor.x + actor.width / 2 ? .72 : .28)), y: actor.y + actor.height * (actor.handY ?? .62) };
 }
+
+export function particlePolicy(state: { width: number; reduced: boolean; webgl: boolean; cores?: number; memory?: number; saveData?: boolean }) {
+  const enabled = state.width >= 900 && !state.reduced && state.webgl;
+  return { enabled, ambient: enabled && !state.saveData && (state.cores ?? 8) > 4 && (state.memory ?? 8) > 4 };
+}

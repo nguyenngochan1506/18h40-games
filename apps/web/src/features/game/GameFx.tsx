@@ -3,8 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 import { assetUrl, availableSceneFiles, backFiles, cardFiles, seatActorFile, fxFiles, optionalSceneFiles } from './assetMap';
 import type { SeatView } from './assetMap';
 import { cardFace } from './cardCatalog';
-import { eventsToFx, FX_BUDGET, FX_CONCURRENT, scheduleFx, shouldPlayFx, shotOrigin } from './fx';
+import { eventsToFx, FX_BUDGET, FX_CONCURRENT, scheduleFx, shouldPlayFx, shotOrigin, particlePolicy } from './fx';
 import type { FxAnchor, FxBatch, FxContext } from './fx';
+import type { ParticleRenderer } from './ParticleRenderer';
 import './fx.css';
 
 type Point = { x: number; y: number };
@@ -57,7 +58,11 @@ function card(cardId?: number) {
   return node;
 }
 
-export default function GameFx({ batch, ctx, enabled, width, height }: { batch: FxBatch | null; ctx: FxContext; enabled: boolean; width: number; height: number }) {
+export default function GameFx({ batch, ctx, enabled, width, height, ambientEnabled = true }: { batch: FxBatch | null; ctx: FxContext; enabled: boolean; width: number; height: number; ambientEnabled?: boolean }) {
+  const particleHost = useRef<HTMLDivElement>(null);
+  const particles = useRef<ParticleRenderer | null>(null);
+  const ambientRequested = useRef(ambientEnabled);
+  ambientRequested.current = ambientEnabled;
   const layer = useRef<HTMLDivElement>(null);
   const persistent = useRef<HTMLDivElement>(null);
   const atmosphere = useRef<HTMLDivElement>(null);
@@ -67,6 +72,43 @@ export default function GameFx({ batch, ctx, enabled, width, height }: { batch: 
   const [activity, setActivity] = useState(() => ({ hidden: document.hidden, reduced: matchMedia('(prefers-reduced-motion: reduce)').matches }));
   const active = enabled && !activity.hidden && !activity.reduced;
   useEffect(() => { if (active) preloadArt(); }, [active]);
+  useEffect(() => {
+    if (!enabled || activity.reduced) return;
+    const host = particleHost.current!;
+    const start = performance.now();
+    const canvas = document.createElement('canvas');
+    let context: WebGL2RenderingContext | null = null;
+    try { context = canvas.getContext('webgl2', { alpha: true, antialias: false, stencil: true }); } catch { /* DOM FX remain available. */ }
+    const device = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
+    const policy = particlePolicy({ width: window.innerWidth, reduced: activity.reduced, webgl: !!context, cores: device.hardwareConcurrency, memory: device.deviceMemory, saveData: device.connection?.saveData });
+    if (!policy.enabled || !context) return;
+    let cancelled = false;
+    void import('./ParticleRenderer').then(module => {
+      if (cancelled) return null;
+      return module.createParticleRenderer(host, canvas, context!);
+    }).then(renderer => {
+      if (!renderer) return;
+      if (cancelled) { renderer.destroy(); return; }
+      particles.current = renderer;
+      renderer.resize(host.clientWidth, host.clientHeight);
+      host.dataset.ambientAllowed = String(policy.ambient);
+      renderer.setAmbient(policy.ambient && ambientRequested.current);
+      performance.measure('bang-particles-init', { start, end: performance.now() });
+    }).catch(() => {
+      // Optional WebGL decoration must never interrupt the table.
+      context?.getExtension('WEBGL_lose_context')?.loseContext();
+    });
+    return () => {
+      cancelled = true; particles.current?.destroy(); particles.current = null;
+      context?.getExtension('WEBGL_lose_context')?.loseContext();
+    };
+  }, [enabled, activity.reduced]);
+  useEffect(() => {
+    if (activity.hidden) particles.current?.suspend(); else particles.current?.resume();
+  }, [activity.hidden]);
+  useEffect(() => { particles.current?.resize(width, height); }, [width, height]);
+  useEffect(() => { particles.current?.setAmbient(ambientEnabled && particleHost.current?.dataset.ambientAllowed === 'true'); }, [ambientEnabled]);
+
   useEffect(() => {
     const media = matchMedia('(prefers-reduced-motion: reduce)');
     const update = () => setActivity({ hidden: document.hidden, reduced: media.matches });
@@ -78,6 +120,7 @@ export default function GameFx({ batch, ctx, enabled, width, height }: { batch: 
     const root = layer.current!, stage = root.parentElement!;
     const play = shouldPlayFx(batch, seen.current, { enabled, ...activity });
     seen.current = batch?.id ?? null;
+    particles.current?.clear();
     if (!play || !batch) return;
     const now = performance.now();
     const jobs = scheduleFx(eventsToFx(batch.events, { ...ctx, waiting: batch.waiting }), now - lastTime.current < 400);
@@ -107,6 +150,8 @@ export default function GameFx({ batch, ctx, enabled, width, height }: { batch: 
       const depth = (anchor: FxAnchor) => typeof anchor === 'number' ? parseFloat(stage.querySelector<HTMLElement>(`[data-player-id="${anchor}"]`)?.style.getPropertyValue('--depth') ?? '') || 1 : 1;
       node.style.setProperty('--fx-source-scale', `${height / 720 * depth(job.from)}`);
       node.style.setProperty('--fx-target-scale', `${height / 720 * depth(job.to)}`);
+      const winner = batch.events.find(event => event.type === 'game_ended');
+      particles.current?.emit(job, from, to, depth(job.from), depth(job.to), job.duration, winner?.type === 'game_ended' ? winner.winner : null);
       const actorBox = typeof job.to === 'number' ? stage.querySelector(`[data-scene-player="${job.to}"]`)?.getBoundingClientRect() : undefined;
       const jailBox = actorBox ?? stage.querySelector(`[data-player-id="${job.to}"] .seat-person`)?.getBoundingClientRect();
       if (jailBox) node.style.setProperty('--fx-jail-height', `${jailBox.height}px`);
@@ -182,6 +227,7 @@ export default function GameFx({ batch, ctx, enabled, width, height }: { batch: 
       timers.forEach(clearTimeout); timers.length = 0;
       animations.forEach(a => a.cancel()); animations.length = 0;
       nodes.forEach(n => n.remove()); nodes.clear();
+      particles.current?.clear();
     };
     timers.push(window.setTimeout(clear, FX_BUDGET + 50));
     return clear;
@@ -224,6 +270,7 @@ export default function GameFx({ batch, ctx, enabled, width, height }: { batch: 
   }, [ctx.players, active, width, height]);
 
   return <>
+    <div ref={particleHost} className="particle-layer" aria-hidden="true" />
     <div ref={atmosphere} className="scene-atmosphere" aria-hidden="true" data-running={active}><span className="fx-lantern-light" /><span className="fx-haze" /><span className="fx-table-glint" />{Array.from({ length: 8 }, (_, i) => <i className="fx-dust" key={i} style={{ '--i': i } as CSSProperties} />)}</div>
     <div ref={persistent} className="fx-persistent-layer" aria-hidden="true" />
     <div ref={layer} className="fx-layer" aria-hidden="true" data-running={active} />

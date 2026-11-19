@@ -16,11 +16,19 @@ let checked = 0;
 for (const entry of await readdir(dist, { recursive: true, withFileTypes: true })) {
   if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
   const source = await readFile(join(entry.parentPath, entry.name), 'utf8');
-  assert.ok(!source.includes('data-demo-drag') && !source.includes('demo-drag-controls') && !source.includes('data-demo-fx') && !source.includes('demo-fx-controls') && !source.includes('data-demo-motion') && !source.includes('demo-motion-controls') && !source.includes('data-demo-sound') && !source.includes('demo-sound-controls'), `Demo FX controls leaked into production: ${entry.name}`);
+  assert.ok(!source.includes('data-demo-particles') && !source.includes('demo-particle-controls') && !source.includes('data-demo-drag') && !source.includes('demo-drag-controls') && !source.includes('data-demo-fx') && !source.includes('demo-fx-controls') && !source.includes('data-demo-motion') && !source.includes('demo-motion-controls') && !source.includes('data-demo-sound') && !source.includes('demo-sound-controls'), `Demo FX controls leaked into production: ${entry.name}`);
   assert.ok(!fixture.test(source), `Demo fixture leaked into production: ${entry.name}`);
   checked += 1;
 }
 assert.ok(checked > 0, 'Production JavaScript must exist before checking demo exclusion');
+const manifest = JSON.parse(await readFile(join(dist, '.vite/manifest.json'), 'utf8'));
+const particleChunk = manifest['src/features/game/ParticleRenderer.ts'];
+assert.ok(particleChunk?.isDynamicEntry, 'Pixi particle renderer must be a lazy production chunk');
+const entry = Object.values(manifest).find(chunk => chunk.isEntry);
+assert.ok(entry?.dynamicImports?.includes('src/features/game/ParticleRenderer.ts'), 'Game entry must dynamically import the particle renderer');
+assert.ok(!entry.imports?.includes('src/features/game/ParticleRenderer.ts'), 'Particle renderer must not be eagerly imported');
+assert.match(await readFile(join(dist, particleChunk.file), 'utf8'), /WebGL/, 'Lazy particle chunk must contain the Pixi WebGL renderer');
+console.log(`Production lazy particle renderer: PASS (${particleChunk.file})`);
 console.log(`Production demo exclusion: PASS (${checked} JavaScript files checked)`);
 
 for (const url of seatActorFiles) {
