@@ -113,6 +113,7 @@ fn seeded_bots_cover_all_cards_frames_and_outcomes() {
                     let name = match frame.kind {
                         PendingKind::AttackResponse { .. } => "attack_response",
                         PendingKind::Check { .. } => "check",
+                        PendingKind::PickHandSlot { .. } => "pick_hand_slot",
                         PendingKind::Dying { .. } => "dying",
                         PendingKind::Duel { .. } => "duel",
                         PendingKind::ResolveTargets { .. } => "resolve_targets",
@@ -154,6 +155,7 @@ fn seeded_bots_cover_all_cards_frames_and_outcomes() {
         );
     }
     for name in [
+        "pick_hand_slot",
         "attack_response",
         "dying",
         "duel",

@@ -17,25 +17,25 @@ async fn ping_pong_and_errors_keep_the_connection_usable() {
 
         let invalid_frames = [
             (
-                Message::Text(r#"{"v":5,"type":"update_settings","settings":{"mode":"unknown","roles":{"deputy":0,"outlaw":2,"renegade":1}}}"#.into()),
+                Message::Text(r#"{"v":6,"type":"update_settings","settings":{"mode":"unknown","roles":{"deputy":0,"outlaw":2,"renegade":1}}}"#.into()),
                 ErrorCode::InvalidMessage,
             ),
             (
-                Message::Text(r#"{"v":5,"type":"update_settings","settings":{"mode":"classic","roles":{"deputy":-1,"outlaw":2,"renegade":1}}}"#.into()),
+                Message::Text(r#"{"v":6,"type":"update_settings","settings":{"mode":"classic","roles":{"deputy":-1,"outlaw":2,"renegade":1}}}"#.into()),
                 ErrorCode::InvalidMessage,
             ),
             (
                 Message::Text(
-                    r#"{"v":5,"type":"create_room","nickname":"Unknown","game":"uno"}"#.into(),
+                    r#"{"v":6,"type":"create_room","nickname":"Unknown","game":"uno"}"#.into(),
                 ),
                 ErrorCode::InvalidMessage,
             ),
             (
-                Message::Text(r#"{"v":5,"type":"create_room","nickname":"Missing"}"#.into()),
+                Message::Text(r#"{"v":6,"type":"create_room","nickname":"Missing"}"#.into()),
                 ErrorCode::InvalidMessage,
             ),
             (
-                Message::Text(r#"{"v":4,"type":"ping","nonce":7}"#.into()),
+                Message::Text(r#"{"v":5,"type":"ping","nonce":7}"#.into()),
                 ErrorCode::UnsupportedVersion,
             ),
             (Message::Text("{".into()), ErrorCode::InvalidMessage),
@@ -48,11 +48,11 @@ async fn ping_pong_and_errors_keep_the_connection_usable() {
                 ErrorCode::InvalidMessage,
             ),
             (
-                Message::Text(r#"{"v":5,"type":"unknown"}"#.into()),
+                Message::Text(r#"{"v":6,"type":"unknown"}"#.into()),
                 ErrorCode::InvalidMessage,
             ),
             (
-                Message::Text(r#"{"v":5,"type":"ping","nonce":"7"}"#.into()),
+                Message::Text(r#"{"v":6,"type":"ping","nonce":"7"}"#.into()),
                 ErrorCode::InvalidMessage,
             ),
             (
@@ -62,7 +62,7 @@ async fn ping_pong_and_errors_keep_the_connection_usable() {
         ];
 
         socket
-            .send(Message::Text(r#"{"v":5,"type":"ping","nonce":0}"#.into()))
+            .send(Message::Text(r#"{"v":6,"type":"ping","nonce":0}"#.into()))
             .await
             .unwrap();
         let response = socket.next().await.unwrap().unwrap().into_text().unwrap();
@@ -87,7 +87,7 @@ async fn ping_pong_and_errors_keep_the_connection_usable() {
             }
             socket
                 .send(Message::Text(
-                    r#"{"v":5,"type":"ping","nonce":4294967295}"#.into(),
+                    r#"{"v":6,"type":"ping","nonce":4294967295}"#.into(),
                 ))
                 .await
                 .unwrap();

@@ -1,5 +1,5 @@
 import type { Action, GameSnapshot } from '../../generated/protocol';
-import { actionMode, discardCount, emptyDraft, endTurnAction, playAction, playKind, needsTarget, respondAction, responseKind, chooseStoreSlotAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, isSid, sidHealAction, flipCheckAction, flipBarrelAction } from './actions';
+import { actionMode, discardCount, emptyDraft, endTurnAction, playAction, playKind, needsTarget, respondAction, responseKind, chooseStoreSlotAction, chooseHandSlotAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, isSid, sidHealAction, flipCheckAction, flipBarrelAction } from './actions';
 import type { ActionDraft } from './actions';
 import { cardFace } from './cardCatalog';
 import { cards } from './i18n';
@@ -31,11 +31,11 @@ function DecisionControls({ game, draft, disabled, setDraft, sendAction }: Props
         {own.character === 'jesse_jones' && table.players.filter((player) => player.alive && player.id !== you).map((player) => <label key={player.id}><input type="radio" name="draw-source" checked={typeof draft.source === 'object' && draft.source.player === player.id} disabled={player.hand_count === 0} onChange={() => setDraft({ ...draft, source: { player: player.id } })} /> Lấy từ tay {game.seats.find((seat) => seat.player_id === player.id)?.nickname ?? `Ghế ${player.id + 1}`} ({player.hand_count} lá)</label>)}
       </fieldset><div className="control-buttons"><button type="button" className="action" data-primary-action="true" aria-keyshortcuts="Enter" disabled={!action} onClick={() => send(action)}>Rút bài <kbd aria-hidden="true">Enter</kbd></button>{cancel}</div></div>;
   }
-  if (mode === 'general_store' || mode === 'keep_cards' || mode === 'choose_draw_result') {
-    const action = mode === 'general_store' ? chooseStoreSlotAction(game, draft.storeSlot, disabled) : mode === 'keep_cards' ? keepCardsAction(game, draft.kept, disabled) : chooseDrawResultAction(game, draft.card, disabled);
+  if (mode === 'pick_hand_slot' || mode === 'general_store' || mode === 'keep_cards' || mode === 'choose_draw_result') {
+    const action = mode === 'pick_hand_slot' ? chooseHandSlotAction(game, draft.handSlot, disabled) : mode === 'general_store' ? chooseStoreSlotAction(game, draft.storeSlot, disabled) : mode === 'keep_cards' ? keepCardsAction(game, draft.kept, disabled) : chooseDrawResultAction(game, draft.card, disabled);
     const reason = table.waiting?.kind.type === 'choose_draw_result' ? cards[table.waiting.kind.reason].name : '';
-    return <div className="game-controls" aria-label="Chọn bài"><p role="status">{mode === 'general_store' ? 'Chọn 1 lá úp.' : mode === 'keep_cards' ? `Chọn ${keepCount(game)} trong ${selectGameView(game.view).choices.length} lá để giữ · Đã chọn ${draft.kept.length}/${keepCount(game)}. Lá còn lại sẽ úp lên đỉnh bộ rút.` : `Lật kiểm tra cho ${reason}. Chọn 1 lá làm kết quả.`}</p>
-      <div className="control-buttons"><button type="button" className="action" data-primary-action="true" aria-keyshortcuts="Enter" disabled={!action} onClick={() => send(action)}>{mode === 'general_store' ? 'Lấy lá đã chọn' : mode === 'keep_cards' ? 'Giữ bài' : 'Chọn kết quả'} <kbd aria-hidden="true">Enter</kbd></button>{cancel}</div></div>;
+    return <div className="game-controls" aria-label="Chọn bài"><p role="status">{mode === 'pick_hand_slot' ? 'Chọn 1 lá úp trên tay mục tiêu. Mặt lá chỉ hiện sau khi chọn.' : mode === 'general_store' ? 'Chọn 1 lá úp.' : mode === 'keep_cards' ? `Chọn ${keepCount(game)} trong ${selectGameView(game.view).choices.length} lá để giữ · Đã chọn ${draft.kept.length}/${keepCount(game)}. Lá còn lại sẽ úp lên đỉnh bộ rút.` : `Lật kiểm tra cho ${reason}. Chọn 1 lá làm kết quả.`}</p>
+      <div className="control-buttons"><button type="button" className="action" data-primary-action="true" aria-keyshortcuts="Enter" disabled={!action} onClick={() => send(action)}>{mode === 'pick_hand_slot' ? table.waiting?.kind.type === 'pick_hand_slot' && table.waiting.kind.kind === 'cat_balou' ? 'Buộc bỏ lá đã chọn' : 'Lấy lá đã chọn' : mode === 'general_store' ? 'Lấy lá đã chọn' : mode === 'keep_cards' ? 'Giữ bài' : 'Chọn kết quả'} <kbd aria-hidden="true">Enter</kbd></button>{cancel}</div></div>;
   }
   if (mode === 'response') {
     const action = draft.card !== null ? respondAction(game, draft.card, disabled) : null;
@@ -63,7 +63,7 @@ function DecisionControls({ game, draft, disabled, setDraft, sendAction }: Props
   return <div className="game-controls" aria-label="Hành động của bạn">
     <p role="status">{cardName ? `Đã chọn ${cardName}.${needsTarget(game, draft.card!) ? target ? ` Nhắm tới ${game.seats.find((seat) => seat.player_id === target.id)?.nickname ?? 'người đã chọn'}.` : ' Chọn người nhắm tới trên bàn.' : ''}` : 'Chạm một lá trên tay để chọn, rồi xác nhận Chơi.'}</p>
     {affect && target && <fieldset className="affect-options" disabled={disabled}><legend>Chọn bài muốn tác động</legend>
-      <label><input type="radio" name="affect-card" checked={draft.selection === 'hand'} disabled={target.hand_count === 0} onChange={() => setDraft({ ...draft, selection: 'hand' })} /> Một lá ngẫu nhiên trên tay ({target.hand_count} lá)</label>
+      <label><input type="radio" name="affect-card" checked={draft.selection === 'hand'} disabled={target.hand_count === 0} onChange={() => setDraft({ ...draft, selection: 'hand' })} /> Chọn mù một lá trên tay ({target.hand_count} lá)</label>
       {target.in_play.map((card) => <label key={card}><input type="radio" name="affect-card" checked={typeof draft.selection === 'object' && draft.selection?.in_play === card} onChange={() => setDraft({ ...draft, selection: { in_play: card } })} /> Bài trước mặt: {cards[cardFace(card)!.kind].name} ({cardFace(card)!.rank}{cardFace(card)!.suit})</label>)}
     </fieldset>}
     <div className="control-buttons"><button type="button" className="action" data-primary-action="true" aria-keyshortcuts="Enter" disabled={!action} onClick={() => send(action)}>Chơi <kbd aria-hidden="true">Enter</kbd></button>{draft.card !== null && cancel}

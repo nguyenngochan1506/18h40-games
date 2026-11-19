@@ -21,6 +21,20 @@ pub struct Event {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventKind {
+    HandSlotsOpened {
+        actor: PlayerId,
+        target: PlayerId,
+        count: u8,
+    },
+    HandSlotClaimed {
+        actor: PlayerId,
+        target: PlayerId,
+        slot: u8,
+    },
+    HandPickCancelled {
+        actor: PlayerId,
+        target: PlayerId,
+    },
     SkillActivated {
         player: PlayerId,
         character: Character,

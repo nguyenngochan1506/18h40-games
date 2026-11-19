@@ -20,3 +20,6 @@
  .store-pool p { margin-bottom: 8px; }
  .store-pool > small { display: none; }
 }
+.hand-pool .store-slots { max-height: min(30svh, 240px); overflow: auto; padding: 4px; }
+.table-center.has-hand-pick { z-index: 3; }
+@media (max-width: 899px) { .table-center.has-hand-pick { top: 48%; } }

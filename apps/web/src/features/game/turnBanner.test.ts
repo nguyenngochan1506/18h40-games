@@ -27,3 +27,10 @@ test('General Store announces a blind choice rather than an attack response', ()
   assert.equal(turnBanner(store, names, 0)?.text, 'Chờ bạn chọn');
   assert.equal(turnBanner(store, names, 1)?.text, 'Hân đang chọn');
 });
+
+test('blind hand banner names the target for actor and observers', () => {
+  const pick = table(0, { player: 0, pending_id: 9, kind: { type: 'pick_hand_slot', target: 1, kind: 'panic', count: 3 } });
+  assert.equal(turnBanner(pick, names, 0)?.text, 'Chọn lá từ tay Mai');
+  assert.equal(turnBanner(pick, names, 1)?.text, 'Hân đang chọn lá từ tay Mai');
+  assert.equal(turnBanner(pick, names, null)?.text, 'Hân đang chọn lá từ tay Mai');
+});

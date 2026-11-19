@@ -163,3 +163,21 @@ test('blind store FX expose no faces until the receiving player reveals the clai
     assert.equal(other[0].to, 0);
   }
 });
+
+test('blind hand open/claim add no duplicate flight and only filtered recipient details reveal the result', () => {
+  const open: EventKind[] = [{ type: 'hand_slots_opened', actor: 0, target: 1, count: 3 }];
+  assert.deepEqual(eventsToFx(open, ctx), []);
+  for (const kind of ['panic', 'cat_balou'] as const) {
+    const publicEvents: EventKind[] = [{ type: 'hand_slot_claimed', actor: 0, target: 1, slot: 2 }, { type: 'hand_affected', source: 0, target: 1, kind, count: 1 }];
+    const privateEvents: EventKind[] = [...publicEvents, { type: 'hand_card_affected', source: 0, target: 1, kind, card: 26 }];
+    const own = eventsToFx(privateEvents, ctx);
+    assert.equal(own.length, 1);
+    assert.equal(own[0].card, 26);
+    assert.equal(own[0].to, kind === 'panic' ? 'hand' : 'discard');
+    for (const you of [1, 2, null]) {
+      const other = eventsToFx(publicEvents, { ...ctx, you });
+      assert.equal(other.length, 1);
+      assert.equal(other[0].card, undefined);
+    }
+  }
+});

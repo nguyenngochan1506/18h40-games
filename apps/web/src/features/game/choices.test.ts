@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { DecisionKind, GameSnapshot } from '../../generated/protocol.ts';
 import { demoGame } from './demo.ts';
-import { actionMode, chooseStoreSlotAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, sidHealAction, isSid } from './actions.ts';
+import { actionMode, chooseHandSlotAction, chooseStoreSlotAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, sidHealAction, isSid } from './actions.ts';
 
 function fixture(kind: DecisionKind) {
   const game = structuredClone(demoGame);
@@ -92,6 +92,7 @@ test('Sid can heal across any waiting frame, uses only his own Dying nonce, and 
 
 test('all new decision builders reject a locked input, wrong actor, spectator, dead player and missing or wrong pending kind', () => {
   const builders = [
+    { kind: { type: 'pick_hand_slot', target: 1, kind: 'panic', count: 3 }, build: (g: GameSnapshot, locked: boolean) => chooseHandSlotAction(g, 0, locked) },
     { kind: { type: 'general_store' }, build: (g: GameSnapshot, locked: boolean) => chooseStoreSlotAction(g, 0, locked) },
     { kind: { type: 'draw_choice' }, build: (g: GameSnapshot, locked: boolean) => chooseDrawSourceAction(g, 'deck', locked) },
     { kind: { type: 'keep_cards', keep: 2 }, build: (g: GameSnapshot, locked: boolean) => keepCardsAction(g, [5, 33], locked) },
@@ -117,5 +118,19 @@ test('all new decision builders reject a locked input, wrong actor, spectator, d
     if (mode === 'won') table.winner = 'outlaws';
     assert.equal(sidHealAction(game, [1, 26], mode === 'locked'), null);
     if (mode !== 'locked') assert.equal(isSid(game), false);
+  }
+});
+
+
+test('blind hand choices use only the current nonce and an opaque bounded slot for either card', () => {
+  for (const kind of ['panic', 'cat_balou'] as const) {
+    const { game, table } = fixture({ type: 'pick_hand_slot', target: 1, kind, count: 3 });
+    const before = structuredClone(game);
+    assert.equal(actionMode(game), 'pick_hand_slot');
+    for (let slot = 0; slot < 3; slot++) assert.deepEqual(chooseHandSlotAction(game, slot, false), { type: 'choose_hand_slot', pending_id: 101, slot });
+    for (const slot of [null, -1, 3, 255, 1.5, NaN, Infinity]) assert.equal(chooseHandSlotAction(game, slot, false), null);
+    assert.deepEqual(game, before);
+    table.waiting!.pending_id = 102;
+    assert.deepEqual(chooseHandSlotAction(game, 1, false), { type: 'choose_hand_slot', pending_id: 102, slot: 1 });
   }
 });

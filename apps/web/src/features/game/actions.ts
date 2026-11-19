@@ -2,17 +2,17 @@ import type { Action, CardId, CardKind, CardSelection, DrawSource, GameSnapshot 
 import { cardFace } from './cardCatalog.ts';
 import { selectGameView } from './state.ts';
 
-export type ActionDraft = { storeSlot: number | null; card: CardId | null; target: number | null; selection: CardSelection | null; discarding: boolean; discard: CardId[]; healing: boolean; source: DrawSource; kept: CardId[] };
-export const emptyDraft: ActionDraft = { storeSlot: null, card: null, target: null, selection: null, discarding: false, discard: [], healing: false, source: 'deck', kept: [] };
+export type ActionDraft = { storeSlot: number | null; handSlot: number | null; card: CardId | null; target: number | null; selection: CardSelection | null; discarding: boolean; discard: CardId[]; healing: boolean; source: DrawSource; kept: CardId[] };
+export const emptyDraft: ActionDraft = { storeSlot: null, handSlot: null, card: null, target: null, selection: null, discarding: false, discard: [], healing: false, source: 'deck', kept: [] };
 
-export function actionMode(game: GameSnapshot): 'view' | 'waiting' | 'turn' | 'response' | 'check' | 'general_store' | 'draw_choice' | 'keep_cards' | 'choose_draw_result' {
+export function actionMode(game: GameSnapshot): 'view' | 'waiting' | 'turn' | 'response' | 'check' | 'pick_hand_slot' | 'general_store' | 'draw_choice' | 'keep_cards' | 'choose_draw_result' {
   const { table, you } = selectGameView(game.view);
   if (you === null || table.winner) return 'view';
   if (!table.waiting || table.waiting.player !== you) return 'waiting';
   switch (table.waiting.kind.type) {
     case 'turn': return 'turn';
     case 'attack_response': case 'duel': case 'dying': return 'response';
-    case 'check': case 'general_store': case 'draw_choice': case 'keep_cards': case 'choose_draw_result': return table.waiting.kind.type;
+    case 'pick_hand_slot': case 'check': case 'general_store': case 'draw_choice': case 'keep_cards': case 'choose_draw_result': return table.waiting.kind.type;
   }
 }
 
@@ -103,6 +103,13 @@ export function endTurnAction(game: GameSnapshot, discard: CardId[], locked: boo
   if (locked || actionMode(game) !== 'turn' || discard.length !== discardCount(game)
     || new Set(discard).size !== discard.length || !discard.every((card) => hand.includes(card))) return null;
   return { type: 'end_turn', discard };
+}
+
+export function chooseHandSlotAction(game: GameSnapshot, slot: number | null, locked: boolean): Action | null {
+  const { table } = selectGameView(game.view);
+  const waiting = table.waiting;
+  if (locked || actionMode(game) !== 'pick_hand_slot' || waiting?.pending_id == null || waiting.kind.type !== 'pick_hand_slot' || slot === null || !Number.isInteger(slot) || slot < 0 || slot >= waiting.kind.count) return null;
+  return { type: 'choose_hand_slot', pending_id: waiting.pending_id, slot };
 }
 
 export function chooseStoreSlotAction(game: GameSnapshot, slot: number | null, locked: boolean): Action | null {

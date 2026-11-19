@@ -1004,3 +1004,6 @@ mod club;
 
 #[path = "engine/manual_checks.rs"]
 mod manual_checks;
+
+#[path = "engine/hand_slots.rs"]
+mod hand_slots;

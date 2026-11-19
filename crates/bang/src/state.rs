@@ -78,6 +78,12 @@ pub struct Pending {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PendingKind {
+    PickHandSlot {
+        actor: PlayerId,
+        target: PlayerId,
+        kind: CardKind,
+        slots: Vec<CardId>,
+    },
     Check {
         player: PlayerId,
         reason: CardKind,
@@ -142,6 +148,7 @@ impl Pending {
 
     pub fn player(&self) -> Option<PlayerId> {
         match &self.kind {
+            PendingKind::PickHandSlot { actor, .. } => Some(*actor),
             PendingKind::AttackResponse { target, .. } => Some(*target),
             PendingKind::Dying { player, .. }
             | PendingKind::Check { player, .. }
@@ -168,6 +175,11 @@ pub enum Winner {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DecisionKind {
+    PickHandSlot {
+        target: PlayerId,
+        kind: CardKind,
+        count: u8,
+    },
     Turn,
     AttackResponse {
         kind: AttackKind,
@@ -225,6 +237,16 @@ impl GameState {
                 player: frame.player()?,
                 pending_id: Some(frame.id),
                 kind: match &frame.kind {
+                    PendingKind::PickHandSlot {
+                        target,
+                        kind,
+                        slots,
+                        ..
+                    } => DecisionKind::PickHandSlot {
+                        target: *target,
+                        kind: *kind,
+                        count: slots.len() as u8,
+                    },
                     PendingKind::AttackResponse {
                         kind,
                         remaining,

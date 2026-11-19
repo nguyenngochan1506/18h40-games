@@ -11,6 +11,7 @@ export function turnBanner(table: Pick<SpectatorView, 'turn' | 'waiting' | 'winn
   if (waiting && waiting.kind.type !== 'turn') {
     const own = waiting.player === viewer;
     const kind = waiting.kind;
+    if (kind.type === 'pick_hand_slot') return { own, key: `wait:${waiting.player}`, text: own ? `Chọn lá từ tay ${name(kind.target)}` : `${name(waiting.player)} đang chọn lá từ tay ${name(kind.target)}` };
     const verb = kind.type === 'check' || kind.type === 'choose_draw_result' ? `lật ${cards[kind.reason].name}` : kind.type === 'attack_response' && kind.checks_left > 0 ? 'lật Barrel hoặc phản ứng' : kind.type === 'general_store' ? 'chọn' : 'phản ứng';
     return { own, key: `wait:${waiting.player}`, text: own ? `Chờ bạn ${verb}` : `${name(waiting.player)} đang ${verb}` };
   }

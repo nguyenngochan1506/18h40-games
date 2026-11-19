@@ -187,7 +187,12 @@ pub(super) fn after_action<R: Rng + ?Sized>(
     }
     for index in 0..state.players.len() {
         let player = &state.players[index];
-        if player.alive && player.character == Character::SuzyLafayette && player.hand.is_empty() {
+        let choosing_hand = state.pending.iter().any(|frame| matches!(frame.kind, PendingKind::PickHandSlot { actor, .. } if actor == PlayerId(index)));
+        if player.alive
+            && player.character == Character::SuzyLafayette
+            && player.hand.is_empty()
+            && !choosing_hand
+        {
             let cards = take_draw(state, 1, rng, events);
             if !cards.is_empty() {
                 activate(state, PlayerId(index), events);

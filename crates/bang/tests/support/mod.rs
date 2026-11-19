@@ -107,7 +107,7 @@ impl Scenario {
         result
     }
 
-    // Rule scenarios choose each available check; manual-input tests use act directly.
+    // Legacy rule scenarios resolve checks and blind picks; input tests use act directly.
     pub fn act_with_checks(&mut self, player: usize, action: Action) -> Vec<Event> {
         let mut events = self.act(player, action);
         while let Some(decision) = self.state.decision() {
@@ -115,6 +115,10 @@ impl Scenario {
                 break;
             };
             let action = match decision.kind {
+                DecisionKind::PickHandSlot { .. } => Action::ChooseHandSlot {
+                    pending_id,
+                    slot: 0,
+                },
                 DecisionKind::Check { .. } => Action::FlipCheck { pending_id },
                 DecisionKind::AttackResponse { checks_left, .. } if checks_left > 0 => {
                     Action::FlipBarrel { pending_id }
@@ -255,6 +259,14 @@ fn decision_actions(state: &GameState) -> Vec<Action> {
     let mut actions = vec![default];
     if let Some(frame) = state.pending.last() {
         let kind = match &frame.kind {
+            PendingKind::PickHandSlot { slots, .. } => {
+                return (0..slots.len())
+                    .map(|slot| Action::ChooseHandSlot {
+                        pending_id: frame.id,
+                        slot: slot as u8,
+                    })
+                    .collect();
+            }
             PendingKind::Check { .. } => {
                 return vec![Action::FlipCheck {
                     pending_id: frame.id,

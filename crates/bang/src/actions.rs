@@ -26,6 +26,10 @@ pub enum DrawSource {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
+    ChooseHandSlot {
+        pending_id: PendingId,
+        slot: u8,
+    },
     FlipCheck {
         pending_id: PendingId,
     },
@@ -167,6 +171,25 @@ pub(crate) fn validate(
     }
     if let Some(frame) = state.pending.last() {
         return match action {
+            Action::ChooseHandSlot { pending_id, slot } => {
+                if *pending_id != frame.id {
+                    return Err(ActionError::StalePending);
+                }
+                match &frame.kind {
+                    PendingKind::PickHandSlot { target, slots, .. } => {
+                        target_player(state, *target)?;
+                        if slots
+                            .get(usize::from(*slot))
+                            .is_some_and(|card| state.players[target.0].hand.contains(card))
+                        {
+                            Ok(())
+                        } else {
+                            Err(ActionError::InvalidCard)
+                        }
+                    }
+                    _ => Err(ActionError::WrongAction),
+                }
+            }
             Action::FlipCheck { pending_id } | Action::FlipBarrel { pending_id } => {
                 if *pending_id != frame.id {
                     return Err(ActionError::StalePending);
@@ -264,7 +287,8 @@ pub(crate) fn validate(
         };
     }
     match action {
-        Action::FlipCheck { .. }
+        Action::ChooseHandSlot { .. }
+        | Action::FlipCheck { .. }
         | Action::FlipBarrel { .. }
         | Action::Respond { .. }
         | Action::ChooseStoreSlot { .. }

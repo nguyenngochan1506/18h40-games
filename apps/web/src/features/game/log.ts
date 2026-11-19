@@ -55,7 +55,7 @@ export function eventsToLog(events: EventKind[], ctx: LogContext): string[] {
         waiting = event.decision;
         if (!waiting) return 'Đã giải quyết xong lượt chờ.';
         const kind = waiting.kind;
-        const prompt = kind.type === 'turn' ? 'chơi lượt của mình' : kind.type === 'check' ? `lật kiểm tra cho ${cards[kind.reason].name}` : kind.type === 'attack_response' ? kind.kind === 'indians' ? 'bỏ BANG! hoặc chịu đòn' : `${kind.checks_left > 0 ? `lật Barrel (còn ${kind.checks_left} lần), ` : ''}đỡ bằng Missed! (còn ${kind.remaining}) hoặc chịu đòn` : kind.type === 'duel' ? 'đáp Duel' : kind.type === 'dying' ? 'dùng Beer hoặc kỹ năng để sống, hoặc chấp nhận bị loại' : kind.type === 'general_store' ? 'chọn 1 lá General Store' : kind.type === 'draw_choice' ? 'chọn nơi rút lá đầu' : kind.type === 'keep_cards' ? `chọn ${kind.keep} lá để giữ` : `chọn kết quả lật kiểm tra cho ${cards[kind.reason].name}`;
+        const prompt = kind.type === 'pick_hand_slot' ? `chọn 1 lá úp trên tay ${name(kind.target)}` : kind.type === 'turn' ? 'chơi lượt của mình' : kind.type === 'check' ? `lật kiểm tra cho ${cards[kind.reason].name}` : kind.type === 'attack_response' ? kind.kind === 'indians' ? 'bỏ BANG! hoặc chịu đòn' : `${kind.checks_left > 0 ? `lật Barrel (còn ${kind.checks_left} lần), ` : ''}đỡ bằng Missed! (còn ${kind.remaining}) hoặc chịu đòn` : kind.type === 'duel' ? 'đáp Duel' : kind.type === 'dying' ? 'dùng Beer hoặc kỹ năng để sống, hoặc chấp nhận bị loại' : kind.type === 'general_store' ? 'chọn 1 lá General Store' : kind.type === 'draw_choice' ? 'chọn nơi rút lá đầu' : kind.type === 'keep_cards' ? `chọn ${kind.keep} lá để giữ` : `chọn kết quả lật kiểm tra cho ${cards[kind.reason].name}`;
         return `Đang chờ ${name(waiting.player)} ${prompt}.`;
       }
       case 'card_equipped': return `${name(event.player)} đặt ${cardName(event.card)} trước mặt.`;
@@ -63,6 +63,9 @@ export function eventsToLog(events: EventKind[], ctx: LogContext): string[] {
       case 'dynamite_round_ended': return `${name(event.player)} bỏ Dynamite vì đã đi hết một vòng.`;
       case 'jail_expired': return `${name(event.player)} thoát Jail sau 3 lượt đã mất, không cần lật kiểm tra.`;
       case 'jail_held': return event.turns_left > 0 ? `${name(event.player)} mất lượt; Jail còn ở lại (${event.turns_left} lượt).` : `${name(event.player)} đã mất 3 lượt vì Jail; Jail tự bỏ ở đầu lượt kế tiếp.`;
+      case 'hand_slots_opened': return `${name(event.actor)} mở bài trên tay ${name(event.target)} (${event.count} lá úp).`;
+      case 'hand_slot_claimed': return `${name(event.actor)} chọn ô ${event.slot + 1} trên tay ${name(event.target)}.`;
+      case 'hand_pick_cancelled': return `${name(event.actor)} dừng chọn bài từ tay ${name(event.target)}.`;
       case 'hand_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${event.kind === 'panic' ? 'lấy' : 'buộc bỏ'} ${event.count} lá từ tay ${name(event.target)}.`;
       case 'hand_card_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${event.kind === 'panic' ? 'lấy' : 'buộc bỏ'} ${cardName(event.card)} từ tay ${name(event.target)}.`;
       case 'in_play_card_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${event.kind === 'panic' ? 'lấy' : 'bỏ'} ${cardName(event.card)} trước mặt ${name(event.target)}.`;

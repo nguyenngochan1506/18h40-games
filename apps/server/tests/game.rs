@@ -40,6 +40,7 @@ fn check_wire(message: &Value) {
         "next_pending_id",
         "hidden_discards",
         "store_pool",
+        "slots",
         "visibility",
     ] {
         assert!(
@@ -789,5 +790,128 @@ async fn manual_checks_are_routed_to_the_authenticated_owner_and_defaults_do_not
     }
     while !matches!(table.state.decision().unwrap().kind, DecisionKind::Turn) {
         table.skip(0).await;
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn blind_hand_slots_authorize_actor_keep_maps_private_and_resume_or_timeout() {
+    for (kind, timeout) in [
+        (CardKind::Panic, false),
+        (CardKind::CatBalou, false),
+        (CardKind::Panic, true),
+    ] {
+        let seed = (0..10_000)
+            .find(|seed| {
+                let (state, _) = bang::setup(
+                    4,
+                    bang::GameConfig {
+                        roles: bang::RoleCounts::standard(4),
+                        ..Default::default()
+                    },
+                    &mut ChaCha8Rng::seed_from_u64(*seed),
+                )
+                .unwrap();
+                state.turn.player == PlayerId(0)
+                    && matches!(state.decision().unwrap().kind, DecisionKind::Turn)
+                    && state.players[0]
+                        .hand
+                        .iter()
+                        .any(|card| card.card().unwrap().kind == kind)
+                    && (kind != CardKind::Panic
+                        || bang::effective_distance(&state, PlayerId(0), PlayerId(1)).unwrap() <= 1)
+            })
+            .unwrap();
+        let mut table = Table::new(4, seed).await;
+        let card = *table.state.players[0]
+            .hand
+            .iter()
+            .find(|card| card.card().unwrap().kind == kind)
+            .unwrap();
+        let before = table.state.players[1].hand.clone();
+        table
+            .act(
+                PlayerId(0),
+                Action::AffectCard {
+                    card,
+                    target: PlayerId(1),
+                    selection: bang::CardSelection::Hand,
+                },
+            )
+            .await;
+        assert_eq!(table.state.players[1].hand, before);
+        let pending_id = table.state.decision().unwrap().pending_id.unwrap();
+        let count = before.len() as u8;
+        for (client, action) in [
+            (
+                1,
+                Action::ChooseHandSlot {
+                    pending_id,
+                    slot: 0,
+                },
+            ),
+            (
+                0,
+                Action::ChooseHandSlot {
+                    pending_id,
+                    slot: count,
+                },
+            ),
+            (
+                0,
+                Action::ChooseHandSlot {
+                    pending_id: bang::PendingId(pending_id.0 + 1),
+                    slot: 0,
+                },
+            ),
+        ] {
+            table.clients[client]
+                .as_mut()
+                .unwrap()
+                .send(json!({"type":"game_action","action":action}))
+                .await;
+            rejected(table.clients[client].as_mut().unwrap(), "illegal_action").await;
+        }
+        table.spectator.send(json!({"type":"game_action","action":Action::ChooseHandSlot { pending_id, slot: 0 }})).await;
+        rejected(&mut table.spectator, "illegal_action").await;
+        table.disconnect(1).await;
+        table.rejoin(1).await;
+        table.disconnect(0).await;
+        table.rejoin(0).await;
+        if timeout {
+            table.disconnect(0).await;
+            tokio::time::advance(Duration::from_secs(59)).await;
+            table.spectator.send(json!({"type":"game_action","action":Action::ChooseHandSlot { pending_id, slot: 0 }})).await;
+            rejected(&mut table.spectator, "illegal_action").await;
+            assert_eq!(table.state.players[1].hand, before);
+            tokio::time::advance(Duration::from_secs(1)).await;
+            let (player, action) = bang::default_action(&table.state).unwrap();
+            assert_eq!(
+                action,
+                Action::ChooseHandSlot {
+                    pending_id,
+                    slot: 0
+                }
+            );
+            let events = bang::apply(&mut table.state, player, action, &mut table.rng).unwrap();
+            table.updates(&events).await;
+            table.rejoin(0).await;
+        } else {
+            let action = Action::ChooseHandSlot {
+                pending_id,
+                slot: count - 1,
+            };
+            table.act(PlayerId(0), action.clone()).await;
+            table.clients[0]
+                .as_mut()
+                .unwrap()
+                .send(json!({"type":"game_action","action":action}))
+                .await;
+            rejected(table.clients[0].as_mut().unwrap(), "illegal_action").await;
+        }
+        assert_eq!(table.state.players[1].hand.len(), before.len() - 1);
+        assert!(!matches!(
+            table.state.decision().unwrap().kind,
+            DecisionKind::PickHandSlot { .. }
+        ));
     }
 }

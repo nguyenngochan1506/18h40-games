@@ -34,11 +34,11 @@ export const cards = {
   },
   "panic": {
     "name": "Panic!",
-    "effect": "Lấy 1 lá từ người ở khoảng cách tối đa 1"
+    "effect": "Lấy 1 lá từ người ở khoảng cách tối đa 1; chọn mù theo ô nếu lấy trên tay"
   },
   "cat_balou": {
     "name": "Cat Balou",
-    "effect": "Buộc một người bỏ 1 lá, không giới hạn khoảng cách"
+    "effect": "Buộc một người bỏ 1 lá, không giới hạn khoảng cách; chọn mù theo ô nếu bỏ từ tay"
   },
   "duel": {
     "name": "Duel",

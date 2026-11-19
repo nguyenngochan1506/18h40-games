@@ -257,7 +257,7 @@ fn panic_range_uses_scope_and_mustang_but_never_weapon_range() {
 }
 
 #[test]
-fn random_hand_selection_hides_identity_from_uninvolved_players_and_discard_top() {
+fn blind_hand_selection_hides_identity_from_uninvolved_players_and_discard_top() {
     for kind in [CardKind::Panic, CardKind::CatBalou] {
         let mut game = Scenario::new(4);
         let card = game.give(0, kind);
@@ -279,8 +279,23 @@ fn random_hand_selection_hides_identity_from_uninvolved_players_and_discard_top(
             selection: CardSelection::Hand,
         };
         let copied_action = serde_json::from_str(&serde_json::to_string(&action).unwrap()).unwrap();
-        let expected = game.act_with_checks(0, action);
-        let actual = apply(&mut other, PlayerId(0), copied_action, &mut rng).unwrap();
+        let mut expected = game.act(0, action);
+        let mut actual = apply(&mut other, PlayerId(0), copied_action, &mut rng).unwrap();
+        for recipient in [
+            None,
+            Some(PlayerId(0)),
+            Some(PlayerId(1)),
+            Some(PlayerId(2)),
+        ] {
+            assert_eq!(
+                filter_events(&actual, recipient),
+                filter_events(&expected, recipient)
+            );
+        }
+        assert_eq!(view(&other, PlayerId(0)), view(&game.state, PlayerId(0)));
+        let (_, choice) = default_action(&game.state).unwrap();
+        actual.extend(apply(&mut other, PlayerId(0), choice.clone(), &mut rng).unwrap());
+        expected.extend(game.act(0, choice));
         invariant(&other);
         assert_eq!(filter_events(&actual, None), filter_events(&expected, None));
         assert_eq!(
@@ -291,9 +306,10 @@ fn random_hand_selection_hides_identity_from_uninvolved_players_and_discard_top(
             filter_events(&actual, Some(PlayerId(0))),
             filter_events(&expected, Some(PlayerId(0)))
         );
-        assert_ne!(
-            filter_events(&actual, Some(PlayerId(1))),
-            filter_events(&expected, Some(PlayerId(1)))
+        assert_eq!(
+            filter_events(&actual, Some(PlayerId(1)))
+                == filter_events(&expected, Some(PlayerId(1))),
+            kind == CardKind::Panic
         );
         assert_eq!(spectator_view(&other), spectator_view(&game.state));
         assert_eq!(view(&other, PlayerId(2)), view(&game.state, PlayerId(2)));

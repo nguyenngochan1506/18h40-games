@@ -93,6 +93,30 @@ pub fn apply<R: Rng + ?Sized>(
     let before = state.decision();
     let mut events = Vec::new();
     match action {
+        Action::ChooseHandSlot { slot, .. } => {
+            let PendingKind::PickHandSlot {
+                actor,
+                target,
+                kind,
+                slots,
+            } = state.pending.pop().unwrap().kind
+            else {
+                unreachable!()
+            };
+            let card = slots[usize::from(slot)];
+            let index = state.players[target.0]
+                .hand
+                .iter()
+                .position(|id| *id == card)
+                .unwrap();
+            state.players[target.0].hand.remove(index);
+            events.push(Event::public(EventKind::HandSlotClaimed {
+                actor,
+                target,
+                slot,
+            }));
+            resolve_affected_card(state, actor, target, kind, card, true, &mut events);
+        }
         Action::FlipCheck { .. } => {
             let PendingKind::Check {
                 player,
@@ -442,8 +466,20 @@ fn affect_card<R: Rng + ?Sized>(
 ) {
     let card = match selection {
         CardSelection::Hand => {
-            let index = rng.random_range(0..state.players[target.0].hand.len());
-            state.players[target.0].hand.remove(index)
+            let mut slots = state.players[target.0].hand.clone();
+            slots.shuffle(rng);
+            events.push(Event::public(EventKind::HandSlotsOpened {
+                actor: source,
+                target,
+                count: slots.len() as u8,
+            }));
+            state.push_pending(PendingKind::PickHandSlot {
+                actor: source,
+                target,
+                kind,
+                slots,
+            });
+            return;
         }
         CardSelection::InPlay(card) => {
             let index = state.players[target.0]
@@ -456,16 +492,28 @@ fn affect_card<R: Rng + ?Sized>(
             card
         }
     };
+    resolve_affected_card(state, source, target, kind, card, false, events);
+}
+
+fn resolve_affected_card(
+    state: &mut GameState,
+    source: PlayerId,
+    target: PlayerId,
+    kind: CardKind,
+    card: CardId,
+    from_hand: bool,
+    events: &mut Vec<Event>,
+) {
     if kind == CardKind::Panic {
         state.players[source.0].hand.push(card);
     } else {
-        if selection == CardSelection::Hand {
+        if from_hand {
             state.discard_hidden(card);
         } else {
             state.discard(card);
         }
     }
-    if selection == CardSelection::Hand {
+    if from_hand {
         events.push(Event::public(EventKind::HandAffected {
             source,
             target,
@@ -482,7 +530,7 @@ fn affect_card<R: Rng + ?Sized>(
             visibility: Visibility::Player(source),
             kind: detail.clone(),
         });
-        if target != source {
+        if target != source && kind == CardKind::CatBalou {
             events.push(Event {
                 visibility: Visibility::Player(target),
                 kind: detail,
@@ -612,7 +660,8 @@ fn clear_pending(state: &mut GameState, events: &mut Vec<Event>) {
             PendingKind::KeepCards { pool, .. } | PendingKind::ChooseDrawResult { pool, .. } => {
                 discard_private_pool(state, pool, events);
             }
-            PendingKind::DrawChoice { .. }
+            PendingKind::PickHandSlot { .. }
+            | PendingKind::DrawChoice { .. }
             | PendingKind::Check { .. }
             | PendingKind::AttackResponse { .. }
             | PendingKind::Dying { .. }
@@ -806,6 +855,36 @@ fn advance_until_input<R: Rng + ?Sized>(
                 continue;
             }
             match frame.kind {
+                PendingKind::PickHandSlot {
+                    actor,
+                    target,
+                    kind,
+                    slots,
+                } => {
+                    let hand = &state.players[target.0].hand;
+                    if !state.players[actor.0].alive
+                        || !state.players[target.0].alive
+                        || hand.is_empty()
+                    {
+                        state.pending.pop();
+                        events.push(Event::public(EventKind::HandPickCancelled {
+                            actor,
+                            target,
+                        }));
+                        continue;
+                    }
+                    if slots.len() != hand.len() || !slots.iter().all(|card| hand.contains(card)) {
+                        let mut slots = hand.clone();
+                        slots.shuffle(rng);
+                        state.pending.last_mut().unwrap().kind = PendingKind::PickHandSlot {
+                            actor,
+                            target,
+                            kind,
+                            slots,
+                        };
+                        state.renew_pending_id();
+                    }
+                }
                 PendingKind::ResolveTargets {
                     source,
                     kind,
@@ -932,6 +1011,10 @@ pub fn default_action(state: &GameState) -> Option<(PlayerId, Action)> {
     let decision = state.decision()?;
     let action = if let Some(pending_id) = decision.pending_id {
         match &state.pending.last()?.kind {
+            PendingKind::PickHandSlot { .. } => Action::ChooseHandSlot {
+                pending_id,
+                slot: 0,
+            },
             PendingKind::GeneralStore { pool, .. } => {
                 pool.first()?;
                 Action::ChooseStoreSlot {
