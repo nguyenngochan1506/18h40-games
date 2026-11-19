@@ -99,6 +99,16 @@ pub enum EventKind {
         target: PlayerId,
         card: CardId,
     },
+    DynamiteRoundEnded {
+        player: PlayerId,
+    },
+    JailHeld {
+        player: PlayerId,
+        turns_left: u8,
+    },
+    JailExpired {
+        player: PlayerId,
+    },
     HandAffected {
         source: PlayerId,
         target: PlayerId,

@@ -16,6 +16,9 @@ pub struct PublicPlayer {
     pub hand_count: usize,
     pub in_play: Vec<CardId>,
     pub weapon_range: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub jail_turns_left: Option<u8>,
     pub role: Option<Role>,
 }
 
@@ -57,6 +60,9 @@ pub fn spectator_view(state: &GameState) -> SpectatorView {
                 hand_count: p.hand.len(),
                 in_play: p.in_play.clone(),
                 weapon_range: p.weapon_range(),
+                jail_turns_left: (state.config.mode == crate::GameMode::Club
+                    && p.has_in_play(crate::CardKind::Jail))
+                .then_some(3u8.saturating_sub(p.jail_turns_served)),
                 role: (p.role == Role::Sheriff || !p.alive || state.winner.is_some())
                     .then_some(p.role),
             })

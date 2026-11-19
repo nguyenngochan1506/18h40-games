@@ -121,7 +121,20 @@ fn resume<R: Rng + ?Sized>(
                 discard_in_play(state, player, dynamite, events);
                 damage_player(state, player, None, None, 3, rng, events);
             } else {
-                let target = next_living(state, player);
+                let target = if state.config.mode == crate::GameMode::Club {
+                    let round = state.dynamite_round.as_mut().unwrap();
+                    round
+                        .remaining
+                        .retain(|id| *id != player && state.players[id.0].alive);
+                    let Some(&target) = round.remaining.first() else {
+                        discard_in_play(state, player, dynamite, events);
+                        events.push(Event::public(EventKind::DynamiteRoundEnded { player }));
+                        return;
+                    };
+                    target
+                } else {
+                    next_living(state, player)
+                };
                 let index = state.players[player.0]
                     .in_play
                     .iter()
@@ -137,8 +150,17 @@ fn resume<R: Rng + ?Sized>(
             }
         }
         DrawContinuation::Jail { player, card: jail } => {
-            discard_in_play(state, player, jail, events);
-            if !face.is_some_and(|c| c.suit == Suit::Hearts) {
+            let escaped = face.is_some_and(|c| c.suit == Suit::Hearts);
+            if state.config.mode == crate::GameMode::Club && !escaped {
+                state.players[player.0].jail_turns_served += 1;
+                events.push(Event::public(EventKind::JailHeld {
+                    player,
+                    turns_left: 3 - state.players[player.0].jail_turns_served,
+                }));
+            } else {
+                discard_in_play(state, player, jail, events);
+            }
+            if !escaped {
                 next_turn(state, events);
             }
         }

@@ -998,3 +998,6 @@ fn custom_roles_are_validated_before_rng_and_preserved_with_mode() {
         assert_eq!(rng.get_word_pos(), before.get_word_pos());
     }
 }
+
+#[path = "engine/club.rs"]
+mod club;

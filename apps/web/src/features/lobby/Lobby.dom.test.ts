@@ -11,6 +11,7 @@ import type LobbyComponent from './Lobby.tsx';
 import type RoomComponent from '../rooms/Room.tsx';
 import type WaitingSettingsComponent from '../rooms/WaitingSettings.tsx';
 import { demoGame, demoRoom } from '../game/demo.ts';
+import { cardCatalog } from '../game/cardCatalog.ts';
 
 const dom = new Window({ url: 'http://localhost/', width: 1280, height: 720, settings: { enableImageFileLoading: false, enableCSSFileLoading: false, disableJavaScriptFileLoading: true } });
 Reflect.deleteProperty(dom.Element.prototype, 'animate');
@@ -128,4 +129,16 @@ test('room settings are read-only to guests and reset a host draft on a seat-cou
   assert.equal(container.querySelectorAll('.room-settings fieldset:disabled').length, 2);
   assert.equal(container.querySelector('.room-settings button[type="submit"]'), null);
   assert.equal(sent.length, 0);
+});
+
+
+test('BANG HUD lists stacked weapons and displays the server-supplied maximum range', async t => {
+  const { container, root } = await mount(t);
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Expected player view');
+  game.view.view.table.players[0].in_play = ['volcanic', 'winchester'].map(kind => cardCatalog.findIndex(card => card.kind === kind));
+  game.view.view.table.players[0].weapon_range = 5;
+  await act(async () => root.render(createElement(Room, { room: { ...demoRoom, settings: { ...demoRoom.settings, mode: 'club' } }, game, log: [], fxBatch: null, soundBatch: null, fxEnabled: false, viewer: 0, disabled: false, send() {} })));
+  assert.match(container.querySelector('.hud-gun')!.textContent!, /Volcanic \+ Winchester/);
+  assert.match(container.querySelector('.hud-gun')!.textContent!, /Tầm bắn: 5/);
 });

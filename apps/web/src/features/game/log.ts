@@ -60,6 +60,9 @@ export function eventsToLog(events: EventKind[], ctx: LogContext): string[] {
       }
       case 'card_equipped': return `${name(event.player)} đặt ${cardName(event.card)} trước mặt.`;
       case 'card_passed': return `${name(event.source)} chuyển ${cardName(event.card)} sang ${name(event.target)}.`;
+      case 'dynamite_round_ended': return `${name(event.player)} bỏ Dynamite vì đã đi hết một vòng.`;
+      case 'jail_expired': return `${name(event.player)} thoát Jail sau 3 lượt đã mất, không cần lật kiểm tra.`;
+      case 'jail_held': return event.turns_left > 0 ? `${name(event.player)} mất lượt; Jail còn ở lại (${event.turns_left} lượt).` : `${name(event.player)} đã mất 3 lượt vì Jail; Jail tự bỏ ở đầu lượt kế tiếp.`;
       case 'hand_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${event.kind === 'panic' ? 'lấy' : 'buộc bỏ'} ${event.count} lá từ tay ${name(event.target)}.`;
       case 'hand_card_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${event.kind === 'panic' ? 'lấy' : 'buộc bỏ'} ${cardName(event.card)} từ tay ${name(event.target)}.`;
       case 'in_play_card_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${event.kind === 'panic' ? 'lấy' : 'bỏ'} ${cardName(event.card)} trước mặt ${name(event.target)}.`;

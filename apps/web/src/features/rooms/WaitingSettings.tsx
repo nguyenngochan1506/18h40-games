@@ -6,7 +6,7 @@ import './settings.css';
 
 const modes = [
   { id: 'classic', name: 'Gốc', description: 'Luật chính thức của BANG!.' },
-  { id: 'club', name: '18h40', description: 'Dynamite 1 vòng, Jail 3 lượt, nhiều súng: sắp có. Hiện ván vẫn dùng luật Gốc.' },
+  { id: 'club', name: '18h40', description: 'Dynamite đi 1 vòng, Jail tối đa 3 lượt mất; nhiều súng lấy tầm lớn nhất.' },
 ] as const;
 const roles = [ ['deputy', 'Phó cảnh sát'], ['outlaw', 'Tội phạm'], ['renegade', 'Kẻ phản bội'] ] as const;
 

@@ -21,6 +21,9 @@ const expected: Record<EventKind['type'], string> = {
   card_discarded: 'Hân (bạn) bỏ Missed! (3♠).',
   card_equipped: 'Minh đặt Barrel (Q♠) trước mặt.',
   draw_revealed: 'Minh lật kiểm tra cho Barrel: Beer (6♥).',
+  dynamite_round_ended: 'Hân (bạn) bỏ Dynamite vì đã đi hết một vòng.',
+  jail_held: 'Minh mất lượt; Jail còn ở lại (2 lượt).',
+  jail_expired: 'Minh thoát Jail sau 3 lượt đã mất, không cần lật kiểm tra.',
   card_passed: 'Hân (bạn) chuyển Dynamite (2♥) sang Minh.',
   hand_affected: 'Hân (bạn) dùng Panic! lấy 1 lá từ tay Minh.',
   hand_card_affected: 'Hân (bạn) dùng Panic! lấy Missed! (3♠) từ tay Minh.',
@@ -101,4 +104,9 @@ test('four-player custom roles show a Deputy and distinguish multiple Renegades 
   assert.equal(result.players[1].role, 'Phó cảnh sát');
   table.winner = { renegade: { player: 3 } };
   assert.deepEqual(gameResult(game, 0)!.players.map(player => player.won), [false, false, false, true]);
+});
+
+
+test('third failed Jail turn says release is next turn, without adding a fourth draw', () => {
+  assert.deepEqual(eventsToLog([{ type: 'jail_held', player: 1, turns_left: 0 }], ctx), ['Minh đã mất 3 lượt vì Jail; Jail tự bỏ ở đầu lượt kế tiếp.']);
 });

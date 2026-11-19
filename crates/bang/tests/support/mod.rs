@@ -202,11 +202,12 @@ pub fn invariant(state: &GameState) {
             .collect();
         assert_eq!(kinds.len(), player.in_play.len());
         assert!(
-            kinds
-                .iter()
-                .filter(|kind| kind.weapon_range().is_some())
-                .count()
-                <= 1
+            state.config.mode == GameMode::Club
+                || kinds
+                    .iter()
+                    .filter(|kind| kind.weapon_range().is_some())
+                    .count()
+                    <= 1
         );
         if player.alive && player.health <= 0 {
             assert!(state.pending.iter().any(|frame| matches!(frame.kind, PendingKind::Dying { player, needed, .. } if player == PlayerId(index) && needed == (1 - state.players[index].health) as u16)));

@@ -47,6 +47,7 @@ pub fn setup<R: Rng + ?Sized>(
                 alive: true,
                 hand: Vec::new(),
                 in_play: Vec::new(),
+                jail_turns_served: 0,
             }
         })
         .collect();
@@ -55,6 +56,7 @@ pub fn setup<R: Rng + ?Sized>(
     draw_pile.shuffle(rng);
     let mut state = GameState {
         config,
+        dynamite_round: None,
         players,
         draw_pile,
         discard_pile: Vec::new(),
@@ -354,7 +356,8 @@ fn equip_card(
     events: &mut Vec<Event>,
 ) {
     let kind = card.card().unwrap().kind;
-    if kind.weapon_range().is_some()
+    if state.config.mode == crate::GameMode::Classic
+        && kind.weapon_range().is_some()
         && let Some(old) = state.players[target.0]
             .in_play
             .iter()
@@ -365,6 +368,15 @@ fn equip_card(
     }
     remove_from_hand(state, source, card);
     state.players[target.0].in_play.push(card);
+    if state.config.mode == crate::GameMode::Club && kind == CardKind::Dynamite {
+        state.dynamite_round = Some(crate::DynamiteRound {
+            card,
+            remaining: turn_order(state, target, true),
+        });
+    }
+    if kind == CardKind::Jail {
+        state.players[target.0].jail_turns_served = 0;
+    }
     events.push(Event::public(EventKind::CardPlayed {
         player: source,
         card,
@@ -396,7 +408,9 @@ fn affect_card<R: Rng + ?Sized>(
                 .iter()
                 .position(|id| *id == card)
                 .unwrap();
-            state.players[target.0].in_play.remove(index)
+            let card = state.players[target.0].in_play.remove(index);
+            clear_in_play_state(state, target, card);
+            card
         }
     };
     if kind == CardKind::Panic {
@@ -496,8 +510,22 @@ fn discard_in_play(state: &mut GameState, player: PlayerId, card: CardId, events
         .position(|id| *id == card)
         .unwrap();
     state.players[player.0].in_play.remove(index);
+    clear_in_play_state(state, player, card);
     state.discard(card);
     events.push(Event::public(EventKind::CardDiscarded { player, card }));
+}
+
+fn clear_in_play_state(state: &mut GameState, player: PlayerId, card: CardId) {
+    if card.card().unwrap().kind == CardKind::Jail {
+        state.players[player.0].jail_turns_served = 0;
+    }
+    if state
+        .dynamite_round
+        .as_ref()
+        .is_some_and(|round| round.card == card)
+    {
+        state.dynamite_round = None;
+    }
 }
 
 fn discard_all(state: &mut GameState, player: PlayerId, events: &mut Vec<Event>) {
@@ -507,6 +535,7 @@ fn discard_all(state: &mut GameState, player: PlayerId, events: &mut Vec<Event>)
         .chain(std::mem::take(&mut own.in_play))
         .collect();
     for card in cards {
+        clear_in_play_state(state, player, card);
         state.discard(card);
         events.push(Event::public(EventKind::CardDiscarded { player, card }));
     }
@@ -575,6 +604,9 @@ fn eliminate<R: Rng + ?Sized>(
         discard_all(state, player, events);
         Vec::new()
     };
+    for &card in &inherited {
+        clear_in_play_state(state, player, card);
+    }
     if let Some(source) = source.filter(|id| state.players.get(id.0).is_some_and(|p| p.alive)) {
         if role == Role::Outlaw && duel_initiator != Some(player) {
             events.push(Event::public(EventKind::BountyAwarded {
@@ -805,6 +837,13 @@ fn advance_until_input<R: Rng + ?Sized>(
                     .copied()
                     .find(|card| card.card().unwrap().kind == CardKind::Dynamite)
                 {
+                    if state.config.mode == crate::GameMode::Club && state.dynamite_round.is_none()
+                    {
+                        state.dynamite_round = Some(crate::DynamiteRound {
+                            card: dynamite,
+                            remaining: turn_order(state, player, true),
+                        });
+                    }
                     checks::begin(
                         state,
                         player,
@@ -826,6 +865,13 @@ fn advance_until_input<R: Rng + ?Sized>(
                     .copied()
                     .find(|card| card.card().unwrap().kind == CardKind::Jail)
                 {
+                    if state.config.mode == crate::GameMode::Club
+                        && state.players[player.0].jail_turns_served >= 3
+                    {
+                        discard_in_play(state, player, jail, events);
+                        events.push(Event::public(EventKind::JailExpired { player }));
+                        continue;
+                    }
                     checks::begin(
                         state,
                         player,

@@ -10,6 +10,14 @@ pub struct Player {
     pub alive: bool,
     pub hand: Vec<CardId>,
     pub in_play: Vec<CardId>,
+    #[serde(default)]
+    pub jail_turns_served: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DynamiteRound {
+    pub card: CardId,
+    pub remaining: Vec<PlayerId>,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -173,6 +181,8 @@ pub struct Decision {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GameState {
     pub config: crate::GameConfig,
+    #[serde(default)]
+    pub dynamite_round: Option<DynamiteRound>,
     pub players: Vec<Player>,
     pub draw_pile: Vec<CardId>,
     pub discard_pile: Vec<CardId>,
@@ -276,7 +286,8 @@ impl Player {
     pub fn weapon_range(&self) -> u16 {
         self.in_play
             .iter()
-            .find_map(|card| card.card().and_then(|card| card.kind.weapon_range()))
+            .filter_map(|card| card.card().and_then(|card| card.kind.weapon_range()))
+            .max()
             .unwrap_or(1)
     }
 }
