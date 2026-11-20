@@ -34,7 +34,7 @@ export default function App() {
   const membership = useRef<WebSocket | null>(null);
   const [room, setRoom] = useState<RoomView | null>(null);
   const roomRef = useRef<RoomView | null>(null);
-  const entry = useRef<{ type: 'create_room' | 'join_room' | 'rejoin_room'; code?: string; invite: boolean } | null>(null);
+  const entry = useRef<{ type: 'create_room' | 'join_room' | 'rejoin_room'; code?: string; invite: boolean; path: string; cancelled?: boolean } | null>(null);
   const switching = useRef<'restore' | 'leave' | null>(null);
   const leaving = useRef(false);
   const [gameState, setGameState] = useState<GameSyncState>(initialGameState);
@@ -87,13 +87,18 @@ export default function App() {
   function restoreForRoute(connection: WebSocket): boolean {
     if (!canRestore() || membership.current === connection || requests.pending || connection.readyState !== WebSocket.OPEN) return false;
     const saved = session.current!;
-    entry.current = { type: 'rejoin_room', code: saved.roomCode, invite: !!routeRef.current.code };
+    entry.current = { type: 'rejoin_room', code: saved.roomCode, invite: !!routeRef.current.code, path: routeRef.current.path };
     setRestoring(true);
     submit(connection, { v: PROTOCOL_VERSION, type: 'rejoin_room', room_code: saved.roomCode, token: saved.token });
     return true;
   }
 
   useEffect(() => {
+    if (entry.current && entry.current.path !== route.path) entry.current.cancelled = true;
+    if (entry.current?.cancelled) {
+      setRestoring(canRestore());
+      if (socket.current?.readyState === WebSocket.OPEN) setStatus('Đã kết nối');
+    }
     if (route.invalid) {
       suppressRestore.current = true; setRestoring(false); setError('Mã phòng không hợp lệ');
       void navigate('/', { replace: true }); return;
@@ -137,6 +142,21 @@ export default function App() {
             switching.current = null; return;
           }
           if (switching.current && message.type === 'room_state') return;
+          if (entry.current && (entry.current.cancelled || entry.current.path !== routeRef.current.path)) {
+            entry.current.cancelled = true;
+            if (message.type === 'joined') {
+              // A stale entry may have succeeded remotely; drain its leave before accepting new input.
+              requests.cancel(connection);
+              submit(connection, { v: PROTOCOL_VERSION, type: 'leave_room' });
+            }
+            if (message.type === 'left' || message.type === 'error' && ['invalid_token', 'room_not_found'].includes(message.code)) forgetSession();
+            if (requests.finish(connection, message)) {
+              entry.current = null;
+              setPending(false); setRequestVersion(value => value + 1);
+              if (!restoreForRoute(connection)) { setRestoring(false); setStatus('Đã kết nối'); }
+            }
+            return;
+          }
           const before = gameRef.current;
           const next = receiveGameState(before, message);
           setGameSync(next);
@@ -243,7 +263,7 @@ export default function App() {
         message = { ...message, room_code: normalized };
       }
       const saved = session.current;
-      entry.current = { type: message.type, code: message.type === 'join_room' ? message.room_code : undefined, invite: !!routeRef.current.code };
+      entry.current = { type: message.type, code: message.type === 'join_room' ? message.room_code : undefined, invite: !!routeRef.current.code, path: routeRef.current.path };
       if (saved && !roomRef.current) {
         if (message.type === 'join_room' && message.room_code === saved.roomCode) {
           entry.current.type = 'rejoin_room';

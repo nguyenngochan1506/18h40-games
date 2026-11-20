@@ -52,7 +52,7 @@ after(async () => {
 
 const saved = { roomCode: 'ABCDE', token: 'ab'.repeat(16) };
 const joined = (code = 'ABCDE'): ServerMessage => ({ v: PROTOCOL_VERSION, type: 'joined', room_code: code, token: 'cd'.repeat(16), room: { ...demoRoom, code, phase: 'waiting' }, game: null });
-async function mount(t: TestContext, path = '/', session?: Session) {
+async function mount(t: TestContext, path: string | string[] = '/', session?: Session) {
   TestSocket.instances = []; window.localStorage.clear(); if (session) saveSession(session);
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
   t.mock.method(performance, 'now', () => Date.now());
@@ -60,7 +60,7 @@ async function mount(t: TestContext, path = '/', session?: Session) {
   const errors = t.mock.method(console, 'error'), warnings = t.mock.method(console, 'warn');
   const container = document.createElement('div'); document.body.append(container);
   const root = createRoot(container);
-  const router = createMemoryRouter(appRoutes, { initialEntries: [path] });
+  const router = createMemoryRouter(appRoutes, { initialEntries: Array.isArray(path) ? path : [path] });
   await act(async () => root.render(createElement(RouterProvider, { router })));
   const tick = async (ms = 200) => { await act(async () => t.mock.timers.tick(ms)); };
   await tick();
@@ -112,6 +112,61 @@ for (const path of ['/', '/r/ABCDE']) test(`the saved room rejoins from ${path} 
   assert.deepEqual(fx.connection.commands(), [{ v: PROTOCOL_VERSION, type: 'rejoin_room', room_code: 'ABCDE', token: saved.token }]);
   await fx.receive(joined()); assert.equal(fx.router.state.location.pathname, '/r/ABCDE'); assert.equal(fx.router.state.historyAction, 'REPLACE');
   assert.equal(TestSocket.instances.length, 1);
+});
+
+for (const outcome of ['joined', 'room_not_found', 'invalid_token', 'wrong_phase'] as const) test(`Back during rejoin ignores a late ${outcome} and allows entering the current invite`, async t => {
+  const fx = await mount(t, ['/r/FGHJK', '/r/ABCDE'], saved);
+  const restorePing = fx.connection.sent.find(message => message.type === 'ping')!;
+  assert.equal(fx.connection.commands()[0]?.type, 'rejoin_room');
+  await act(() => fx.router.navigate(-1)); await fx.tick();
+  const assertInvite = () => {
+    assert.equal(fx.router.state.location.pathname, '/r/FGHJK');
+    assert.equal(fx.container.querySelector<HTMLInputElement>('#room-code')?.value, 'FGHJK');
+    assert.match(fx.container.textContent!, /Bạn được mời vào phòng FGHJK/);
+    assert.equal(fx.container.querySelector('.app-scene:not([inert]) .saloon-restoring,.app-scene:not([inert]) .saloon-waiting,dialog,[role="alert"]'), null);
+  };
+  assertInvite();
+  if (outcome === 'joined') {
+    await fx.receive(joined(), false);
+    assertInvite();
+    assert.equal(fx.connection.commands().at(-1)?.type, 'leave_room');
+    await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: { ...demoRoom, code: 'ABCDE', phase: 'waiting' } }, false);
+    await fx.receive({ v: PROTOCOL_VERSION, type: 'pong', nonce: restorePing.nonce }, false);
+    assertInvite();
+    assert.equal(fx.container.querySelector<HTMLButtonElement>('.join-poster button[type="submit"]')!.disabled, true, 'Wait for the cleanup barrier before entering another room');
+    await fx.receive({ v: PROTOCOL_VERSION, type: 'left' });
+  } else {
+    await fx.receive({ v: PROTOCOL_VERSION, type: 'error', code: outcome, message: 'Old rejoin rejected' });
+  }
+  assertInvite();
+  if (outcome !== 'wrong_phase') assert.equal(window.localStorage.getItem('18h40.session'), null);
+  assert.equal(fx.container.querySelector('.connection-status')!.textContent, 'Đã kết nối');
+  assert.equal(fx.container.querySelector<HTMLButtonElement>('.join-poster button[type="submit"]')!.disabled, false);
+  await fx.fill('#join-nickname', 'Mai'); await fx.click('.join-poster button[type="submit"]');
+  assert.deepEqual(fx.connection.commands().at(-1), { v: PROTOCOL_VERSION, type: 'join_room', room_code: 'FGHJK', nickname: 'Mai' });
+  if (outcome === 'wrong_phase') {
+    await fx.receive(joined(), false);
+    await fx.receive({ v: PROTOCOL_VERSION, type: 'left' }, false);
+  }
+  await fx.receive(joined('FGHJK'));
+  assert.equal(fx.router.state.location.pathname, '/r/FGHJK');
+  assert.equal(JSON.parse(window.localStorage.getItem('18h40.session')!).roomCode, 'FGHJK');
+  assert.equal(TestSocket.instances.length, 1);
+});
+
+test('Forward to the saved route does not revive a cancelled rejoin before cleanup finishes', async t => {
+  const fx = await mount(t, ['/r/FGHJK', '/r/ABCDE'], saved);
+  await act(() => fx.router.navigate(-1)); await fx.tick();
+  await act(() => fx.router.navigate(1)); await fx.tick();
+  await fx.receive(joined(), false);
+  assert.equal(fx.connection.commands().at(-1)?.type, 'leave_room');
+  assert.equal(fx.container.querySelector('.app-scene:not([inert]) .saloon-waiting'), null);
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'left' });
+  assert.equal(fx.router.state.location.pathname, '/r/ABCDE');
+  assert.equal(fx.container.querySelector<HTMLInputElement>('#room-code')!.value, 'ABCDE');
+  assert.match(fx.container.textContent!, /Bạn được mời vào phòng ABCDE/);
+  assert.equal(fx.connection.commands().filter(message => message.type === 'rejoin_room').length, 1);
+  assert.equal(window.localStorage.getItem('18h40.session'), null);
 });
 
 test('another room invite does not restore the old membership until the user returns', async t => {
