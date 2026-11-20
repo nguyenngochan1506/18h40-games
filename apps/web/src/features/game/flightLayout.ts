@@ -49,11 +49,10 @@ export function prepareFlights(stage: HTMLElement, jobs: ReturnType<typeof sched
   for (const [player, count] of arrivals) {
     const node = stage.querySelector<HTMLElement>(`[data-player-id="${player}"] .hand-count`);
     if (!node) continue;
-    const label = node.getAttribute('aria-label');
     const base = Math.max(0, (current.counts.get(player) ?? count) - count);
-    const restore = () => { delete node.dataset.flightCount; if (label !== null) node.setAttribute('aria-label', label); restores.delete(restore); };
+    const restore = () => { delete node.dataset.flightCount; restores.delete(restore); };
     restores.add(restore); counts.set(player, { node, count: base, restore });
-    node.dataset.flightCount = String(base); node.setAttribute('aria-label', `${base} lá trên tay`);
+    node.dataset.flightCount = String(base);
   }
   const discards = jobs.filter(job => (job.kind === 'card' || job.kind === 'extinguish') && job.to === 'discard' || job.kind === 'check' && job.card !== undefined);
   let pendingDiscards = discards.length;
@@ -96,7 +95,7 @@ export function prepareFlights(stage: HTMLElement, jobs: ReturnType<typeof sched
       show();
       const badge = player === null ? undefined : counts.get(player);
       if (badge) {
-        badge.count++; badge.node.dataset.flightCount = String(badge.count); badge.node.setAttribute('aria-label', `${badge.count} lá trên tay`);
+        badge.count++; badge.node.dataset.flightCount = String(badge.count);
         arrivals.set(player!, arrivals.get(player!)! - 1);
         if (!arrivals.get(player!)) badge.restore();
       }

@@ -208,7 +208,8 @@ export default function GameFx({ batch, ctx, enabled, width, height, ambientEnab
         } else body.append(card(job.card));
         if (job.fuse) node.append(element('fx-fuse'));
         root.append(node); nodes.add(node);
-        landings.set(node, () => flight?.land(body));
+        const land = () => flight?.land(job.to === 'discard' ? card(job.card) : undefined);
+        landings.set(node, land);
         if (job.start) timers.push(window.setTimeout(() => admit(node), job.start)); else admit(node);
         const arc = Math.min(75, Math.max(20, Math.hypot(dx, dy) * .12));
         const life = animate(node, [
@@ -216,7 +217,7 @@ export default function GameFx({ batch, ctx, enabled, width, height, ambientEnab
           { transform: `translate(${dx * .55}px,${dy * .55 - arc}px) translate(-50%,-50%) rotate(3deg) scale(${(1 + scale) / 2})`, opacity: 1, offset: .55 },
           { transform: `translate(${dx}px,${dy}px) translate(-50%,-50%) rotate(0deg) scale(${scale})`, opacity: 1 },
         ], duration, job.start);
-        life.onfinish = () => { flight?.land(body); node.remove(); nodes.delete(node); running.delete(node); landings.delete(node); };
+        life.onfinish = () => { land(); node.remove(); nodes.delete(node); running.delete(node); landings.delete(node); };
         return;
       } else if (job.kind === 'check') {
         const pile = stage.querySelector('.discard-pile .game-art')?.getBoundingClientRect();

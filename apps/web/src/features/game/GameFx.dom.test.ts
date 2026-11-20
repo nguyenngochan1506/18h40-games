@@ -5,8 +5,8 @@ import type { TestContext } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Window } from 'happy-dom';
 import { createServer } from 'vite';
-import { act, createElement } from 'react';
-import type { ComponentProps } from 'react';
+import { act, createElement, Fragment } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import type GameFxComponent from './GameFx.tsx';
 import type { FxBatch } from './fx.ts';
 import { demoGame, demoRoom } from './demo.ts';
@@ -37,7 +37,7 @@ type Props = ComponentProps<typeof GameFxComponent>;
 const ctx = { players: selectGameView(demoGame.view).table.players, seats: demoGame.seats, you: 0 };
 const burst = (id: number): FxBatch => ({ id, events: Array.from({ length: 20 }, () => ({ type: 'health_changed' as const, player: 1, source: 0, delta: -1, health: 1 })), waiting: null });
 
-async function mount(t: TestContext, initial: FxBatch | null = null, state = { hidden: false, reduced: false }) {
+async function mount(t: TestContext, initial: FxBatch | null = null, state = { hidden: false, reduced: false }, scene?: (props: Props) => ReactNode) {
   t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 0 });
   t.mock.method(performance, 'now', () => Date.now());
   const pending = new Set<ReturnType<typeof setTimeout>>(), intervals = new Set<ReturnType<typeof setInterval>>();
@@ -74,7 +74,7 @@ async function mount(t: TestContext, initial: FxBatch | null = null, state = { h
   const root = createRoot(stage);
   let mounted = true;
   let props: Props = { batch: initial, ctx, enabled: true, width: 1280, height: 720, ambientEnabled: false };
-  const render = async (next: Partial<Props>) => { props = { ...props, ...next }; await act(() => root.render(createElement(GameFx, props))); };
+  const render = async (next: Partial<Props>) => { props = { ...props, ...next }; await act(() => root.render(createElement(Fragment, null, scene?.(props), createElement(GameFx, props)))); };
   await render({});
   const layer = stage.querySelector<HTMLElement>('.fx-layer')!;
   const append = layer.append;
@@ -337,13 +337,61 @@ test('other players hand counts wait for arrivals, and reduced motion never hide
   const badge = document.createElement('span'); badge.dataset.playerId = '1'; badge.innerHTML = '<span class="hand-count" aria-label="5 lá trên tay"></span>'; fx.stage.append(badge);
   const players = structuredClone(ctx.players); players[1].hand_count = 5;
   await fx.render({ ctx: { ...ctx, players }, batch: { id: 1, events: [{ type: 'cards_drawn', player: 1, count: 2 }], waiting: null } });
-  assert.equal(badge.querySelector('span')!.getAttribute('aria-label'), '3 lá trên tay');
+  assert.equal(badge.querySelector<HTMLElement>('span')!.dataset.flightCount, '3');
+  assert.equal(badge.querySelector('span')!.getAttribute('aria-label'), '5 lá trên tay');
   assert.equal(fx.layer.querySelectorAll('[data-face="public"]').length, 0);
-  await fx.tick(300); assert.equal(badge.querySelector('span')!.getAttribute('aria-label'), '3 lá trên tay');
+  await fx.tick(300); assert.equal(badge.querySelector<HTMLElement>('span')!.dataset.flightCount, '3');
   await fx.tick(400); assert.equal(badge.querySelector('span')!.getAttribute('aria-label'), '5 lá trên tay');
   await fx.reduced(true);
   const hand = document.createElement('div'); hand.className = 'own-hand'; hand.innerHTML = '<div class="hand-cards"><button data-card-id="10"></button></div>'; fx.stage.append(hand);
   await fx.render({ batch: { id: 2, events: [{ type: 'cards_drawn', player: 0, count: 1 }, { type: 'cards_received', player: 0, cards: [10] }], waiting: null } });
   assert.equal(hand.querySelector<HTMLElement>('button')!.style.visibility, ''); assert.equal(fx.layer.children.length, 0);
   await fx.unmount(); assert.equal(fx.pending.size, 0); assert.equal(fx.intervals.size, 0);
+});
+
+for (const next of ['batch', 'snapshot'] as const) test(`React owns the final hand count and aria-label after a consecutive ${next}`, async t => {
+  const fx = await mount(t, null, { hidden: false, reduced: false }, props => {
+    const count = props.ctx.players.find(player => player.id === 1)!.hand_count;
+    return createElement('div', { 'data-player-id': 1 }, createElement('span', { className: 'hand-count', 'aria-label': `${count} lá trên tay` }, createElement('span', { className: 'motion-count' }, count)));
+  });
+  const update = (count: number, batch: FxBatch | null) => fx.render({ ctx: { ...ctx, players: ctx.players.map(player => player.id === 1 ? { ...player, hand_count: count } : player) }, batch });
+  const draw = (id: number): FxBatch => ({ id, events: [{ type: 'cards_drawn', player: 1, count: 1 }], waiting: null });
+  await update(3, null);
+  const badge = fx.stage.querySelector<HTMLElement>('.hand-count')!;
+  await update(4, draw(1));
+  assert.equal(badge.dataset.flightCount, '3');
+  assert.equal(badge.getAttribute('aria-label'), '4 lá trên tay');
+  await fx.tick(100);
+  await update(5, next === 'batch' ? draw(2) : null);
+  assert.equal(badge.getAttribute('aria-label'), '5 lá trên tay');
+  await fx.tick(3000);
+  assert.equal(fx.stage.querySelector('.hand-count'), badge, 'React updates the same badge node across batches');
+  assert.equal(badge.textContent, '5');
+  assert.equal(badge.getAttribute('aria-label'), '5 lá trên tay');
+  assert.equal(badge.dataset.flightCount, undefined);
+  assert.equal(fx.layer.children.length, 0);
+});
+
+test('consecutive public opponent discards hold a static front face between landings', async t => {
+  const fx = await mount(t, null, { hidden: false, reduced: false }, props => createElement('div', { className: 'discard-pile', 'data-animation-region': 'discard' }, createElement('div', { className: 'pile-top' }, createElement('span', { className: 'game-card', 'data-card-id': props.batch ? 37 : 1 }, 'Authoritative discard'))));
+  await fx.render({ batch: { id: 1, events: [{ type: 'card_discarded', player: 1, card: 26 }, { type: 'card_discarded', player: 1, card: 37 }], waiting: null } });
+  const firstImage = fx.layer.querySelector<HTMLImageElement>('.fx-cue-card .fx-flight-front img')!.src;
+  await fx.tick(400);
+  assert.equal(fx.layer.querySelectorAll('.fx-cue-card').length, 1, 'Only the first flight has landed');
+  const hold = fx.stage.querySelector<HTMLElement>('.fx-discard-hold')!;
+  const face = hold.firstElementChild as HTMLElement;
+  assert.ok(face.classList.contains('fx-card'), 'Hold receives a static card, not an animated two-sided body');
+  assert.equal(face.dataset.face, 'public');
+  assert.equal(face.querySelector<HTMLImageElement>('img')!.src, firstImage);
+  assert.equal(hold.querySelector('.fx-flight-body,.fx-flight-front,.fx-flight-back,[data-face="back"]'), null);
+  assert.equal(face.style.transform, '', 'The static face needs no 3D animation to face the viewer');
+  await fx.tick(100);
+  assert.equal(fx.stage.querySelector('.fx-discard-hold'), null);
+  assert.equal(fx.stage.querySelector<HTMLElement>('.pile-top')!.style.visibility, '');
+  await fx.render({ batch: { id: 2, events: Array.from({ length: 2 }, () => ({ type: 'hand_affected' as const, source: 0, target: 1, kind: 'cat_balou' as const, count: 1 })), waiting: null } });
+  await fx.tick(400);
+  assert.equal(fx.stage.querySelector('.fx-discard-hold > .fx-card')?.getAttribute('data-face'), 'back', 'A flight without a public card stays face down');
+  assert.equal(fx.stage.querySelector('.fx-discard-hold [data-face="public"]'), null);
+  await fx.tick(100);
+  assert.equal(fx.stage.querySelector('.fx-discard-hold'), null);
 });
