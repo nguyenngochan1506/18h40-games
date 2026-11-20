@@ -134,6 +134,6 @@
 .fx-discard-hold * { pointer-events: none !important; }
 .fx-discard-hold > * { width: 100% !important; height: 100%; margin: 0; }
 .fx-discard-hold .game-art { width: 100%; }
-.hand-count[data-flight-count] > .motion-count { visibility: hidden; }
-.hand-count[data-flight-count]::after { content: attr(data-flight-count); }
+.hand-count[data-flight-count] > .motion-count { opacity: 0; }
+.hand-count > .fx-hand-count { position: absolute; right: 0; }
 @media (prefers-reduced-motion: reduce) { .fx-fuse { display: none; } }

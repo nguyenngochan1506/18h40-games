@@ -45,13 +45,14 @@ export function prepareFlights(stage: HTMLElement, jobs: ReturnType<typeof sched
     const player = job.to === 'hand' ? ctx.you : typeof job.to === 'number' ? job.to : null;
     if (player !== null) arrivals.set(player, (arrivals.get(player) ?? 0) + 1);
   }
-  const counts = new Map<number, { node: HTMLElement; count: number; restore: () => void }>();
+  const counts = new Map<number, { node: HTMLElement; display: HTMLElement; count: number; restore: () => void }>();
   for (const [player, count] of arrivals) {
     const node = stage.querySelector<HTMLElement>(`[data-player-id="${player}"] .hand-count`);
     if (!node) continue;
     const base = Math.max(0, (current.counts.get(player) ?? count) - count);
-    const restore = () => { delete node.dataset.flightCount; restores.delete(restore); };
-    restores.add(restore); counts.set(player, { node, count: base, restore });
+    const display = document.createElement('span'); display.className = 'fx-hand-count'; display.setAttribute('aria-hidden', 'true'); display.textContent = String(base); node.append(display);
+    const restore = () => { delete node.dataset.flightCount; display.remove(); restores.delete(restore); };
+    restores.add(restore); counts.set(player, { node, display, count: base, restore });
     node.dataset.flightCount = String(base);
   }
   const discards = jobs.filter(job => (job.kind === 'card' || job.kind === 'extinguish') && job.to === 'discard' || job.kind === 'check' && job.card !== undefined);
@@ -95,7 +96,7 @@ export function prepareFlights(stage: HTMLElement, jobs: ReturnType<typeof sched
       show();
       const badge = player === null ? undefined : counts.get(player);
       if (badge) {
-        badge.count++; badge.node.dataset.flightCount = String(badge.count);
+        badge.count++; badge.node.dataset.flightCount = String(badge.count); badge.display.textContent = String(badge.count);
         arrivals.set(player!, arrivals.get(player!)! - 1);
         if (!arrivals.get(player!)) badge.restore();
       }

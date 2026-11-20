@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import { Window } from 'happy-dom';
 import { createServer } from 'vite';
 import { act, createElement, Fragment } from 'react';
@@ -369,7 +370,36 @@ for (const next of ['batch', 'snapshot'] as const) test(`React owns the final ha
   assert.equal(badge.textContent, '5');
   assert.equal(badge.getAttribute('aria-label'), '5 lá trên tay');
   assert.equal(badge.dataset.flightCount, undefined);
+  assert.equal(badge.querySelector('.fx-hand-count'), null);
   assert.equal(fx.layer.children.length, 0);
+});
+
+test('in-flight hand counts are decorative while the authoritative count stays accessible', async t => {
+  const style = document.createElement('style'); style.textContent = await readFile(new URL('./fx.css', import.meta.url), 'utf8'); document.head.append(style); t.after(() => style.remove());
+  const fx = await mount(t, null, { hidden: false, reduced: false }, props => {
+    const count = props.ctx.players.find(player => player.id === 1)!.hand_count;
+    return createElement('div', { 'data-player-id': 1 }, createElement('span', { className: 'hand-count', 'aria-label': `${count} lá trên tay` }, createElement('span', { className: 'motion-count' }, count)));
+  });
+  const players = ctx.players.map(player => player.id === 1 ? { ...player, hand_count: 5 } : player);
+  const draw = (id: number): FxBatch => ({ id, events: [{ type: 'cards_drawn', player: 1, count: 2 }], waiting: null });
+  await fx.render({ ctx: { ...ctx, players }, batch: draw(1) });
+  const badge = fx.stage.querySelector<HTMLElement>('.hand-count')!;
+  const authoritative = badge.querySelector<HTMLElement>('.motion-count')!;
+  const display = badge.querySelector<HTMLElement>('.fx-hand-count')!;
+  assert.ok(display, 'The temporary number belongs to a separate decorative element');
+  assert.equal(display.getAttribute('aria-hidden'), 'true'); assert.equal(display.textContent, '3');
+  assert.equal(badge.getAttribute('aria-label'), '5 lá trên tay'); assert.equal(authoritative.textContent, '5');
+  assert.equal(authoritative.closest('[aria-hidden="true"],[hidden],[inert]'), null);
+  assert.ok(!['hidden', 'collapse'].includes(getComputedStyle(authoritative).visibility));
+  assert.notEqual(getComputedStyle(authoritative).display, 'none');
+  assert.equal(getComputedStyle(authoritative).opacity, '0', 'Only visual opacity hides the authoritative count');
+  await fx.tick(400); assert.equal(display.textContent, '4');
+  await fx.tick(100);
+  assert.equal(badge.querySelector('.fx-hand-count'), null); assert.equal(badge.dataset.flightCount, undefined);
+  assert.notEqual(getComputedStyle(authoritative).opacity, '0');
+  assert.equal(badge.getAttribute('aria-label'), '5 lá trên tay');
+  await fx.reduced(true); await fx.render({ batch: draw(2) });
+  assert.equal(badge.querySelector('.fx-hand-count'), null); assert.equal(badge.dataset.flightCount, undefined);
 });
 
 test('consecutive public opponent discards hold a static front face between landings', async t => {
