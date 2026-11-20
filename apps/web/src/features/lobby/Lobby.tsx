@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { m, useReducedMotion } from 'motion/react';
 import type { ClientMessage, GameKind } from '../../generated/protocol';
 import { PROTOCOL_VERSION } from '../../generated/protocol';
@@ -6,12 +6,24 @@ import { SaloonBackdrop } from '../../shared/SaloonScene';
 import { Icon } from '../game/TableIcons';
 import { games, availableGames } from './games';
 import './lobby.css';
+import { isValidRoomCode, normalizeRoomCode } from '../../shared/lib/roomRoute';
 
-type Props = { disabled: boolean; send: (message: ClientMessage) => void };
+type Props = { disabled: boolean; send: (message: ClientMessage) => void; inviteCode?: string | null; previousRoom?: string; returnToRoom?: () => void; dismissInvite?: () => void };
 
-export default function Lobby({ disabled, send }: Props) {
+export default function Lobby({ disabled, send, inviteCode, previousRoom, returnToRoom, dismissInvite }: Props) {
   const [nickname, setNickname] = useState('');
-  const [roomCode, setRoomCode] = useState('');
+  const [roomCode, setRoomCode] = useState(inviteCode ?? '');
+  const joinName = useRef<HTMLInputElement>(null);
+  const joinCode = useRef<HTMLInputElement>(null);
+  const [nameError, setNameError] = useState(false);
+  const [codeError, setCodeError] = useState(false);
+  useEffect(() => {
+    if (!inviteCode) return;
+    setRoomCode(inviteCode);
+    // Focus after the parent scene's heading focus has run.
+    const timer = setTimeout(() => joinName.current?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, [inviteCode]);
   const [selectedGame, setSelectedGame] = useState<GameKind | null>(null);
   const reduced = useReducedMotion();
   const nameLength = Array.from(nickname.trim()).length;
@@ -53,20 +65,25 @@ export default function Lobby({ disabled, send }: Props) {
         </form>
         <form className="saloon-poster join-poster" aria-labelledby="join-heading" onSubmit={(event) => {
           event.preventDefault();
-          if (validName && roomCode.trim().length === 5 && !disabled) send({ v: PROTOCOL_VERSION, type: 'join_room', room_code: roomCode.trim(), nickname });
+          if (disabled) return;
+          if (!validName) { joinName.current?.focus(); setNameError(true); return; }
+          if (!isValidRoomCode(roomCode)) { joinCode.current?.focus(); setCodeError(true); return; }
+          send({ v: PROTOCOL_VERSION, type: 'join_room', room_code: roomCode, nickname });
         }}>
           <span className="poster-star" aria-hidden="true">✦</span>
           <h3 id="join-heading">Vào phòng</h3>
           <p className="poster-description">Bạn bè đã đợi? Kéo ghế vào bàn.</p>
+          {inviteCode && <p className="invite-notice">Bạn được mời vào phòng <strong>{inviteCode}</strong>. <button type="button" className="invite-action" onClick={() => { setRoomCode(''); dismissInvite?.(); }}>Bỏ lời mời</button></p>}
+          {previousRoom && <p className="invite-notice">Bạn đang ở phòng {previousRoom}. <button type="button" className="invite-action" onClick={returnToRoom}>Về phòng {previousRoom}</button></p>}
           <div className="poster-fields">
             <label htmlFor="join-nickname">Tên của bạn</label>
-            <input id="join-nickname" autoComplete="nickname" autoCapitalize="words" value={nickname} onChange={(event) => setNickname(event.target.value)} aria-describedby="join-nickname-hint" className="saloon-field" />
-            <p id="join-nickname-hint" className="field-hint">Từ 1 đến 20 ký tự · {nameLength}/20</p>
+            <input ref={joinName} id="join-nickname" autoComplete="nickname" autoCapitalize="words" value={nickname} onFocus={() => setNameError(false)} onBlur={() => setNameError(!validName)} onChange={(event) => { setNickname(event.target.value); setNameError(false); }} aria-invalid={nameError || undefined} aria-describedby="join-nickname-hint" className="saloon-field" />
+            <p id="join-nickname-hint" className="field-hint" role={nameError ? 'alert' : undefined}>{nameError ? 'Nhập tên từ 1 đến 20 ký tự.' : `Từ 1 đến 20 ký tự · ${nameLength}/20`}</p>
             <label htmlFor="room-code">Mã phòng</label>
-            <input id="room-code" autoComplete="off" autoCapitalize="characters" maxLength={5} value={roomCode} onChange={(event) => setRoomCode(event.target.value.toUpperCase())} placeholder="ABCDE" aria-describedby="room-code-hint" className="saloon-field room-code-input" />
-            <p id="room-code-hint" className="field-hint">Nhập mã 5 ký tự từ chủ phòng.</p>
+            <input ref={joinCode} id="room-code" autoComplete="off" autoCapitalize="characters" maxLength={32} value={roomCode} onFocus={() => setCodeError(false)} onBlur={() => setCodeError(!isValidRoomCode(roomCode))} onChange={(event) => { setRoomCode(normalizeRoomCode(event.target.value)); setCodeError(false); }} placeholder="ABCDE" aria-invalid={codeError || undefined} aria-describedby="room-code-hint" className="saloon-field room-code-input" />
+            <p id="room-code-hint" className="field-hint" role={codeError ? 'alert' : undefined}>{codeError ? 'Mã phòng không hợp lệ' : 'Nhập mã 5 ký tự từ chủ phòng.'}</p>
           </div>
-          <m.button {...feedback} className="western-button" disabled={disabled || !validName || roomCode.trim().length !== 5} type="submit">Vào phòng <span aria-hidden="true">→</span></m.button>
+          <m.button {...feedback} className="western-button" disabled={disabled} type="submit">Vào phòng <span aria-hidden="true">→</span></m.button>
         </form>
       </div>
       <p className="lobby-footnote">Chọn game yêu thích <span aria-hidden="true">✦</span> Rủ bạn vào bàn</p>

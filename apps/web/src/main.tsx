@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
-import App from './app/App';
+import { RouterProvider } from 'react-router/dom';
+import { createAppRouter } from './app/router';
 import { sound } from './features/game/sound';
 import './style.css';
 
@@ -9,5 +10,6 @@ const root = createRoot(document.getElementById('root')!);
 if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('demo') === 'bang') {
   void import('./features/game/GameDemo').then(({ default: GameDemo }) => root.render(<GameDemo />));
 } else {
-  root.render(<App />);
+  const router = createAppRouter();
+  root.render(<RouterProvider router={router} />);
 }

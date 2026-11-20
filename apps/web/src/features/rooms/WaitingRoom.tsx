@@ -8,6 +8,8 @@ import { landscapeScenes } from '../game/assetMap';
 import { waitingSeats } from './waitingSeats';
 import { availableGames } from '../lobby/games';
 import WaitingSettings from './WaitingSettings';
+import { inviteLink } from '../../shared/lib/roomRoute';
+import { copyText } from '../../shared/lib/clipboard';
 
 type Props = { room: RoomView; disabled: boolean; send: (message: ClientMessage) => void };
 
@@ -23,13 +25,13 @@ export default function WaitingRoom({ room, disabled, send }: Props) {
   const waiting = room.phase === 'waiting';
   const missing = Math.max(0, room.min_players - seats.length);
   const feedback = { whileHover: { scale: reduced || disabled ? 1 : 1.02 }, whileTap: { scale: reduced || disabled ? 1 : .98 }, transition: { duration: .1 } };
-  async function copyCode() {
+  async function copyCode(link = false) {
     setCopying(true);
     try {
-      await navigator.clipboard.writeText(room.code);
-      setCopyStatus('Đã chép');
+      await copyText(link ? inviteLink(window.location.origin, room.code) : room.code);
+      setCopyStatus(link ? 'Đã sao chép link' : 'Đã chép');
     } catch {
-      setCopyStatus(`Chưa chép được. Hãy chọn mã ${room.code} và sao chép.`);
+      setCopyStatus(`Chưa sao chép được. Hãy gửi mã ${room.code} cho bạn bè.`);
     } finally {
       setCopying(false);
     }
@@ -41,6 +43,7 @@ export default function WaitingRoom({ room, disabled, send }: Props) {
       <header className="waiting-code western-wood">
         <h2 id="room-overview" data-scene-title tabIndex={-1}>Mã phòng</h2>
         <div className="code-row"><strong>{room.code}</strong><button className="copy-code" type="button" onClick={() => void copyCode()} disabled={copying} aria-label="Sao chép mã phòng" title="Sao chép mã phòng"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="1" /><path d="M16 8V3H3v13h5" /></svg></button></div>
+        <button className="western-button quiet-button copy-invite" type="button" disabled={copying} onClick={() => void copyCode(true)}>Sao chép link mời</button>
         <p className="copy-status" role="status" aria-live="polite">{copyStatus || 'Gửi mã này để rủ bạn vào bàn'}</p>
       </header>
       <ul className="waiting-seats" aria-label={`Người chơi (${seats.length})`} aria-live="polite" aria-relevant="all">

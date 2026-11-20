@@ -1,3 +1,5 @@
+import { isValidRoomCode } from './roomRoute.ts';
+
 export type Session = { roomCode: string; token: string };
 const SESSION_KEY = '18h40.session';
 type SessionStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -6,7 +8,7 @@ export function loadSession(storage?: SessionStorage): Session | null {
   try {
     const value: unknown = JSON.parse((storage ?? window.localStorage).getItem(SESSION_KEY) ?? 'null');
     if (typeof value === 'object' && value !== null && 'roomCode' in value && 'token' in value
-      && typeof value.roomCode === 'string' && /^[2-9A-HJKMNP-Z]{5}$/.test(value.roomCode)
+      && typeof value.roomCode === 'string' && isValidRoomCode(value.roomCode)
       && typeof value.token === 'string' && /^[a-f0-9]{32}$/.test(value.token)) {
       return { roomCode: value.roomCode, token: value.token };
     }

@@ -19,6 +19,7 @@ export default function Room({ room, game, log, fxBatch, soundBatch, fxEnabled, 
   const waiting = room.phase === 'waiting';
   if (game && !waiting) return <Board game={game} room={room} log={log} fxBatch={fxBatch} soundBatch={soundBatch} fxEnabled={fxEnabled} viewer={viewer} disabled={disabled} pending={pending} requestVersion={requestVersion} actionError={actionError}
     endGame={() => send({ v: PROTOCOL_VERSION, type: 'end_game' })}
+    leaveRoom={() => send({ v: PROTOCOL_VERSION, type: 'leave_room' })}
     sendAction={(action) => send({ v: PROTOCOL_VERSION, type: 'game_action', action })}
     roomMenu={<><h2 id="room-overview">{info.name} · Phòng {room.code}</h2><p>{players} người chơi · Đang chơi</p><ul className="room-presence">{room.members.map((member) => <li key={member.id}><span>{member.nickname}{member.id === room.you ? ' (bạn)' : ''}</span><span>{member.online ? 'Đang kết nối' : 'Mất kết nối'}</span></li>)}</ul>
       <a className="action secondary" href="#room-overview">Về phòng</a>

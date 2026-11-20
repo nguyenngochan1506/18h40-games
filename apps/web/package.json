@@ -7,13 +7,14 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "vite build && node ../../scripts/check-web-build.mjs",
-    "test": "node --test src/shared/lib/*.test.ts src/features/game/*.test.ts src/features/rooms/*.test.ts src/features/lobby/*.test.ts"
+    "test": "node --test src/shared/lib/*.test.ts src/app/*.test.ts src/features/game/*.test.ts src/features/rooms/*.test.ts src/features/lobby/*.test.ts"
   },
   "dependencies": {
     "motion": "14.11.1",
     "pixi.js": "8.23.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-router": "7.18.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",

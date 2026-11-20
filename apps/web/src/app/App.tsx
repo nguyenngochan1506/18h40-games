@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Outlet, useBlocker, useLocation, useNavigate, useParams } from 'react-router';
 import { AnimatePresence, LazyMotion, domAnimation } from 'motion/react';
 import { SaloonBackdrop, SceneTransition, usePreloadedImages } from '../shared/SaloonScene';
 import '../shared/saloon.css';
@@ -14,24 +15,39 @@ import { sound } from '../features/game/sound';
 import { connectSocket } from '../shared/lib/socket';
 import { createRequestTracker } from '../shared/lib/request';
 import { loadSession, retryDelay, saveSession } from '../shared/lib/session';
+import { isValidRoomCode, normalizeRoomCode, roomPath, roomRoute } from '../shared/lib/roomRoute';
+import LeaveRoomDialog from './LeaveRoomDialog';
 
 const Lobby = lazy(() => import('../features/lobby/Lobby'));
 
 type ConnectionStatus = 'Đang kết nối' | 'Đã kết nối' | 'Đang kết nối lại…' | 'Mất kết nối';
 
 export default function App() {
+  const location = useLocation(), navigate = useNavigate();
+  const { code } = useParams();
+  const route = roomRoute(location.pathname);
+  const routeRef = useRef(route); routeRef.current = route;
+  const suppressRestore = useRef(false);
   const [initialSession] = useState(loadSession);
   const session = useRef(initialSession);
   const socket = useRef<WebSocket | null>(null);
+  const membership = useRef<WebSocket | null>(null);
   const [room, setRoom] = useState<RoomView | null>(null);
+  const roomRef = useRef<RoomView | null>(null);
+  const entry = useRef<{ type: 'create_room' | 'join_room' | 'rejoin_room'; code?: string; invite: boolean } | null>(null);
+  const switching = useRef<'restore' | 'leave' | null>(null);
+  const leaving = useRef(false);
   const [gameState, setGameState] = useState<GameSyncState>(initialGameState);
   const gameRef = useRef(gameState);
   const game = gameState.game;
-  const [restoring, setRestoring] = useState(Boolean(initialSession));
-  const [status, setStatus] = useState<ConnectionStatus>(initialSession ? 'Đang kết nối lại…' : 'Đang kết nối');
+  const canRestore = () => Boolean(session.current && !suppressRestore.current && !routeRef.current.invalid && (!routeRef.current.code || routeRef.current.code === session.current.roomCode));
+  const [restoring, setRestoring] = useState(canRestore);
+  const [status, setStatus] = useState<ConnectionStatus>(restoring ? 'Đang kết nối lại…' : 'Đang kết nối');
   const [pending, setPending] = useState(false);
   const [requestVersion, setRequestVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const blocker = useBlocker(({ nextLocation }) => Boolean(roomRef.current && roomRoute(nextLocation.pathname).code !== roomRef.current.code));
+  const blockerRef = useRef(blocker); blockerRef.current = blocker;
 
   const [requests] = useState(() => createRequestTracker<WebSocket>((connection) => {
     reconnect(connection, 'Máy chủ chưa phản hồi sau 15 giây. Đang kết nối lại để đồng bộ trạng thái.');
@@ -39,6 +55,9 @@ export default function App() {
 
   function clearRequest(connection: WebSocket) {
     requests.cancel(connection);
+    membership.current = null;
+    switching.current = null; entry.current = null;
+    leaving.current = false;
     setPending(false);
   }
   function reconnect(connection: WebSocket, message: string) {
@@ -46,23 +65,47 @@ export default function App() {
     clearRequest(connection);
     setError(message);
     setStatus('Đang kết nối lại…');
-    setRestoring(Boolean(session.current));
+    setRestoring(canRestore());
     connection.close();
   }
-  function submit(connection: WebSocket, message: ClientMessage) {
+  function submit(connection: WebSocket, message: ClientMessage | ClientMessage[]) {
     const nonce = requests.start(connection);
     if (nonce === null) return;
     setPending(true);
     setError(null);
     try {
-      connection.send(JSON.stringify(message));
-      // The server awaits this connection's command before reading the following ping.
+      for (const command of Array.isArray(message) ? message : [message]) connection.send(JSON.stringify(command));
+      // Commands on this socket are serialized by the server before the final ping barrier.
       connection.send(JSON.stringify({ v: PROTOCOL_VERSION, type: 'ping', nonce } satisfies ClientMessage));
     } catch {
       reconnect(connection, 'Kết nối vừa gián đoạn. Hãy chờ kết nối lại.');
     }
   }
   function setGameSync(next: GameSyncState) { gameRef.current = next; setGameState(next); }
+  function updateRoom(next: RoomView | null) { roomRef.current = next; setRoom(next); }
+  function forgetSession() { session.current = null; saveSession(null); }
+  function restoreForRoute(connection: WebSocket): boolean {
+    if (!canRestore() || membership.current === connection || requests.pending || connection.readyState !== WebSocket.OPEN) return false;
+    const saved = session.current!;
+    entry.current = { type: 'rejoin_room', code: saved.roomCode, invite: !!routeRef.current.code };
+    setRestoring(true);
+    submit(connection, { v: PROTOCOL_VERSION, type: 'rejoin_room', room_code: saved.roomCode, token: saved.token });
+    return true;
+  }
+
+  useEffect(() => {
+    if (route.invalid) {
+      suppressRestore.current = true; setRestoring(false); setError('Mã phòng không hợp lệ');
+      void navigate('/', { replace: true }); return;
+    }
+    if (route.code) suppressRestore.current = false;
+    if (route.path !== location.pathname) {
+      void navigate({ pathname: route.path, search: location.search, hash: location.hash }, { replace: true }); return;
+    }
+    const connection = socket.current;
+    if (connection) restoreForRoute(connection);
+  }, [location.pathname]);
+  useEffect(() => { document.title = room ? `18h40 — Phòng ${room.code}` : '18h40 — Phòng chơi cùng hội'; }, [room?.code]);
 
   useEffect(() => {
     let stopped = false;
@@ -73,11 +116,9 @@ export default function App() {
       const connection = connectSocket();
       socket.current = connection;
       connection.onopen = () => {
-        if (session.current) {
-          setRestoring(true);
-          submit(connection, { v: PROTOCOL_VERSION, type: 'rejoin_room', room_code: session.current.roomCode, token: session.current.token });
-        } else {
+        if (!restoreForRoute(connection)) {
           attempt = 0;
+          setRestoring(false);
           setStatus('Đã kết nối');
         }
       };
@@ -86,6 +127,16 @@ export default function App() {
           if (socket.current !== connection) return;
           const message: ServerMessage = JSON.parse(event.data);
           if (message.v !== PROTOCOL_VERSION) throw new Error('Unsupported protocol version');
+          // Only a user-initiated entry switches the saved membership; opening an invite never does.
+          if (switching.current === 'restore' && (message.type === 'joined' || message.type === 'error')) {
+            if (message.type === 'error' && ['invalid_token', 'room_not_found'].includes(message.code)) forgetSession();
+            switching.current = 'leave'; return;
+          }
+          if (switching.current === 'leave' && (message.type === 'left' || message.type === 'error')) {
+            if (message.type === 'left' || message.type === 'error' && message.code === 'not_in_room') forgetSession();
+            switching.current = null; return;
+          }
+          if (switching.current && message.type === 'room_state') return;
           const before = gameRef.current;
           const next = receiveGameState(before, message);
           setGameSync(next);
@@ -97,33 +148,45 @@ export default function App() {
           }
           switch (message.type) {
             case 'joined':
+              membership.current = connection;
               session.current = { roomCode: message.room_code, token: message.token };
               saveSession(session.current);
-              setRoom(message.room);
+              updateRoom(message.room);
               setRestoring(false);
               setStatus('Đã kết nối');
               setError(null);
               attempt = 0;
+              void navigate(roomPath(message.room_code), { replace: entry.current?.invite || entry.current?.type === 'rejoin_room' });
+              entry.current = null;
               break;
             case 'room_state':
-              setRoom(message.room);
+              updateRoom(message.room);
               break;
             case 'left':
-              session.current = null;
-              saveSession(null);
-              setRoom(null);
+              leaving.current = false;
+              membership.current = null;
+              forgetSession();
+              updateRoom(null);
               setRestoring(false);
+              if (blockerRef.current.state === 'blocked') blockerRef.current.proceed();
+              else void navigate('/', { replace: true });
               break;
             case 'error':
+              leaving.current = false;
               if (message.code === 'illegal_action' && gameRef.current.game && !gameRef.current.desynced) void sound.play('invalid');
-              setError(errorMessages[message.code] ?? 'Không xử lý được yêu cầu. Hãy tải lại trang.');
-              if (message.code === 'invalid_token' || message.code === 'room_not_found') {
-                session.current = null;
-                saveSession(null);
-                setRoom(null);
+              setError(message.code === 'room_not_found' && entry.current?.code ? `Không tìm thấy phòng ${entry.current.code}` : errorMessages[message.code] ?? 'Không xử lý được yêu cầu. Hãy tải lại trang.');
+              if (message.code === 'invalid_token' || message.code === 'room_not_found') forgetSession();
+              if (entry.current || message.code === 'invalid_token' || message.code === 'room_not_found') {
+                updateRoom(null);
                 setGameSync(initialGameState);
                 setRestoring(false);
                 setStatus('Đã kết nối');
+              }
+              if (entry.current) {
+                suppressRestore.current = true;
+                setRestoring(false);
+                void navigate('/', { replace: true });
+                entry.current = null;
               }
               break;
             case 'game_started':
@@ -139,6 +202,7 @@ export default function App() {
       connection.onerror = () => connection.close();
       connection.onclose = (event) => {
         if (stopped || socket.current !== connection) return;
+        connection.onopen = null; connection.onmessage = null; connection.onerror = null; connection.onclose = null;
         clearRequest(connection);
         if (event.code === 4001) {
           setStatus('Mất kết nối');
@@ -147,7 +211,7 @@ export default function App() {
           return;
         }
         setStatus('Đang kết nối lại…');
-        setRestoring(Boolean(session.current));
+        setRestoring(canRestore());
         timer = setTimeout(connect, retryDelay(attempt++));
       };
     }
@@ -171,6 +235,24 @@ export default function App() {
   function send(message: ClientMessage) {
     const connection = socket.current;
     if (connection?.readyState !== WebSocket.OPEN || inputLocked({ connected: status === 'Đã kết nối', pending: requests.pending, restoring, desynced: gameRef.current.desynced })) return;
+    if (message.type === 'leave_room') leaving.current = true;
+    if (message.type === 'join_room' || message.type === 'create_room') {
+      if (message.type === 'join_room') {
+        const normalized = normalizeRoomCode(message.room_code);
+        if (!isValidRoomCode(normalized)) { setError('Mã phòng không hợp lệ'); void navigate('/', { replace: true }); return; }
+        message = { ...message, room_code: normalized };
+      }
+      const saved = session.current;
+      entry.current = { type: message.type, code: message.type === 'join_room' ? message.room_code : undefined, invite: !!routeRef.current.code };
+      if (saved && !roomRef.current) {
+        if (message.type === 'join_room' && message.room_code === saved.roomCode) {
+          entry.current.type = 'rejoin_room';
+          submit(connection, { v: PROTOCOL_VERSION, type: 'rejoin_room', room_code: saved.roomCode, token: saved.token }); return;
+        }
+        switching.current = 'restore';
+        submit(connection, [{ v: PROTOCOL_VERSION, type: 'rejoin_room', room_code: saved.roomCode, token: saved.token }, { v: PROTOCOL_VERSION, type: 'leave_room' }, message]); return;
+      }
+    }
     submit(connection, message);
   }
 
@@ -187,9 +269,11 @@ export default function App() {
       {gameState.desynced && <p className="connection-alert mt-5 border-l-2 border-amber-700 pl-3 text-sm text-amber-900" role="alert">Bàn chơi đang mất đồng bộ. Đang kết nối lại để lấy trạng thái mới; tạm khóa thao tác.</p>}
       {error && <p className="connection-alert mt-5 border-l-2 border-red-700 pl-3 text-sm text-red-800" role="alert">{error}</p>}
       <Suspense fallback={null}><div className="app-scenes"><AnimatePresence initial={false}><SceneTransition key={sceneKey}>
-      {room ? <Room room={room} game={sceneReady ? game : null} log={gameState.log} fxBatch={gameState.fxBatch} soundBatch={gameState.soundBatch} fxEnabled={status === 'Đã kết nối' && !restoring && !gameState.desynced} viewer={gameState.viewer} disabled={disabled} pending={pending} requestVersion={requestVersion} actionError={error} send={send} /> : restoring ? <section className="saloon-restoring"><SaloonBackdrop /><div className="saloon-poster"><h2 data-scene-title tabIndex={-1}>Đang vào lại phòng</h2><p role="status">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p></div></section> : <Lobby disabled={disabled} send={send} />}
+      {room ? <Room room={room} game={sceneReady ? game : null} log={gameState.log} fxBatch={gameState.fxBatch} soundBatch={gameState.soundBatch} fxEnabled={status === 'Đã kết nối' && !restoring && !gameState.desynced} viewer={gameState.viewer} disabled={disabled} pending={pending} requestVersion={requestVersion} actionError={error} send={send} /> : restoring ? <section className="saloon-restoring"><SaloonBackdrop /><div className="saloon-poster"><h2 data-scene-title tabIndex={-1}>Đang vào lại phòng</h2><p role="status">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p></div></section> : <Lobby disabled={disabled} send={send} inviteCode={code === undefined ? null : route.code} previousRoom={session.current?.roomCode} returnToRoom={() => { const saved = session.current; if (saved) void navigate(roomPath(saved.roomCode)); }} dismissInvite={() => void navigate('/')} />}
       </SceneTransition></AnimatePresence></div></Suspense>
     </main>
+    <Outlet />
+    {room && blocker.state === 'blocked' && <LeaveRoomDialog code={room.code} disabled={disabled} leaving={leaving.current && pending} stay={() => blocker.reset()} leave={() => send({ v: PROTOCOL_VERSION, type: 'leave_room' })} />}
     </LazyMotion>
   );
 }

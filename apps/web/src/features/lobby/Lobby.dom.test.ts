@@ -25,6 +25,7 @@ try {
   WaitingSettings = (await vite.ssrLoadModule('/src/features/rooms/WaitingSettings.tsx')).default;
   Lobby = (await vite.ssrLoadModule('/src/features/lobby/Lobby.tsx')).default;
   await vite.ssrLoadModule('/src/features/game/GameBoard.tsx');
+  await vite.ssrLoadModule('/src/features/game/GameResult.tsx');
   Room = (await vite.ssrLoadModule('/src/features/rooms/Room.tsx')).default;
 } catch (error) { await vite.close(); throw error; }
 after(async () => {
@@ -86,6 +87,16 @@ test('a BANG room renders its mapped board and catalog name in the waiting room'
   await act(async () => root.render(createElement(Room, { ...props, room: { ...demoRoom, phase: 'waiting' }, game: null })));
   assert.ok(container.querySelector('.saloon-waiting'));
   assert.match(container.querySelector('.waiting-table-note')!.textContent!, /BANG!.*4–7/s);
+});
+
+test('returning to the lobby from the result explicitly leaves the room', async t => {
+  const { container, root, sent } = await mount(t);
+  const game = structuredClone(demoGame);
+  if (game.view.perspective === 'player') game.view.view.table.winner = 'outlaws';
+  await act(async () => root.render(createElement(Room, { room: { ...demoRoom, phase: 'playing' }, game, log: [], fxBatch: null, soundBatch: null, fxEnabled: false, viewer: 0, disabled: false, send: message => sent.push(message) })));
+  const leave = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Về sảnh');
+  assert.ok(leave); await act(() => leave.click());
+  assert.deepEqual(sent, [{ v: PROTOCOL_VERSION, type: 'leave_room' }]);
 });
 
 test('room settings edit a draft, validate totals and send the selected mode with custom roles', async t => {

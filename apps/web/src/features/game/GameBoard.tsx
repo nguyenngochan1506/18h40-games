@@ -172,7 +172,7 @@ function Seat({ player, nickname, own, turn, waiting, presence, inspect, inspect
   </article>;
 }
 
-export default function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch = null, soundBatch = fxBatch, fxEnabled = true, ambientEnabled = true, viewer = game.view.perspective === 'player' ? game.view.view.you : null, endGame, roomMenu, pending = false, requestVersion = 0, actionError = null }: { game: GameSnapshot; room: RoomView; disabled?: boolean; pending?: boolean; requestVersion?: number; actionError?: string | null; sendAction?: (action: Action) => void; log?: LogEntry[]; fxBatch?: FxBatch | null; soundBatch?: FxBatch | null; fxEnabled?: boolean; ambientEnabled?: boolean; viewer?: number | null; endGame?: () => void; roomMenu?: ReactNode }) {
+export default function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch = null, soundBatch = fxBatch, fxEnabled = true, ambientEnabled = true, viewer = game.view.perspective === 'player' ? game.view.view.you : null, endGame, leaveRoom, roomMenu, pending = false, requestVersion = 0, actionError = null }: { game: GameSnapshot; room: RoomView; disabled?: boolean; pending?: boolean; requestVersion?: number; actionError?: string | null; sendAction?: (action: Action) => void; log?: LogEntry[]; fxBatch?: FxBatch | null; soundBatch?: FxBatch | null; fxEnabled?: boolean; ambientEnabled?: boolean; viewer?: number | null; endGame?: () => void; leaveRoom?: () => void; roomMenu?: ReactNode }) {
   const { table, you, hand, choices } = selectGameView(game.view);
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   useEffect(() => {
@@ -333,7 +333,7 @@ export default function GameBoard({ game, room, disabled = false, sendAction, lo
     <GameSound batch={soundBatch} ctx={{ players: table.players, seats: game.seats, you, waiting: table.waiting }} enabled={fxEnabled} />
     {stage && <GameFx batch={fxBatch} ctx={{ players: table.players, seats: game.seats, you, waiting: table.waiting }} enabled={fxEnabled && effectsEnabled} width={stage.width} height={stage.height} ambientEnabled={ambientEnabled && !table.winner} />}
     <m.div id="table-journal" data-ui-motion="journal-layout" layout={stage ? "position" : false} layoutDependency={journalOpen} transition={tableSpring}><AnimatePresence initial={false} mode="popLayout"><GameLog key={journalOpen ? 'expanded' : 'compact'} entries={log} scrollState={journalScroll} expanded={journalOpen} onToggle={toggleJournal} /></AnimatePresence></m.div>
-    <AnimatePresence>{table.winner && <MotionPanel key="result" className="result-overlay"><Suspense fallback={<p role="status">Đang tải kết quả…</p>}><GameResult game={game} room={room} viewer={viewer} disabled={disabled} endGame={endGame} /></Suspense></MotionPanel>}</AnimatePresence>
+    <AnimatePresence>{table.winner && <MotionPanel key="result" className="result-overlay"><Suspense fallback={<p role="status">Đang tải kết quả…</p>}><GameResult game={game} room={room} viewer={viewer} disabled={disabled} endGame={endGame} leaveRoom={leaveRoom} /></Suspense></MotionPanel>}</AnimatePresence>
     </div>
   </section></GameMotion>;
 }
