@@ -1,0 +1,21 @@
+name: Đề xuất / nhận việc
+description: Tính năng mới, game mới hoặc một việc cần làm
+labels: [enhancement]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Mục tiêu
+      description: Làm gì và vì sao.
+    validations: { required: true }
+  - type: textarea
+    id: done
+    attributes:
+      label: Tiêu chí xong
+      placeholder: "- [ ] ...\n- [ ] ..."
+    validations: { required: true }
+  - type: textarea
+    id: notes
+    attributes:
+      label: Ghi chú
+      description: Liên kết spec, file liên quan, ràng buộc.
