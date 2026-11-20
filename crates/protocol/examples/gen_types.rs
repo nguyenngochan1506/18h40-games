@@ -1,6 +1,6 @@
 use protocol::{
-    ClientMessage, ErrorCode, GameEvents, GameKind, GameSeat, GameSnapshot, GameView, Member,
-    PROTOCOL_VERSION, Phase, Role, RoomView, ServerMessage,
+    ClientMessage, ErrorCode, GameAction, GameDelta, GameKind, GameSeat, GameSettings,
+    GameSnapshot, GameView, Member, PROTOCOL_VERSION, Phase, Role, RoomView, ServerMessage,
 };
 use std::{fs, path::Path};
 use ts_rs::TS;
@@ -33,10 +33,22 @@ fn main() -> std::io::Result<()> {
         bang::SpectatorView::decl(&config),
         bang::PlayerView::decl(&config),
         bang::EventKind::decl(&config),
+        uno::Settings::decl(&config),
+        uno::Action::decl(&config),
+        uno::View::decl(&config),
+        uno::Events::decl(&config),
+        werewolf::Settings::decl(&config),
+        werewolf::Action::decl(&config),
+        werewolf::View::decl(&config),
+        werewolf::Events::decl(&config),
         GameView::decl(&config),
         GameSeat::decl(&config),
         GameSnapshot::decl(&config),
-        GameEvents::decl(&config),
+        protocol::bang::BangEvents::decl(&config),
+        protocol::bang::BangView::decl(&config),
+        GameSettings::decl(&config),
+        GameAction::decl(&config),
+        GameDelta::decl(&config),
         ErrorCode::decl(&config),
         Phase::decl(&config),
         Role::decl(&config),

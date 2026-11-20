@@ -1,9 +1,8 @@
-mod game;
+use crate::games::{GameSession, module};
 use crate::{Config, Peer, QUEUE_CAPACITY, error};
-use game::Game;
 use protocol::{
-    ClientMessage, ErrorCode, GameKind, GameSeat, Member, PROTOCOL_VERSION, Phase, Role, RoomView,
-    ServerMessage,
+    ClientMessage, ErrorCode, GameKind, GameSeat, GameSettings, Member, PROTOCOL_VERSION, Phase,
+    Role, RoomView, ServerMessage,
 };
 use std::{
     collections::HashMap,
@@ -57,6 +56,9 @@ impl Registry {
         game_kind: GameKind,
     ) -> Result<mpsc::Sender<Command>, ErrorCode> {
         nickname(name)?;
+        if !module(game_kind).enabled() {
+            return Err(ErrorCode::GameUnavailable);
+        }
         let mut rooms = self.rooms.lock().unwrap();
         if rooms.len() >= self.config.max_rooms {
             return Err(ErrorCode::ServerBusy);
@@ -85,7 +87,7 @@ impl Registry {
         rooms.insert(code.clone(), sender.clone());
         let room = Room {
             game_kind,
-            settings: bang::GameConfig::default(),
+            settings: module(game_kind).default_settings(),
             code,
             phase: Phase::Waiting,
             game: None,
@@ -165,10 +167,10 @@ struct MemberState {
 
 struct Room {
     game_kind: GameKind,
-    settings: bang::GameConfig,
+    settings: GameSettings,
     code: String,
     phase: Phase,
-    game: Option<Game>,
+    game: Option<Box<dyn GameSession>>,
     host: String,
     members: Vec<MemberState>,
     next_id: u64,
@@ -225,10 +227,10 @@ impl Room {
     }
 
     fn view(&self, you: &str) -> RoomView {
-        let (min_players, max_players) = self.game_kind.player_limits();
+        let (min_players, max_players) = module(self.game_kind).limits();
         RoomView {
             game: self.game_kind,
-            settings: self.settings,
+            settings: self.settings.clone(),
             code: self.code.clone(),
             phase: self.phase,
             host: self.host.clone(),
@@ -250,58 +252,52 @@ impl Room {
         }
     }
 
-    fn broadcast_game(&self, events: &[bang::Event]) {
+    fn broadcast_game(&self) {
         let game = self.game.as_ref().unwrap();
         for member in &self.members {
             if let Some(peer) = &member.connection {
-                peer.send(game.update(&member.view.id, events));
+                peer.send(game.update(&member.view.id));
             }
         }
     }
 
     fn game_deadline(&self) -> Option<Instant> {
         let game = self.game.as_ref()?;
-        let decision = game.state.decision()?;
+        let seat = game.awaited_seat()?;
         let member = self
             .members
             .iter()
-            .find(|member| member.view.id == game.seats[decision.player.0].member_id)?;
-        Some(member.offline_since?.max(game.waiting_since) + self.config.offline_timeout)
+            .find(|member| member.view.id == game.seats()[seat].member_id)?;
+        Some(member.offline_since?.max(game.waiting_since()) + self.config.offline_timeout)
     }
 
     fn drive_game(&mut self, now: Instant) {
         while let Some(game) = &self.game {
-            let Some((player, action)) = bang::default_action(&game.state) else {
+            let Some(seat) = game.awaited_seat() else {
                 break;
             };
             let member = self
                 .members
                 .iter()
-                .find(|member| member.view.id == game.seats[player.0].member_id);
+                .find(|member| member.view.id == game.seats()[seat].member_id);
             let due = match member {
                 Some(_) => self.game_deadline().is_some_and(|deadline| deadline <= now),
                 // An abandoned game pauses at a turn boundary instead of spinning forever.
-                None => {
-                    !game.state.pending.is_empty()
-                        || game.seats.iter().enumerate().any(|(i, seat)| {
-                            game.state.players[i].alive
-                                && self
-                                    .members
-                                    .iter()
-                                    .any(|member| member.view.id == seat.member_id)
-                        })
-                }
+                None => game.may_continue_abandoned(&|seat| {
+                    self.members
+                        .iter()
+                        .any(|member| member.view.id == game.seats()[seat].member_id)
+                }),
             };
             if !due {
                 break;
             }
-            let events = self
-                .game
+            self.game
                 .as_mut()
                 .unwrap()
-                .apply(player, action, now)
+                .apply_default(now)
                 .expect("Engine default actions are valid");
-            self.broadcast_game(&events);
+            self.broadcast_game();
         }
     }
 
@@ -336,7 +332,7 @@ impl Room {
                 let mut token = [0; 16];
                 getrandom::fill(&mut token).map_err(|_| ErrorCode::ServerBusy)?;
                 let role = if self.phase == Phase::Waiting
-                    && self.players() < self.game_kind.player_limits().1 as usize
+                    && self.players() < module(self.game_kind).limits().1 as usize
                 {
                     Role::Player
                 } else {
@@ -357,7 +353,7 @@ impl Room {
                 });
                 self.empty_since = None;
                 self.maintain_host(now);
-                self.reset_roles_if_changed(previous_players);
+                self.adjust_settings_if_changed(previous_players);
                 peer.send(ServerMessage::Joined {
                     v: PROTOCOL_VERSION,
                     room_code: self.code.clone(),
@@ -381,7 +377,7 @@ impl Room {
                 let id = member.view.id.clone();
                 self.empty_since = None;
                 self.maintain_host(now);
-                self.reset_roles_if_changed(previous_players);
+                self.adjust_settings_if_changed(previous_players);
                 peer.send(ServerMessage::Joined {
                     v: PROTOCOL_VERSION,
                     room_code: self.code.clone(),
@@ -412,7 +408,7 @@ impl Room {
                         if self.members[index].view.role == Role::Player {
                             return Ok(true);
                         }
-                        if self.players() >= self.game_kind.player_limits().1 as usize {
+                        if self.players() >= module(self.game_kind).limits().1 as usize {
                             return Err(ErrorCode::NoFreeSeat);
                         }
                         self.members[index].view.role = Role::Player;
@@ -424,12 +420,7 @@ impl Room {
                         if self.phase != Phase::Waiting {
                             return Err(ErrorCode::WrongPhase);
                         }
-                        if !settings.roles.valid_for(self.players().max(4))
-                            || (self.players() < 4
-                                && settings.roles != bang::RoleCounts::standard(4))
-                        {
-                            return Err(ErrorCode::InvalidSettings);
-                        }
+                        module(self.game_kind).validate_settings(&settings, self.players())?;
                         self.settings = settings;
                     }
                     ClientMessage::StartGame { .. } | ClientMessage::EndGame { .. } => {
@@ -440,7 +431,7 @@ impl Room {
                             if self.phase != Phase::Waiting {
                                 return Err(ErrorCode::WrongPhase);
                             }
-                            if self.players() < self.game_kind.player_limits().0 as usize {
+                            if self.players() < module(self.game_kind).limits().0 as usize {
                                 return Err(ErrorCode::NotEnoughPlayers);
                             }
                             let seats = self
@@ -449,16 +440,17 @@ impl Room {
                                 .filter(|member| member.view.role == Role::Player)
                                 .enumerate()
                                 .map(|(i, member)| GameSeat {
-                                    player_id: bang::PlayerId(i),
+                                    player_id: i,
                                     member_id: member.view.id.clone(),
                                     nickname: member.view.nickname.clone(),
                                 })
                                 .collect();
-                            let (game, events) = match self.game_kind {
-                                GameKind::Bang => {
-                                    Game::new(seats, self.settings, self.config.game_seed, now)?
-                                }
-                            };
+                            let game = module(self.game_kind).start(
+                                seats,
+                                &self.settings,
+                                self.config.game_seed,
+                                now,
+                            )?;
                             self.game = Some(game);
                             self.phase = Phase::Playing;
                             for member in &self.members {
@@ -466,12 +458,12 @@ impl Room {
                                     peer.send(ServerMessage::GameStarted {
                                         v: PROTOCOL_VERSION,
                                         seq: 0,
-                                        seats: self.game.as_ref().unwrap().seats.clone(),
+                                        seats: self.game.as_ref().unwrap().seats().to_vec(),
                                         view: self.game.as_ref().unwrap().view(&member.view.id),
                                     });
                                 }
                             }
-                            self.broadcast_game(&events);
+                            self.broadcast_game();
                         } else {
                             if self.phase != Phase::Playing {
                                 return Err(ErrorCode::WrongPhase);
@@ -486,14 +478,8 @@ impl Room {
                     }
                     ClientMessage::GameAction { action, .. } => {
                         let game = self.game.as_mut().ok_or(ErrorCode::WrongPhase)?;
-                        if game.state.winner.is_some() {
-                            return Err(ErrorCode::WrongPhase);
-                        }
-                        let player = game
-                            .player(&self.members[index].view.id)
-                            .ok_or(ErrorCode::IllegalAction)?;
-                        let events = game.apply(player, action, now)?;
-                        self.broadcast_game(&events);
+                        game.apply(&self.members[index].view.id, action, now)?;
+                        self.broadcast_game();
                         self.drive_game(now);
                         return Ok(false);
                     }
@@ -502,10 +488,8 @@ impl Room {
                             return Err(ErrorCode::NotHost);
                         }
                         let game = self.game.as_mut().ok_or(ErrorCode::WrongPhase)?;
-                        let (player, action) =
-                            bang::default_action(&game.state).ok_or(ErrorCode::WrongPhase)?;
-                        let events = game.apply(player, action, now)?;
-                        self.broadcast_game(&events);
+                        game.apply_default(now)?;
+                        self.broadcast_game();
                         self.drive_game(now);
                         return Ok(false);
                     }
@@ -513,13 +497,14 @@ impl Room {
                 }
             }
         }
-        self.reset_roles_if_changed(previous_players);
+        self.adjust_settings_if_changed(previous_players);
         Ok(true)
     }
 
-    fn reset_roles_if_changed(&mut self, previous_players: usize) {
+    fn adjust_settings_if_changed(&mut self, previous_players: usize) {
         if self.phase == Phase::Waiting && self.players() != previous_players {
-            self.settings.roles = bang::RoleCounts::standard(self.players());
+            let players = self.players();
+            module(self.game_kind).adjust_settings(&mut self.settings, players);
         }
     }
 
@@ -564,7 +549,7 @@ impl Room {
                 .is_some_and(|since| now.duration_since(since) >= self.config.offline_timeout)
                 && (self.phase == Phase::Waiting || m.view.role == Role::Spectator))
         });
-        self.reset_roles_if_changed(previous_players);
+        self.adjust_settings_if_changed(previous_players);
         let host_changed = self.maintain_host(now);
         if self.members.len() != count || host_changed {
             self.broadcast();
@@ -596,211 +581,4 @@ impl Room {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn game_seats() -> Vec<GameSeat> {
-        (0..4)
-            .map(|i| GameSeat {
-                player_id: bang::PlayerId(i),
-                member_id: (i + 1).to_string(),
-                nickname: format!("P{i}"),
-            })
-            .collect()
-    }
-
-    fn timer_room(phase: Phase, online: bool) -> (Room, mpsc::Receiver<ServerMessage>) {
-        let now = Instant::now();
-        let (outgoing, receiver) = mpsc::channel(QUEUE_CAPACITY);
-        let (shutdown, _) = tokio::sync::watch::channel(None);
-        let room = Room {
-            game_kind: GameKind::Bang,
-            settings: bang::GameConfig::default(),
-            code: "ABCDE".into(),
-            phase,
-            game: None,
-            host: if phase == Phase::Playing { "2" } else { "1" }.into(),
-            members: vec![
-                MemberState {
-                    view: Member {
-                        id: "1".into(),
-                        nickname: "Online".into(),
-                        role: Role::Player,
-                        online,
-                    },
-                    token: [0; 16],
-                    connection: online.then_some(Peer {
-                        id: 1,
-                        outgoing,
-                        shutdown,
-                    }),
-                    offline_since: (!online).then_some(now),
-                },
-                MemberState {
-                    view: Member {
-                        id: "2".into(),
-                        nickname: "Offline".into(),
-                        role: Role::Player,
-                        online: false,
-                    },
-                    token: [0; 16],
-                    connection: None,
-                    offline_since: Some(now),
-                },
-            ],
-            next_id: 3,
-            empty_since: (!online).then_some(now),
-            config: Config::default(),
-            registry: Weak::new(),
-        };
-        (room, receiver)
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn deadline_survives_clock_advancing_between_expiry_and_scheduling() {
-        for phase in [Phase::Waiting, Phase::Playing] {
-            let (mut room, mut snapshots) = timer_room(phase, true);
-            let deadline = Instant::now() + room.config.offline_timeout;
-            tokio::time::advance(std::time::Duration::from_secs(59)).await;
-            let now = Instant::now();
-            assert!(!room.expire(now));
-            tokio::time::advance(std::time::Duration::from_secs(2)).await;
-            assert_eq!(room.next_deadline(now), Some(deadline));
-            tokio::time::sleep_until(deadline).await;
-            assert!(!room.expire(Instant::now()));
-            assert_eq!(room.host, "1");
-            assert_eq!(
-                room.members.len(),
-                if phase == Phase::Waiting { 1 } else { 2 }
-            );
-            assert!(matches!(
-                snapshots.try_recv(),
-                Ok(ServerMessage::RoomState { .. })
-            ));
-            assert_eq!(room.next_deadline(Instant::now()), None);
-        }
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn processed_offline_host_deadline_does_not_spin() {
-        let (mut room, _) = timer_room(Phase::Playing, false);
-        let cleanup = Instant::now() + room.config.empty_room_timeout;
-        tokio::time::advance(room.config.offline_timeout).await;
-        assert!(!room.expire(Instant::now()));
-        assert_eq!(room.members.len(), 2);
-        assert_eq!(room.host, "2");
-        assert_eq!(room.next_deadline(Instant::now()), Some(cleanup));
-    }
-
-    #[test]
-    fn tokens_and_unicode_nicknames() {
-        let token = [0xab; 16];
-        assert_eq!(decode_token(&encode_token(&token)), Some(token));
-        assert!(tokens_equal(&token, &[0xab; 16]));
-        for index in 0..16 {
-            let mut other = token;
-            other[index] ^= 1;
-            assert!(!tokens_equal(&token, &other));
-        }
-        assert!(decode_token("invalid").is_none());
-        assert_eq!(nickname("  Hân  "), Ok("Hân".into()));
-        assert!(nickname(&"ắ".repeat(21)).is_err());
-        assert!(nickname("a\nb").is_err());
-    }
-    #[tokio::test(start_paused = true)]
-    async fn game_deadline_uses_the_same_now_across_expiry_and_scheduling() {
-        let (mut room, _) = timer_room(Phase::Playing, true);
-        let now = Instant::now();
-        let (game, _) = (0..100)
-            .find_map(|seed| {
-                let (game, events) =
-                    Game::new(game_seats(), bang::GameConfig::default(), Some(seed), now).unwrap();
-                matches!(
-                    game.state.decision().unwrap().kind,
-                    bang::DecisionKind::DrawChoice
-                )
-                .then_some((game, events))
-            })
-            .unwrap();
-        let owner = game.state.decision().unwrap().player.0;
-        room.members[1].view.id = game.seats[owner].member_id.clone();
-        room.members[0].view.id = game.seats[(owner + 1) % 4].member_id.clone();
-        room.host = room.members[0].view.id.clone();
-        room.game = Some(game);
-        let deadline = now + room.config.offline_timeout;
-        tokio::time::advance(std::time::Duration::from_secs(59)).await;
-        let now = Instant::now();
-        assert!(!room.expire(now));
-        tokio::time::advance(std::time::Duration::from_secs(2)).await;
-        assert_eq!(room.next_deadline(now), Some(deadline));
-        tokio::time::sleep_until(deadline).await;
-        let now = Instant::now();
-        assert!(!room.expire(now));
-        assert_eq!(
-            room.game.as_ref().unwrap().state.decision().unwrap().kind,
-            bang::DecisionKind::Turn
-        );
-        assert_eq!(
-            room.game_deadline(),
-            Some(now + room.config.offline_timeout)
-        );
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn an_abandoned_game_does_not_spin_when_every_living_seat_has_left() {
-        let (mut room, _) = timer_room(Phase::Playing, false);
-        let now = Instant::now();
-        room.members.clear();
-        room.game = Some(
-            Game::new(game_seats(), bang::GameConfig::default(), Some(42), now)
-                .unwrap()
-                .0,
-        );
-        room.drive_game(now);
-        let decision = room.game.as_ref().unwrap().state.decision();
-        assert!(matches!(
-            decision.map(|d| d.kind),
-            Some(bang::DecisionKind::Turn)
-        ));
-        assert_eq!(
-            room.next_deadline(now),
-            Some(now + room.config.empty_room_timeout)
-        );
-        room.drive_game(now);
-        assert_eq!(room.game.as_ref().unwrap().state.decision(), decision);
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn starting_with_mismatched_roles_rejects_without_repairing_settings() {
-        let (mut room, _) = timer_room(Phase::Waiting, true);
-        for id in ["3", "4"] {
-            room.members.push(MemberState {
-                view: Member {
-                    id: id.into(),
-                    nickname: id.into(),
-                    role: Role::Player,
-                    online: false,
-                },
-                token: [0; 16],
-                connection: None,
-                offline_since: None,
-            });
-        }
-        room.settings.roles = bang::RoleCounts::standard(5);
-        let before = room.settings;
-        let peer = room.members[0].connection.clone().unwrap();
-        assert_eq!(
-            room.apply(
-                &peer,
-                ClientMessage::StartGame {
-                    v: PROTOCOL_VERSION
-                },
-                Instant::now()
-            ),
-            Err(ErrorCode::InvalidSettings)
-        );
-        assert_eq!(room.settings, before);
-        assert_eq!(room.phase, Phase::Waiting);
-        assert!(room.game.is_none());
-    }
-}
+mod tests;

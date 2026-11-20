@@ -1,20 +1,57 @@
+pub mod bang;
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 6;
+pub const PROTOCOL_VERSION: u32 = 7;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum GameKind {
     Bang,
+    Uno,
+    Werewolf,
 }
 
-impl GameKind {
-    pub const fn player_limits(self) -> (u32, u32) {
-        match self {
-            Self::Bang => (4, 7),
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "game", content = "payload", rename_all = "snake_case")]
+pub enum GameSettings {
+    Bang(::bang::GameConfig),
+    Uno(uno::Settings),
+    Werewolf(werewolf::Settings),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "game", content = "payload", rename_all = "snake_case")]
+pub enum GameAction {
+    Bang(::bang::Action),
+    Uno(uno::Action),
+    Werewolf(werewolf::Action),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "game", content = "payload", rename_all = "snake_case")]
+pub enum GameView {
+    Bang(bang::BangView),
+    Uno(uno::View),
+    Werewolf(werewolf::View),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "game", rename_all = "snake_case")]
+pub enum GameDelta {
+    Bang {
+        events: bang::BangEvents,
+        view: bang::BangView,
+    },
+    Uno {
+        events: uno::Events,
+        view: uno::View,
+    },
+    Werewolf {
+        events: werewolf::Events,
+        view: werewolf::View,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -50,11 +87,11 @@ pub enum ClientMessage {
     },
     UpdateSettings {
         v: u32,
-        settings: bang::GameConfig,
+        settings: GameSettings,
     },
     GameAction {
         v: u32,
-        action: bang::Action,
+        action: GameAction,
     },
     HostSkip {
         v: u32,
@@ -76,14 +113,12 @@ pub enum ServerMessage {
     GameUpdate {
         v: u32,
         seq: u32,
-        events: GameEvents,
-        view: GameView,
+        update: GameDelta,
     },
     GameOver {
         v: u32,
         seq: u32,
-        events: GameEvents,
-        view: GameView,
+        update: GameDelta,
     },
     Joined {
         v: u32,
@@ -113,7 +148,7 @@ pub enum ServerMessage {
 /// Public identity fixed at start_game, including members who later leave.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct GameSeat {
-    pub player_id: bang::PlayerId,
+    pub player_id: usize,
     pub member_id: String,
     pub nickname: String,
 }
@@ -123,38 +158,6 @@ pub struct GameSnapshot {
     pub seq: u32,
     pub seats: Vec<GameSeat>,
     pub view: GameView,
-}
-
-/// Wire snapshots have no variant accepting a raw GameState.
-///
-/// ```compile_fail
-/// fn outgoing(state: bang::GameState) -> protocol::GameView { state.into() }
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(tag = "perspective", content = "view", rename_all = "snake_case")]
-pub enum GameView {
-    Player(bang::PlayerView),
-    Spectator(bang::SpectatorView),
-}
-
-/// Only filtered event kinds can be constructed for outgoing messages.
-///
-/// ```compile_fail
-/// let raw: Vec<bang::Event> = vec![];
-/// let outgoing: protocol::GameEvents = raw.into();
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct GameEvents(Vec<bang::EventKind>);
-
-impl GameEvents {
-    pub fn for_recipient(events: &[bang::Event], player: Option<bang::PlayerId>) -> Self {
-        Self(
-            bang::filter_events(events, player)
-                .into_iter()
-                .map(|event| event.kind)
-                .collect(),
-        )
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -175,12 +178,13 @@ pub enum ErrorCode {
     ServerBusy,
     IllegalAction,
     InvalidSettings,
+    GameUnavailable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct RoomView {
     pub game: GameKind,
-    pub settings: bang::GameConfig,
+    pub settings: GameSettings,
     pub code: String,
     pub phase: Phase,
     pub host: String,
@@ -215,6 +219,7 @@ pub enum Role {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bang::{BangEvents, BangView};
     use serde_json::{Value, json};
 
     #[test]
@@ -240,7 +245,7 @@ mod tests {
                 assert!(serde_json::from_value::<ClientMessage>(invalid).is_err());
             }
         }
-        let room = json!({"code":"ABCDE","game":"bang","settings":bang::GameConfig::default(),"phase":"waiting","host":"1","you":"1","min_players":4,"max_players":7,"members":[{"id":"1","nickname":"Hân","role":"player","online":true}]});
+        let room = json!({"code":"ABCDE","game":"bang","settings":GameSettings::Bang(::bang::GameConfig::default()),"phase":"waiting","host":"1","you":"1","min_players":4,"max_players":7,"members":[{"id":"1","nickname":"Hân","role":"player","online":true}]});
         for value in [
             json!({"v":PROTOCOL_VERSION,"type":"joined","room_code":"ABCDE","token":"secret","room":room,"game":null}),
             json!({"v":PROTOCOL_VERSION,"type":"room_state","room":room}),
@@ -266,7 +271,7 @@ mod tests {
             ("phase", json!("unknown")),
             ("members", json!([{"id":1}])),
             ("min_players", json!("4")),
-            ("game", json!("uno")),
+            ("game", json!("unknown")),
         ] {
             let mut invalid = room.clone();
             invalid[field] = bad;
@@ -275,8 +280,7 @@ mod tests {
     }
 
     #[test]
-    fn creating_a_room_requires_an_available_game_kind() {
-        assert_eq!(GameKind::Bang.player_limits(), (4, 7));
+    fn creating_a_room_requires_a_known_game_kind() {
         let valid =
             json!({"v":PROTOCOL_VERSION,"type":"create_room","nickname":"Host","game":"bang"});
         assert!(matches!(
@@ -286,7 +290,7 @@ mod tests {
                 ..
             }
         ));
-        for game in [json!("uno"), json!("werewolf"), Value::Null, json!(42)] {
+        for game in [json!("unknown"), Value::Null, json!(42)] {
             let mut invalid = valid.clone();
             invalid["game"] = game;
             assert!(serde_json::from_value::<ClientMessage>(invalid).is_err());
@@ -373,11 +377,11 @@ mod tests {
     }
     #[test]
     fn game_messages_round_trip_require_version_and_filter_private_events() {
-        let table = bang::SpectatorView {
+        let table = ::bang::SpectatorView {
             players: vec![],
-            turn: bang::TurnState {
-                player: bang::PlayerId(0),
-                step: bang::TurnStep::Play,
+            turn: ::bang::TurnState {
+                player: ::bang::PlayerId(0),
+                step: ::bang::TurnStep::Play,
                 bangs_played: 0,
             },
             waiting: None,
@@ -387,30 +391,30 @@ mod tests {
             winner: None,
             store_slots: 0,
         };
-        let player = GameView::Player(bang::PlayerView {
-            you: bang::PlayerId(0),
-            hand: vec![bang::CardId(0)],
+        let player = BangView::Player(::bang::PlayerView {
+            you: ::bang::PlayerId(0),
+            hand: vec![::bang::CardId(0)],
             choices: vec![],
             table: table.clone(),
         });
-        let public = GameView::Spectator(table);
+        let public = BangView::Spectator(table);
         let raw = vec![
-            bang::Event {
-                visibility: bang::Visibility::Public,
-                kind: bang::EventKind::CardsDrawn {
-                    player: bang::PlayerId(0),
+            ::bang::Event {
+                visibility: ::bang::Visibility::Public,
+                kind: ::bang::EventKind::CardsDrawn {
+                    player: ::bang::PlayerId(0),
                     count: 1,
                 },
             },
-            bang::Event {
-                visibility: bang::Visibility::Player(bang::PlayerId(0)),
-                kind: bang::EventKind::CardsReceived {
-                    player: bang::PlayerId(0),
-                    cards: vec![bang::CardId(0)],
+            ::bang::Event {
+                visibility: ::bang::Visibility::Player(::bang::PlayerId(0)),
+                kind: ::bang::EventKind::CardsReceived {
+                    player: ::bang::PlayerId(0),
+                    cards: vec![::bang::CardId(0)],
                 },
             },
         ];
-        let hidden = GameEvents::for_recipient(&raw, None);
+        let hidden = BangEvents::for_recipient(&raw, None);
         assert_eq!(
             serde_json::to_value(&hidden)
                 .unwrap()
@@ -420,7 +424,7 @@ mod tests {
             1
         );
         assert_eq!(
-            serde_json::to_value(GameEvents::for_recipient(&raw, Some(bang::PlayerId(0))))
+            serde_json::to_value(BangEvents::for_recipient(&raw, Some(::bang::PlayerId(0))))
                 .unwrap()
                 .as_array()
                 .unwrap()
@@ -428,7 +432,7 @@ mod tests {
             2
         );
         let seats = vec![GameSeat {
-            player_id: bang::PlayerId(0),
+            player_id: 0,
             member_id: "1".into(),
             nickname: "Hân".into(),
         }];
@@ -437,19 +441,23 @@ mod tests {
                 v: PROTOCOL_VERSION,
                 seq: 0,
                 seats: seats.clone(),
-                view: player.clone(),
+                view: GameView::Bang(player.clone()),
             },
             ServerMessage::GameUpdate {
                 v: PROTOCOL_VERSION,
                 seq: 1,
-                events: hidden.clone(),
-                view: public.clone(),
+                update: GameDelta::Bang {
+                    events: hidden.clone(),
+                    view: public.clone(),
+                },
             },
             ServerMessage::GameOver {
                 v: PROTOCOL_VERSION,
                 seq: 2,
-                events: hidden,
-                view: public,
+                update: GameDelta::Bang {
+                    events: hidden,
+                    view: public,
+                },
             },
         ] {
             let value = serde_json::to_value(&message).unwrap();
@@ -472,7 +480,7 @@ mod tests {
             },
             ClientMessage::GameAction {
                 v: PROTOCOL_VERSION,
-                action: bang::Action::EndTurn { discard: vec![] },
+                action: GameAction::Bang(::bang::Action::EndTurn { discard: vec![] }),
             },
         ] {
             let value = serde_json::to_value(&message).unwrap();
@@ -484,7 +492,7 @@ mod tests {
             missing.as_object_mut().unwrap().remove("v");
             assert!(serde_json::from_value::<ClientMessage>(missing).is_err());
         }
-        let joined = ServerMessage::Joined { v: PROTOCOL_VERSION, room_code: "ABCDE".into(), token: "secret".into(), game: Some(GameSnapshot { seq: 2, seats, view: player }), room: serde_json::from_value(json!({"code":"ABCDE","game":"bang","settings":bang::GameConfig::default(),"phase":"playing","host":"1","you":"1","min_players":4,"max_players":7,"members":[]})).unwrap() };
+        let joined = ServerMessage::Joined { v: PROTOCOL_VERSION, room_code: "ABCDE".into(), token: "secret".into(), game: Some(GameSnapshot { seq: 2, seats, view: GameView::Bang(player) }), room: serde_json::from_value(json!({"code":"ABCDE","game":"bang","settings":GameSettings::Bang(::bang::GameConfig::default()),"phase":"playing","host":"1","you":"1","min_players":4,"max_players":7,"members":[]})).unwrap() };
         for field in ["seq", "seats", "view"] {
             let mut value = serde_json::to_value(&joined).unwrap();
             value["game"].as_object_mut().unwrap().remove(field);
@@ -507,23 +515,78 @@ mod tests {
 
     #[test]
     fn settings_messages_require_typed_modes_and_role_counts() {
-        let valid = json!({"v":PROTOCOL_VERSION,"type":"update_settings","settings":bang::GameConfig::default()});
+        let valid = json!({"v":PROTOCOL_VERSION,"type":"update_settings","settings":GameSettings::Bang(::bang::GameConfig::default())});
         let message: ClientMessage = serde_json::from_value(valid.clone()).unwrap();
         assert_eq!(serde_json::to_value(message).unwrap(), valid);
         for bad in [json!("unknown"), Value::Null, json!(1)] {
             let mut value = valid.clone();
-            value["settings"]["mode"] = bad;
+            value["settings"]["payload"]["mode"] = bad;
             assert!(serde_json::from_value::<ClientMessage>(value).is_err());
         }
         for bad in [json!(-1), json!(256), json!(1.5), Value::Null, json!("1")] {
             let mut value = valid.clone();
-            value["settings"]["roles"]["deputy"] = bad;
+            value["settings"]["payload"]["roles"]["deputy"] = bad;
             assert!(serde_json::from_value::<ClientMessage>(value).is_err());
         }
         for field in ["mode", "roles"] {
             let mut value = valid.clone();
-            value["settings"].as_object_mut().unwrap().remove(field);
+            value["settings"]["payload"]
+                .as_object_mut()
+                .unwrap()
+                .remove(field);
             assert!(serde_json::from_value::<ClientMessage>(value).is_err());
+        }
+    }
+    #[test]
+    fn all_game_envelopes_round_trip_and_require_their_tagged_payloads() {
+        for game in ["bang", "uno", "werewolf"] {
+            let create =
+                json!({"v":PROTOCOL_VERSION,"type":"create_room","game":game,"nickname":"Host"});
+            let decoded: ClientMessage = serde_json::from_value(create.clone()).unwrap();
+            assert_eq!(serde_json::to_value(decoded).unwrap(), create);
+        }
+        for (game, payload) in [
+            ("bang", json!(::bang::GameConfig::default())),
+            ("uno", json!({})),
+            ("werewolf", json!({})),
+        ] {
+            let value = json!({"game":game,"payload":payload});
+            let settings: GameSettings = serde_json::from_value(value.clone()).unwrap();
+            assert_eq!(serde_json::to_value(settings).unwrap(), value);
+        }
+        for game in ["uno", "werewolf"] {
+            let view = json!({"game":game,"payload":{}});
+            let decoded: GameView = serde_json::from_value(view.clone()).unwrap();
+            assert_eq!(serde_json::to_value(decoded).unwrap(), view);
+            let update = json!({"game":game,"events":{},"view":{}});
+            let decoded: GameDelta = serde_json::from_value(update.clone()).unwrap();
+            assert_eq!(serde_json::to_value(decoded).unwrap(), update);
+        }
+        for bad in [
+            json!({"payload":{}}),
+            json!({"game":"unknown","payload":{}}),
+            json!({"game":"bang"}),
+            json!({"game":"uno","payload":null}),
+            json!({"game":"werewolf","payload":42}),
+        ] {
+            assert!(serde_json::from_value::<GameSettings>(bad.clone()).is_err());
+            assert!(serde_json::from_value::<GameAction>(bad.clone()).is_err());
+            assert!(serde_json::from_value::<GameView>(bad).is_err());
+        }
+        let bang_action = json!({"type":"end_turn","discard":[]});
+        for game in ["uno", "werewolf", "unknown"] {
+            assert!(
+                serde_json::from_value::<GameAction>(json!({"game":game,"payload":bang_action}))
+                    .is_err()
+            );
+        }
+        for bad in [
+            json!({"game":"bang","events":[],"view":{}}),
+            json!({"game":"unknown","events":{},"view":{}}),
+            json!({"game":"uno","view":{}}),
+            json!({"game":"werewolf","events":{}}),
+        ] {
+            assert!(serde_json::from_value::<GameDelta>(bad).is_err());
         }
     }
 }

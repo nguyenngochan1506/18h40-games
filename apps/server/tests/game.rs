@@ -1,6 +1,6 @@
 mod support;
 use bang::{Action, CardKind, DecisionKind, Event, GameState, PlayerId};
-use protocol::GameView;
+use protocol::{GameView, bang::BangView};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use serde_json::{Value, json};
@@ -21,10 +21,10 @@ struct Table {
 
 fn snapshot(state: &GameState, player: Option<usize>) -> Value {
     let view = match player.filter(|i| state.players[*i].alive) {
-        Some(player) => GameView::Player(bang::view(state, PlayerId(player)).unwrap()),
-        None => GameView::Spectator(bang::spectator_view(state)),
+        Some(player) => BangView::Player(bang::view(state, PlayerId(player)).unwrap()),
+        None => BangView::Spectator(bang::spectator_view(state)),
     };
-    serde_json::to_value(view).unwrap()
+    serde_json::to_value(GameView::Bang(view)).unwrap()
 }
 
 fn game_snapshot(state: &GameState, player: Option<usize>, seq: u32, seats: &Value) -> Value {
@@ -154,7 +154,7 @@ impl Table {
         self.clients[player.0]
             .as_mut()
             .unwrap()
-            .send(json!({"type":"game_action","action":action}))
+            .send(json!({"type":"game_action","action":{"game":"bang","payload":action}}))
             .await;
         let events = bang::apply(&mut self.state, player, action, &mut self.rng).unwrap();
         self.updates(&events).await;
@@ -214,13 +214,20 @@ async fn assert_update(
     let message = client.until(kind).await;
     check_wire(&message);
     assert_eq!(message["seq"], seq);
-    assert_eq!(message["view"], snapshot(state, player));
+    assert_eq!(message["update"]["game"], "bang");
+    assert_eq!(
+        message["update"]["view"],
+        snapshot(state, player)["payload"]
+    );
     let recipient = player.filter(|i| state.players[*i].alive).map(PlayerId);
     let expected: Vec<_> = bang::filter_events(events, recipient)
         .into_iter()
         .map(|event| event.kind)
         .collect();
-    assert_eq!(message["events"], serde_json::to_value(expected).unwrap());
+    assert_eq!(
+        message["update"]["events"],
+        serde_json::to_value(expected).unwrap()
+    );
 }
 
 // Rejecting a command must not silently produce an update before the error.
@@ -277,12 +284,12 @@ async fn games_for_four_through_seven_match_engine_views_and_private_events() {
         table.clients[wrong]
             .as_mut()
             .unwrap()
-            .send(json!({"type":"game_action","player":owner.0,"action":action}))
+            .send(json!({"type":"game_action","player":owner.0,"action":{"game":"bang","payload":action}}))
             .await;
         rejected(table.clients[wrong].as_mut().unwrap(), "illegal_action").await;
         table
             .spectator
-            .send(json!({"type":"game_action","player":owner.0,"action":action}))
+            .send(json!({"type":"game_action","player":owner.0,"action":{"game":"bang","payload":action}}))
             .await;
         rejected(&mut table.spectator, "illegal_action").await;
         table.spectator.send(json!({"type":"host_skip"})).await;
@@ -304,7 +311,7 @@ async fn games_for_four_through_seven_match_engine_views_and_private_events() {
             table.clients[owner.0]
                 .as_mut()
                 .unwrap()
-                .send(json!({"type":"game_action","action":action}))
+                .send(json!({"type":"game_action","action":{"game":"bang","payload":action}}))
                 .await;
             rejected(table.clients[owner.0].as_mut().unwrap(), "illegal_action").await;
         }
@@ -360,7 +367,7 @@ async fn a_complete_seeded_game_crosses_websocket_then_waits_for_host_end() {
     table.clients[0]
         .as_mut()
         .unwrap()
-        .send(json!({"type":"game_action","action":Action::EndTurn{discard:vec![]}}))
+        .send(json!({"type":"game_action","action":{"game":"bang","payload":Action::EndTurn{discard:vec![]}}}))
         .await;
     rejected(table.clients[0].as_mut().unwrap(), "wrong_phase").await;
     table.clients[0]
@@ -412,7 +419,7 @@ async fn offline_top_decisions_get_their_own_full_window_and_rejoin_cancels_dead
     tokio::time::advance(Duration::from_secs(59)).await;
     table
         .spectator
-        .send(json!({"type":"game_action","action":Action::EndTurn{discard:vec![]}}))
+        .send(json!({"type":"game_action","action":{"game":"bang","payload":Action::EndTurn{discard:vec![]}}}))
         .await;
     rejected(&mut table.spectator, "illegal_action").await;
     tokio::time::advance(Duration::from_secs(1)).await;
@@ -424,14 +431,14 @@ async fn offline_top_decisions_get_their_own_full_window_and_rejoin_cancels_dead
     tokio::time::advance(Duration::from_secs(59)).await;
     table
         .spectator
-        .send(json!({"type":"game_action","action":Action::EndTurn{discard:vec![]}}))
+        .send(json!({"type":"game_action","action":{"game":"bang","payload":Action::EndTurn{discard:vec![]}}}))
         .await;
     rejected(&mut table.spectator, "illegal_action").await;
     table.rejoin(offline).await;
     tokio::time::advance(Duration::from_secs(61)).await;
     table
         .spectator
-        .send(json!({"type":"game_action","action":Action::EndTurn{discard:vec![]}}))
+        .send(json!({"type":"game_action","action":{"game":"bang","payload":Action::EndTurn{discard:vec![]}}}))
         .await;
     rejected(&mut table.spectator, "illegal_action").await;
     table.skip(0).await;
@@ -567,7 +574,7 @@ async fn host_skip_and_offline_timeout_flip_barrel_before_a_fresh_damage_window(
                 tokio::time::advance(Duration::from_secs(59)).await;
                 table
                     .spectator
-                    .send(json!({"type":"game_action","action":Action::EndTurn{discard:vec![]}}))
+                    .send(json!({"type":"game_action","action":{"game":"bang","payload":Action::EndTurn{discard:vec![]}}}))
                     .await;
                 rejected(&mut table.spectator, "illegal_action").await;
                 tokio::time::advance(Duration::from_secs(1)).await;
@@ -645,7 +652,7 @@ async fn leaving_a_game_defaults_the_reserved_seat_immediately_and_invalidates_i
         table.clients[player.0]
             .as_mut()
             .unwrap()
-            .send(json!({"type":"game_action","action":action}))
+            .send(json!({"type":"game_action","action":{"game":"bang","payload":action}}))
             .await;
         let events = bang::apply(&mut table.state, player, action, &mut table.rng).unwrap();
         table.updates(&events).await;
@@ -690,7 +697,7 @@ async fn ping_barrier_follows_the_same_connections_action_update_or_error() {
                 other => panic!("Unexpected message: {other}"),
             }
         }
-        host.send(json!({"type":"game_action","action":{"type":"respond","pending_id":4294967295_u32,"card":null}})).await;
+        host.send(json!({"type":"game_action","action":{"game":"bang","payload":{"type":"respond","pending_id":4294967295_u32,"card":null}}})).await;
         host.send(json!({"type":"ping","nonce":42})).await;
         let error = host.receive().await;
         assert_eq!(error["type"], "error");
@@ -896,13 +903,13 @@ async fn manual_checks_are_routed_to_the_authenticated_owner_and_defaults_do_not
         table.clients[actor]
             .as_mut()
             .unwrap()
-            .send(json!({"type":"game_action","action":Action::FlipCheck { pending_id:id }}))
+            .send(json!({"type":"game_action","action":{"game":"bang","payload":Action::FlipCheck { pending_id:id }}}))
             .await;
         rejected(table.clients[actor].as_mut().unwrap(), "illegal_action").await;
     }
     table
         .spectator
-        .send(json!({"type":"game_action","action":Action::FlipCheck { pending_id }}))
+        .send(json!({"type":"game_action","action":{"game":"bang","payload":Action::FlipCheck { pending_id }}}))
         .await;
     rejected(&mut table.spectator, "illegal_action").await;
     table.rejoin(0).await;
@@ -931,7 +938,7 @@ async fn manual_checks_are_routed_to_the_authenticated_owner_and_defaults_do_not
     table.clients[0]
         .as_mut()
         .unwrap()
-        .send(json!({"type":"game_action","action":Action::FlipBarrel { pending_id }}))
+        .send(json!({"type":"game_action","action":{"game":"bang","payload":Action::FlipBarrel { pending_id }}}))
         .await;
     rejected(table.clients[0].as_mut().unwrap(), "illegal_action").await;
     table
@@ -1026,11 +1033,11 @@ async fn blind_hand_slots_authorize_actor_keep_maps_private_and_resume_or_timeou
             table.clients[client]
                 .as_mut()
                 .unwrap()
-                .send(json!({"type":"game_action","action":action}))
+                .send(json!({"type":"game_action","action":{"game":"bang","payload":action}}))
                 .await;
             rejected(table.clients[client].as_mut().unwrap(), "illegal_action").await;
         }
-        table.spectator.send(json!({"type":"game_action","action":Action::ChooseHandSlot { pending_id, slot: 0 }})).await;
+        table.spectator.send(json!({"type":"game_action","action":{"game":"bang","payload":Action::ChooseHandSlot { pending_id, slot: 0 }}})).await;
         rejected(&mut table.spectator, "illegal_action").await;
         table.disconnect(1).await;
         table.rejoin(1).await;
@@ -1039,7 +1046,7 @@ async fn blind_hand_slots_authorize_actor_keep_maps_private_and_resume_or_timeou
         if timeout {
             table.disconnect(0).await;
             tokio::time::advance(Duration::from_secs(59)).await;
-            table.spectator.send(json!({"type":"game_action","action":Action::ChooseHandSlot { pending_id, slot: 0 }})).await;
+            table.spectator.send(json!({"type":"game_action","action":{"game":"bang","payload":Action::ChooseHandSlot { pending_id, slot: 0 }}})).await;
             rejected(&mut table.spectator, "illegal_action").await;
             assert_eq!(table.state.players[1].hand, before);
             tokio::time::advance(Duration::from_secs(1)).await;
@@ -1063,7 +1070,7 @@ async fn blind_hand_slots_authorize_actor_keep_maps_private_and_resume_or_timeou
             table.clients[0]
                 .as_mut()
                 .unwrap()
-                .send(json!({"type":"game_action","action":action}))
+                .send(json!({"type":"game_action","action":{"game":"bang","payload":action}}))
                 .await;
             rejected(table.clients[0].as_mut().unwrap(), "illegal_action").await;
         }
@@ -1073,4 +1080,20 @@ async fn blind_hand_slots_authorize_actor_keep_maps_private_and_resume_or_timeou
             DecisionKind::PickHandSlot { .. }
         ));
     }
+}
+
+#[tokio::test(start_paused = true)]
+async fn mismatched_action_tags_preserve_the_bang_session() {
+    let mut table = Table::new(4, 42).await;
+    let (player, action) = bang::default_action(&table.state).unwrap();
+    for game in ["uno", "werewolf", "unknown"] {
+        let client = table.clients[player.0].as_mut().unwrap();
+        client
+            .send(json!({"type":"game_action","action":{"game":game,"payload":action}}))
+            .await;
+        // Scaffold action enums are empty: these tags cannot decode any action.
+        rejected(client, "invalid_message").await;
+    }
+    table.rejoin(player.0).await;
+    table.skip(0).await;
 }

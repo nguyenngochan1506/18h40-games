@@ -1,4 +1,5 @@
 mod config;
+mod games;
 mod rooms;
 
 use axum::{
@@ -123,9 +124,8 @@ fn error(code: ErrorCode) -> ServerMessage {
             ErrorCode::WrongPhase => "Action unavailable in this phase",
             ErrorCode::NotEnoughPlayers => "Not enough players",
             ErrorCode::NoFreeSeat => "No free player seat",
-            ErrorCode::InvalidSettings => {
-                "Role counts must match 4-7 players and include an Outlaw or Renegade"
-            }
+            ErrorCode::InvalidSettings => "Thiết lập trò chơi không hợp lệ",
+            ErrorCode::GameUnavailable => "Trò chơi chưa sẵn sàng",
             ErrorCode::IllegalAction => "Action is not allowed",
             ErrorCode::ServerBusy => "Server capacity reached",
         }

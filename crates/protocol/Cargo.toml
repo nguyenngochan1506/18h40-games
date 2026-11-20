@@ -5,6 +5,8 @@ edition.workspace = true
 
 [dependencies]
 bang = { path = "../bang", features = ["ts"] }
+uno = { path = "../uno", features = ["ts"] }
+werewolf = { path = "../werewolf", features = ["ts"] }
 serde.workspace = true
 ts-rs = "12.0.1"
 

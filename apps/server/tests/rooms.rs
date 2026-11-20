@@ -478,12 +478,12 @@ async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() 
     })
     .await;
     let (mut host, joined) = server.create("Host").await;
-    let defaults = json!({"mode":"classic","roles":{"deputy":0,"outlaw":2,"renegade":1}});
+    let defaults = json!({"game":"bang","payload":{"mode":"classic","roles":{"deputy":0,"outlaw":2,"renegade":1}}});
     assert_eq!(joined["room"]["settings"], defaults);
-    host.send(json!({"type":"update_settings","settings":{"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}}})).await;
+    host.send(json!({"type":"update_settings","settings":{"game":"bang","payload":{"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}}}})).await;
     host.error("invalid_settings").await;
     let mut club = defaults.clone();
-    club["mode"] = json!("club");
+    club["payload"]["mode"] = json!("club");
     host.send(json!({"type":"update_settings","settings":club}))
         .await;
     host.state(|room| room["settings"] == club).await;
@@ -493,7 +493,7 @@ async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() 
         assert_eq!(data["room"]["settings"], club);
         guests.push(guest);
     }
-    let custom = json!({"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}});
+    let custom = json!({"game":"bang","payload":{"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}}});
     guests[0]
         .send(json!({"type":"update_settings","settings":custom}))
         .await;
@@ -503,7 +503,7 @@ async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() 
         json!({"deputy":0,"outlaw":1,"renegade":1}),
         json!({"deputy":255,"outlaw":255,"renegade":255}),
     ] {
-        host.send(json!({"type":"update_settings","settings":{"mode":"club","roles":roles}}))
+        host.send(json!({"type":"update_settings","settings":{"game":"bang","payload":{"mode":"club","roles":roles}}}))
             .await;
         host.error("invalid_settings").await;
         host.send(json!({"type":"ping","nonce":123})).await;
@@ -515,7 +515,7 @@ async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() 
         guest.state(|room| room["settings"] == custom).await;
     }
     let (mut fifth, fifth_data) = server.join(code(&joined), "Fifth").await;
-    let five = json!({"mode":"club","roles":{"deputy":1,"outlaw":2,"renegade":1}});
+    let five = json!({"game":"bang","payload":{"mode":"club","roles":{"deputy":1,"outlaw":2,"renegade":1}}});
     assert_eq!(fifth_data["room"]["settings"], five);
     fifth.send(json!({"type":"leave_room"})).await;
     fifth.until("left").await;
@@ -544,8 +544,8 @@ async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() 
     let mut counts = std::collections::BTreeMap::new();
     for client in std::iter::once(&mut host).chain(guests.iter_mut()) {
         let start = client.until("game_started").await;
-        assert_eq!(start["view"]["perspective"], "player");
-        let own = &start["view"]["view"];
+        assert_eq!(start["view"]["payload"]["perspective"], "player");
+        let own = &start["view"]["payload"]["view"];
         let role = own["table"]["players"][own["you"].as_u64().unwrap() as usize]["role"]
             .as_str()
             .unwrap();
@@ -570,4 +570,38 @@ async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() 
         .await;
     host.send(json!({"type":"take_seat"})).await;
     host.state(|room| room["settings"] == club).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn disabled_games_and_mismatched_settings_reject_without_fallback() {
+    let server = TestServer::new(Config {
+        max_rooms: 1,
+        ..Default::default()
+    })
+    .await;
+    let mut client = server.connect().await;
+    for game in ["uno", "werewolf"] {
+        client
+            .send(json!({"type":"create_room","game":game,"nickname":"Host"}))
+            .await;
+        client.error("game_unavailable").await;
+        client.send(json!({"type":"ping","nonce":7})).await;
+        assert_eq!(client.until("pong").await["nonce"], 7);
+    }
+    // Disabled games do not allocate rooms or attach the connection to one.
+    client
+        .send(json!({"type":"create_room","game":"bang","nickname":"Host"}))
+        .await;
+    let joined = client.until("joined").await;
+    let settings = joined["room"]["settings"].clone();
+    for game in ["uno", "werewolf"] {
+        client
+            .send(json!({"type":"update_settings","settings":{"game":game,"payload":{}}}))
+            .await;
+        client.error("invalid_settings").await;
+        let (_, snapshot) = server.join(code(&joined), game).await;
+        assert_eq!(snapshot["room"]["settings"], settings);
+    }
+    client.send(json!({"type":"ping","nonce":8})).await;
+    assert_eq!(client.until("pong").await["nonce"], 8);
 }
