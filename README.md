@@ -26,7 +26,7 @@ assets/<id>/                 art, âm thanh của từng game; assets/platform/ 
 specs/                       spec nền tảng và spec từng game
 ```
 
-Thêm game mới: đọc [ADDING_A_GAME.md](ADDING_A_GAME.md). `pnpm check` chạy cả script chặn import chéo giữa các game (`scripts/check-game-boundaries.mjs`).
+Thêm game mới: đọc [ADDING_A_GAME.md](ADDING_A_GAME.md). Quy trình cộng tác (nhánh, PR, review): [CONTRIBUTING.md](CONTRIBUTING.md). `pnpm check` chạy cả script chặn import chéo giữa các game (`scripts/check-game-boundaries.mjs`).
 
 Cần Rust hỗ trợ edition 2024, Node.js 26 và pnpm 10.34.9.
 

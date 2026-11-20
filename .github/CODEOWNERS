@@ -1,0 +1,15 @@
+# Vùng nền tảng: người làm game không tự sửa; PR đụng vào đây tự gọi chủ nền tảng duyệt.
+/crates/protocol/                 @nguyenngochan1506
+/apps/server/src/rooms.rs         @nguyenngochan1506
+/apps/server/src/rooms/           @nguyenngochan1506
+/apps/server/src/games/mod.rs     @nguyenngochan1506
+/apps/web/src/app/                @nguyenngochan1506
+/apps/web/src/shared/             @nguyenngochan1506
+/apps/web/src/features/           @nguyenngochan1506
+/apps/web/src/games/registry.ts   @nguyenngochan1506
+/apps/web/src/games/types.ts      @nguyenngochan1506
+/scripts/                         @nguyenngochan1506
+/.github/                         @nguyenngochan1506
+/specs/*.md                       @nguyenngochan1506
+/Dockerfile                       @nguyenngochan1506
+/deploy/                          @nguyenngochan1506

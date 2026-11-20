@@ -1,0 +1,25 @@
+name: Báo lỗi
+description: Có thứ gì đó chạy sai
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Chuyện gì xảy ra
+      description: Mô tả lỗi, kèm ảnh chụp nếu có.
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Cách tái hiện
+      placeholder: "1. Tạo phòng BANG!\n2. ..."
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: Kết quả mong đợi
+  - type: input
+    id: env
+    attributes:
+      label: Môi trường
+      description: Trình duyệt, thiết bị, game, mã phòng nếu có.
