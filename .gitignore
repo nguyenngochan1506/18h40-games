@@ -1,5 +1,4 @@
-specs/
 target/
 node_modules/
 dist/
-assets/bang/
+specs/games/*/research/
