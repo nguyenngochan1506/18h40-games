@@ -21,7 +21,7 @@ export function DecodedImage({ src, className, alt = '', loading, onError }: { s
 }
 
 export function SaloonBackdrop() {
-  return <div className="saloon-backdrop" aria-hidden="true"><DecodedImage src="/scene/saloon-bg.webp" /><div className="saloon-shade" /><div className="saloon-embers" /><div className="saloon-lamplight" /></div>;
+  return <div className="saloon-backdrop" aria-hidden="true"><DecodedImage src="/platform/saloon-bg.webp" /><div className="saloon-shade" /><div className="saloon-embers" /><div className="saloon-lamplight" /></div>;
 }
 
 export function SceneTransition({ children }: { children: ReactNode }) {

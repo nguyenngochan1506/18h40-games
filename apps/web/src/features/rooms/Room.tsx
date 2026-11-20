@@ -1,31 +1,34 @@
-import GameBoard from '../game/GameBoard';
-import type { ClientMessage, GameKind, GameSnapshot, RoomView } from '../../generated/protocol';
+import { Fragment, useEffect, useState } from 'react';
+import type { ClientMessage, RoomView } from '../../generated/protocol';
 import { PROTOCOL_VERSION } from '../../generated/protocol';
-import { availableGames } from '../lobby/games';
+import { loadGame, registry } from '../../games/registry';
+import type { GameClient } from '../../games/types';
+import type { GameSyncState } from '../../shared/gameSync';
 import WaitingRoom from './WaitingRoom';
-import type { FxBatch } from '../game/fx';
-import type { LogEntry } from '../game/log';
-import { selectGameView } from '../game/state';
 
-const boards = { bang: GameBoard } satisfies Record<GameKind, typeof GameBoard>;
-
-type Props = { room: RoomView; game: GameSnapshot | null; log: LogEntry[]; fxBatch: FxBatch | null; soundBatch: FxBatch | null; fxEnabled: boolean; viewer: number | null; disabled: boolean; pending?: boolean; requestVersion?: number; actionError?: string | null; send: (message: ClientMessage) => void };
-
-export default function Room({ room, game, log, fxBatch, soundBatch, fxEnabled, viewer, disabled, pending = false, requestVersion = 0, actionError = null, send }: Props) {
-  const Board = boards[room.game];
-  const info = availableGames[room.game];
-  const players = room.members.filter((member) => member.role === 'player').length;
+type Props = { room: RoomView; sync: GameSyncState; fxEnabled: boolean; disabled: boolean; pending?: boolean; requestVersion?: number; actionError?: string | null; actionErrorCode?: string | null; consume: (through: number) => void; send: (message: ClientMessage) => void };
+export default function Room({ room, sync, fxEnabled, disabled, pending = false, requestVersion = 0, actionError = null, actionErrorCode = null, consume, send }: Props) {
+  const [loaded, setLoaded] = useState<{ kind: string; client: GameClient } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  const info = registry[room.game];
+  useEffect(() => {
+    let active = true;
+    setLoaded(null); setError(null);
+    void loadGame(room.game).then(client => { if (active) setLoaded({ kind: room.game, client }); }).catch(() => { if (active) setError('Không tải được trò chơi. Hãy thử lại hoặc rời phòng.'); });
+    return () => { active = false; };
+  }, [room.code, room.game, retry]);
+  const leaveRoom = () => send({ v: PROTOCOL_VERSION, type: 'leave_room' });
+  if (!info?.enabled || error) return <section className="saloon-restoring"><div className="saloon-poster"><h2>{info?.name ?? 'Trò chơi không hỗ trợ'}</h2><p role="alert">{!info?.enabled ? 'Trò chơi chưa được hỗ trợ. Bạn vẫn có thể rời phòng.' : error}</p>{info?.enabled && <button className="western-button" onClick={() => setRetry(value => value + 1)}>Thử tải lại</button>}<button className="western-button" disabled={disabled} onClick={leaveRoom}>Rời phòng</button></div></section>;
+  const client = loaded?.kind === room.game ? loaded.client : null;
+  const Root = client?.Root ?? Fragment;
+  if (room.phase === 'waiting') return <Root><WaitingRoom room={room} disabled={disabled} send={send} Settings={client?.Settings} /></Root>;
+  if (!sync.game || !client) return <section className="saloon-restoring"><div className="saloon-poster"><h2>Phòng {room.code}</h2><p role="status">Đang tải trò chơi…</p><button className="western-button" disabled={disabled} onClick={leaveRoom}>Rời phòng</button></div></section>;
+  const Board = client.Board;
   const host = room.host === room.you;
-  const waiting = room.phase === 'waiting';
-  if (game && !waiting) return <Board game={game} room={room} log={log} fxBatch={fxBatch} soundBatch={soundBatch} fxEnabled={fxEnabled} viewer={viewer} disabled={disabled} pending={pending} requestVersion={requestVersion} actionError={actionError}
-    endGame={() => send({ v: PROTOCOL_VERSION, type: 'end_game' })}
-    leaveRoom={() => send({ v: PROTOCOL_VERSION, type: 'leave_room' })}
-    sendAction={(action) => send({ v: PROTOCOL_VERSION, type: 'game_action', action })}
-    roomMenu={<><h2 id="room-overview">{info.name} · Phòng {room.code}</h2><p>{players} người chơi · Đang chơi</p><ul className="room-presence">{room.members.map((member) => <li key={member.id}><span>{member.nickname}{member.id === room.you ? ' (bạn)' : ''}</span><span>{member.online ? 'Đang kết nối' : 'Mất kết nối'}</span></li>)}</ul>
-      <a className="action secondary" href="#room-overview">Về phòng</a>
-      {host && !selectGameView(game.view).table.winner && <button className="action secondary" disabled={disabled} onClick={() => send({ v: PROTOCOL_VERSION, type: 'host_skip' })}>Bỏ qua lượt chờ</button>}
-      {host && <button className="action secondary" disabled={disabled} onClick={() => send({ v: PROTOCOL_VERSION, type: 'end_game' })}>Kết thúc ván</button>}
-      <button className="action" disabled={disabled} onClick={() => send({ v: PROTOCOL_VERSION, type: 'leave_room' })}>Rời phòng</button></>}
-  />;
-  return <WaitingRoom room={room} disabled={disabled} send={send} />;
+  const players = room.members.filter(member => member.role === 'player').length;
+  return <Root><Board key={sync.generation} room={room} sync={sync} consume={consume} disabled={disabled || sync.frames.length > 0} pending={pending} requestVersion={requestVersion} actionError={actionError} actionErrorCode={actionErrorCode} fxEnabled={fxEnabled}
+    sendAction={action => { if (!disabled && sync.frames.length === 0) send({ v: PROTOCOL_VERSION, type: 'game_action', action }); }}
+    endGame={() => send({ v: PROTOCOL_VERSION, type: 'end_game' })} leaveRoom={leaveRoom} hostSkip={() => send({ v: PROTOCOL_VERSION, type: 'host_skip' })}
+    roomMenu={<><h2 id="room-overview">{info.name} · Phòng {room.code}</h2><p>{players} người chơi · Đang chơi</p><ul className="room-presence">{room.members.map(member => <li key={member.id}><span>{member.nickname}{member.id === room.you ? ' (bạn)' : ''}</span><span>{member.online ? 'Đang kết nối' : 'Mất kết nối'}</span></li>)}</ul><a className="action secondary" href="#room-overview">Về phòng</a>{host && <button className="action secondary" disabled={disabled} onClick={() => send({ v: PROTOCOL_VERSION, type: 'end_game' })}>Kết thúc ván</button>}<button className="action" disabled={disabled} onClick={leaveRoom}>Rời phòng</button></>} /></Root>;
 }

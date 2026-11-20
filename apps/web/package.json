@@ -7,7 +7,8 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "vite build && node ../../scripts/check-web-build.mjs",
-    "test": "node --test src/shared/lib/*.test.ts src/app/*.test.ts src/features/game/*.test.ts src/features/rooms/*.test.ts src/features/lobby/*.test.ts"
+    "test": "node --test src/shared/lib/*.test.ts src/shared/*.test.ts src/app/*.test.ts src/features/rooms/*.test.ts src/features/lobby/*.test.ts src/games/*.test.ts src/games/*/*.test.ts src/games/*/*/*.test.ts ../../scripts/check-game-boundaries.test.mjs",
+    "boundaries": "node ../../scripts/check-game-boundaries.mjs"
   },
   "dependencies": {
     "motion": "14.11.1",

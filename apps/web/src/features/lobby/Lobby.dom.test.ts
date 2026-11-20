@@ -4,14 +4,15 @@ import type { TestContext } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Window } from 'happy-dom';
 import { createServer } from 'vite';
-import { act, createElement } from 'react';
+import { act, createElement, useRef, useState } from 'react';
 import { PROTOCOL_VERSION } from '../../generated/protocol.ts';
 import type { ClientMessage } from '../../generated/protocol.ts';
 import type LobbyComponent from './Lobby.tsx';
 import type RoomComponent from '../rooms/Room.tsx';
-import type WaitingSettingsComponent from '../rooms/WaitingSettings.tsx';
-import { demoGame, demoRoom } from '../game/demo.ts';
-import { cardCatalog } from '../game/cardCatalog.ts';
+import type { GameClient } from '../../games/types.ts';
+import type { RoomView } from '../../generated/protocol.ts';
+import { initialGameState, receiveGameState, consumeFrames } from '../../shared/gameSync.ts';
+import { demoGame, demoRoom } from '../../testFixtures.ts';
 
 const dom = new Window({ url: 'http://localhost/', width: 1280, height: 720, settings: { enableImageFileLoading: false, enableCSSFileLoading: false, disableJavaScriptFileLoading: true } });
 Reflect.deleteProperty(dom.Element.prototype, 'animate');
@@ -20,18 +21,30 @@ const previous = Object.getOwnPropertyDescriptors(globalThis);
 for (const [name, value] of Object.entries(globals)) Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 const vite = await createServer({ root: fileURLToPath(new URL('../../../', import.meta.url)), configFile: false, optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false, watch: null } });
-let Lobby: typeof LobbyComponent, Room: typeof RoomComponent, WaitingSettings: typeof WaitingSettingsComponent;
+let Lobby: typeof LobbyComponent, ShellRoom: typeof RoomComponent, WaitingSettings: GameClient['Settings'];
 try {
-  WaitingSettings = (await vite.ssrLoadModule('/src/features/rooms/WaitingSettings.tsx')).default;
+  const { registry } = await vite.ssrLoadModule('/src/games/registry.ts');
+  WaitingSettings = (await registry.bang.load()).Settings;
   Lobby = (await vite.ssrLoadModule('/src/features/lobby/Lobby.tsx')).default;
-  await vite.ssrLoadModule('/src/features/game/GameBoard.tsx');
-  await vite.ssrLoadModule('/src/features/game/GameResult.tsx');
-  Room = (await vite.ssrLoadModule('/src/features/rooms/Room.tsx')).default;
+  ShellRoom = (await vite.ssrLoadModule('/src/features/rooms/Room.tsx')).default;
 } catch (error) { await vite.close(); throw error; }
 after(async () => {
   await vite.close(); await dom.happyDOM.close();
   for (const name of Object.keys(globals)) { if (previous[name]) Object.defineProperty(globalThis, name, previous[name]); else Reflect.deleteProperty(globalThis, name); }
 });
+
+// Drive the shell with authoritative v7 snapshots while keeping DOM scenarios readable.
+type RoomProps = { room: RoomView; game: typeof demoGame | null; disabled: boolean; fxEnabled: boolean; viewer: number; log: unknown[]; fxBatch: null; soundBatch: null; send: (message: ClientMessage) => void };
+function Room(props: RoomProps) {
+  const snapshot = () => receiveGameState(initialGameState, { v: PROTOCOL_VERSION, type: 'joined', room_code: props.room.code, token: 'test', room: props.room, game: props.game ? { ...props.game, view: { game: 'bang', payload: props.game.view } } : null });
+  const [sync, setSync] = useState(snapshot);
+  const previous = useRef({ game: props.game, phase: props.room.phase });
+  if (previous.current.game !== props.game || previous.current.phase !== props.room.phase) {
+    previous.current = { game: props.game, phase: props.room.phase };
+    setSync({ ...snapshot(), generation: sync.generation + 1 });
+  }
+  return createElement(ShellRoom, { room: props.room, sync, consume: through => setSync(current => consumeFrames(current, through)), disabled: props.disabled, fxEnabled: props.fxEnabled, send: props.send });
+}
 
 async function mount(t: TestContext) {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
@@ -40,7 +53,7 @@ async function mount(t: TestContext) {
   const errors = t.mock.method(console, 'error'), warnings = t.mock.method(console, 'warn');
   const container = document.createElement('div'); document.body.append(container);
   const root = createRoot(container);
-  t.after(async () => { await act(() => root.unmount()); container.remove(); assert.equal(errors.mock.callCount(), 0); assert.equal(warnings.mock.callCount(), 0); });
+  t.after(async () => { await act(() => root.unmount()); container.remove(); assert.equal(errors.mock.callCount(), 0, errors.mock.calls.map(call => String(call.arguments)).join('\n')); assert.equal(warnings.mock.callCount(), 0, warnings.mock.calls.map(call => String(call.arguments)).join('\n')); });
   const sent: ClientMessage[] = [];
   const render = async (disabled = false) => { await act(async () => root.render(createElement(Lobby, { disabled, send: message => sent.push(message) }))); };
   const fill = async (selector: string, value: string) => {
@@ -94,6 +107,7 @@ test('returning to the lobby from the result explicitly leaves the room', async 
   const game = structuredClone(demoGame);
   if (game.view.perspective === 'player') game.view.view.table.winner = 'outlaws';
   await act(async () => root.render(createElement(Room, { room: { ...demoRoom, phase: 'playing' }, game, log: [], fxBatch: null, soundBatch: null, fxEnabled: false, viewer: 0, disabled: false, send: message => sent.push(message) })));
+  for (let i = 0; i < 50 && !container.querySelector('.game-result'); i++) await act(async () => { await new Promise(resolve => setImmediate(resolve)); });
   const leave = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Về sảnh');
   assert.ok(leave); await act(() => leave.click());
   assert.deepEqual(sent, [{ v: PROTOCOL_VERSION, type: 'leave_room' }]);
@@ -102,7 +116,7 @@ test('returning to the lobby from the result explicitly leaves the room', async 
 test('room settings edit a draft, validate totals and send the selected mode with custom roles', async t => {
   const { container, root, sent, fill } = await mount(t);
   const settings = { mode: 'classic' as const, roles: { deputy: 0, outlaw: 2, renegade: 1 } };
-  await act(async () => root.render(createElement(WaitingSettings, { settings, players: 4, editable: true, send: message => sent.push(message) })));
+  await act(async () => root.render(createElement(WaitingSettings, { settings: { game: 'bang', payload: settings }, players: 4, editable: true, onChange: settings => sent.push({ v: PROTOCOL_VERSION, type: 'update_settings', settings }) })));
   const button = (label: string) => [...container.querySelectorAll<HTMLButtonElement>('button')].find(b => b.getAttribute('aria-label') === label || b.textContent === label)!;
   await act(() => button('Tăng Phó cảnh sát').click());
   await act(() => button('Áp dụng cài đặt').click());
@@ -112,12 +126,12 @@ test('room settings edit a draft, validate totals and send the selected mode wit
   assert.equal(container.querySelector('[role="alert"]'), null);
   await act(() => container.querySelector<HTMLInputElement>('input[value="club"]')!.click());
   await act(() => button('Áp dụng cài đặt').click());
-  assert.deepEqual([...sent], [{ v: PROTOCOL_VERSION, type: 'update_settings', settings: { mode: 'club', roles: { deputy: 1, outlaw: 1, renegade: 1 } } }]);
+  assert.deepEqual([...sent], [{ v: PROTOCOL_VERSION, type: 'update_settings', settings: { game: 'bang', payload: { mode: 'club', roles: { deputy: 1, outlaw: 1, renegade: 1 } } } }]);
   await act(() => button('Về mặc định').click());
   assert.equal(container.querySelector<HTMLInputElement>('#role-deputy')!.value, '0');
   assert.equal(container.querySelector<HTMLInputElement>('input[value="club"]')!.checked, true);
   await act(() => button('Áp dụng cài đặt').click());
-  assert.deepEqual(sent.at(-1), { v: PROTOCOL_VERSION, type: 'update_settings', settings: { mode: 'club', roles: settings.roles } });
+  assert.deepEqual(sent.at(-1), { v: PROTOCOL_VERSION, type: 'update_settings', settings: { game: 'bang', payload: { mode: 'club', roles: settings.roles } } });
   await fill('#role-deputy', '');
   await act(() => button('Áp dụng cài đặt').click());
   assert.match(container.querySelector('[role="alert"]')!.textContent!, /0 đến 6/);
@@ -128,7 +142,7 @@ test('room settings edit a draft, validate totals and send the selected mode wit
 
 test('room settings are read-only to guests and reset a host draft on a seat-count snapshot', async t => {
   const { container, root, sent } = await mount(t);
-  const room = { ...demoRoom, phase: 'waiting' as const, members: demoRoom.members.slice(0, 4), settings: { mode: 'classic' as const, roles: { deputy: 0, outlaw: 2, renegade: 1 } } };
+  const room = { ...demoRoom, phase: 'waiting' as const, members: demoRoom.members.slice(0, 4), settings: { game: 'bang' as const, payload: { mode: 'classic' as const, roles: { deputy: 0, outlaw: 2, renegade: 1 } } } };
   const props = { room, game: null, log: [], fxBatch: null, soundBatch: null, fxEnabled: false, viewer: 0, disabled: false, send: (message: ClientMessage) => sent.push(message) };
   await act(async () => root.render(createElement(Room, props)));
   await act(() => container.querySelector<HTMLButtonElement>('[aria-label="Tăng Phó cảnh sát"]')!.click());
@@ -147,9 +161,9 @@ test('BANG HUD lists stacked weapons and displays the server-supplied maximum ra
   const { container, root } = await mount(t);
   const game = structuredClone(demoGame);
   if (game.view.perspective !== 'player') throw Error('Expected player view');
-  game.view.view.table.players[0].in_play = ['volcanic', 'winchester'].map(kind => cardCatalog.findIndex(card => card.kind === kind));
+  game.view.view.table.players[0].in_play = [72, 79];
   game.view.view.table.players[0].weapon_range = 5;
-  await act(async () => root.render(createElement(Room, { room: { ...demoRoom, settings: { ...demoRoom.settings, mode: 'club' } }, game, log: [], fxBatch: null, soundBatch: null, fxEnabled: false, viewer: 0, disabled: false, send() {} })));
+  await act(async () => root.render(createElement(Room, { room: { ...demoRoom, settings: { game: 'bang', payload: { ...((demoRoom.settings.game === 'bang') ? demoRoom.settings.payload : { mode: 'classic', roles: { deputy: 1, outlaw: 2, renegade: 1 } }), mode: 'club' } } }, game, log: [], fxBatch: null, soundBatch: null, fxEnabled: false, viewer: 0, disabled: false, send() {} })));
   assert.match(container.querySelector('.hud-gun')!.textContent!, /Volcanic \+ Winchester/);
   assert.match(container.querySelector('.hud-gun')!.textContent!, /Tầm bắn: 5/);
 });
@@ -167,7 +181,7 @@ test('manual check controls expose Enter, lock pending input and retain Barrel a
   assert.equal(initialFlip.getAttribute('aria-keyshortcuts'), 'Enter');
   assert.equal(initialFlip.getAttribute('data-primary-action'), 'true');
   await act(() => initialFlip.click());
-  assert.deepEqual([...sent], [{ v: PROTOCOL_VERSION, type: 'game_action', action: { type: 'flip_check', pending_id: 44 } }]);
+  assert.deepEqual([...sent], [{ v: PROTOCOL_VERSION, type: 'game_action', action: { game: 'bang', payload: { type: 'flip_check', pending_id: 44 } } }]);
   await act(async () => root.render(createElement(Room, { ...props, disabled: true })));
   const flip = container.querySelector<HTMLButtonElement>('[aria-label="Lật kiểm tra"] button')!;
   assert.equal(flip.disabled, true);
@@ -179,7 +193,7 @@ test('manual check controls expose Enter, lock pending input and retain Barrel a
   assert.ok(buttons.some(button => button.textContent!.includes('Lật Barrel (2 lần còn lại)')));
   assert.ok(buttons.some(button => button.textContent!.includes('Chịu đòn')));
   await act(() => buttons.find(button => button.textContent!.includes('Lật Barrel'))!.click());
-  assert.deepEqual(sent.at(-1), { v: PROTOCOL_VERSION, type: 'game_action', action: { type: 'flip_barrel', pending_id: 45 } });
+  assert.deepEqual(sent.at(-1), { v: PROTOCOL_VERSION, type: 'game_action', action: { game: 'bang', payload: { type: 'flip_barrel', pending_id: 45 } } });
   table.waiting = { player: 0, pending_id: 46, kind: { type: 'attack_response', kind: 'bang', remaining: 2, checks_left: 1 } };
   await act(async () => root.render(createElement(Room, { ...props, game: { ...game, seq: game.seq + 2 } })));
   const current = [...container.querySelectorAll<HTMLElement>('.game-controls')].find(control => !control.closest('[inert]'))!;

@@ -1,0 +1,16 @@
+.game-bang .cinematic .can-drag { cursor: grab; user-select: none; }
+.game-bang .cinematic .card-dragging { z-index: 70 !important; cursor: grabbing; filter: drop-shadow(0 12px 12px #090502bb); }
+.game-bang .cinematic.is-dragging, .game-bang .cinematic.is-dragging * { cursor: grabbing !important; }
+.game-bang .cinematic .hand-tray:has(.card-dragging) { z-index: 65; }
+.game-bang .cinematic .hand-cards:has(.card-dragging, .card-returning) { overflow: visible; }
+.game-bang .cinematic.is-dragging .scene-actor:not(.drop-ready), .game-bang .cinematic.is-dragging .seat-position:not(.drop-ready), .game-bang .cinematic.is-dragging .table-center:not(.drop-ready) { opacity: .65; }
+.game-bang .cinematic.is-dragging .decision-overlay, .game-bang .cinematic.is-dragging .card-detail { opacity: .1; pointer-events: none; }
+.game-bang .cinematic .scene-actor.drop-ready { filter: drop-shadow(0 0 12px #e9c471b0); }
+.game-bang .cinematic .seat-position.drop-ready .seat-person, .game-bang .cinematic .table-center.drop-ready { outline: 2px solid #e9c471; outline-offset: 4px; }
+.game-bang .cinematic .scene-actor.drop-over { filter: drop-shadow(0 0 22px #ffe6a6); }
+.game-bang .cinematic .seat-position.drop-over .seat-person, .game-bang .cinematic .table-center.drop-over { outline: 3px solid #fff0b4; outline-offset: 5px; }
+.game-bang .drag-flight { position: fixed; z-index: 90; pointer-events: none; transform-origin: center; filter: drop-shadow(0 6px 8px #0a0607aa); }
+.game-bang .drag-flight img { width: 100%; height: 100%; object-fit: contain; }
+.game-bang .drag-hint { position: absolute; z-index: 66; top: 40px; left: 50%; transform: translateX(-50%); padding: 8px 14px; color: #fff0bf; background: #281a10ee; border: 1px solid #caa563; font: 14px/1.4 system-ui, sans-serif; pointer-events: none; }
+.game-bang .cinematic .game-card.card-flight-source, .game-bang .cinematic .game-card.card-flight-source * { visibility: hidden !important; }
+.game-bang .demo-drag-error { position: fixed; z-index: 80; top: 80px; left: 50%; transform: translateX(-50%); max-width: 560px; padding: 12px; background: #f2d7a8; color: #7a2018; border: 1px solid #9c6035; }

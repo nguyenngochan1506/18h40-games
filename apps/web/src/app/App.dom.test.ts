@@ -8,7 +8,7 @@ import { act, createElement } from 'react';
 import type { RouteObject } from 'react-router';
 import type { ClientMessage, ServerMessage } from '../generated/protocol.ts';
 import { PROTOCOL_VERSION } from '../generated/protocol.ts';
-import { demoRoom } from '../features/game/demo.ts';
+import { demoRoom } from '../testFixtures.ts';
 import { saveSession } from '../shared/lib/session.ts';
 import type { Session } from '../shared/lib/session.ts';
 
@@ -43,6 +43,10 @@ const vite = await createServer({ root: fileURLToPath(new URL('../../', import.m
 let appRoutes: RouteObject[];
 try {
   await vite.ssrLoadModule('/src/features/lobby/Lobby.tsx');
+  // Vite crawl timers must finish before tests replace the global clock.
+  const { registry } = await vite.ssrLoadModule('/src/games/registry.ts');
+  await registry.bang.load();
+  await vite.waitForRequestsIdle();
   appRoutes = (await vite.ssrLoadModule('/src/app/router.tsx')).appRoutes;
 } catch (error) { await vite.close(); throw error; }
 after(async () => {

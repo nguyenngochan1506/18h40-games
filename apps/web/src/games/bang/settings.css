@@ -1,0 +1,36 @@
+.game-bang .saloon-waiting.with-settings { grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 48px 16px 24px; }
+@media (min-width: 1200px) {
+ .game-bang .with-settings .waiting-name { width: clamp(104px, 10vw, 160px); }
+ .game-bang .with-settings .waiting-actions { bottom: 12px; left: 16px; }
+}
+.game-bang .room-settings { width: 100%; padding: 20px; align-self: center; }
+.game-bang .room-settings fieldset { min-width: 0; border: 0; padding: 0; margin: 0 0 16px; }
+.game-bang .room-settings legend { margin-bottom: 8px; font: 700 22px/1.2 Georgia, serif; }
+.game-bang .room-mode-options { display: grid; gap: 8px; }
+.game-bang .room-mode-options label { display: flex; gap: 10px; align-items: flex-start; padding: 8px; margin: 0; border: 1px solid #9b733d; cursor: pointer; }
+.game-bang .room-mode-options label.is-selected { background: #fff1ca88; border-color: #63391d; }
+.game-bang .room-mode-options input { margin-top: 4px; accent-color: #63391d; }
+.game-bang .room-mode-options strong, .game-bang .room-mode-options small { display: block; }
+.game-bang .room-mode-options small { margin-top: 2px; font: 12px/1.4 system-ui, sans-serif; }
+.game-bang .fixed-sheriff, .game-bang .room-role { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; font: 13px/1.4 system-ui, sans-serif; }
+.game-bang .room-role label { margin: 0; }
+.game-bang .role-stepper { display: flex; align-items: center; gap: 4px; }
+.game-bang .role-stepper input { width: 44px; height: 36px; border: 1px solid #886536; background: #fff1ca88; color: #352314; text-align: center; font: 16px/1.3 system-ui, sans-serif; appearance: textfield; }
+.game-bang .role-stepper input::-webkit-inner-spin-button { appearance: none; }
+.game-bang .role-stepper button { width: 36px; height: 36px; border: 1px solid #886536; background: #5b3a20; color: #ffe1a5; font-size: 20px; cursor: pointer; }
+.game-bang .role-stepper button:disabled { opacity: .45; cursor: default; }
+.game-bang .room-settings :is(input, button):focus-visible { outline: 3px solid #63391d; outline-offset: 3px; box-shadow: 0 0 0 5px #fff0bf; }
+.game-bang .role-total, .game-bang .settings-hint, .game-bang .settings-error { font: 12px/1.5 system-ui, sans-serif; margin: 8px 0; }
+.game-bang .settings-reset { color: #573317; text-decoration: underline; padding: 4px 0; font-size: 13px; cursor: pointer; }
+.game-bang .settings-error { color: #732b1c; font-weight: 600; }
+.game-bang .room-settings > .western-button { width: 100%; }
+@media (max-width: 1199px) {
+ .game-bang .saloon-waiting.with-settings { grid-template-columns: minmax(0, 1fr); }
+ .game-bang .room-settings { max-width: 680px; justify-self: center; }
+}
+@media (max-width: 899px) {
+ .game-bang .saloon-waiting.with-settings { padding: 44px 0 20px; display: grid; }
+ .game-bang .room-settings { width: calc(100% - 40px); }
+ .game-bang .role-stepper button, .game-bang .role-stepper input { height: 44px; }
+ .game-bang .role-stepper button { width: 44px; }
+}

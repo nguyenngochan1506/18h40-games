@@ -1,21 +1,19 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useBlocker, useLocation, useNavigate, useParams } from 'react-router';
 import { AnimatePresence, LazyMotion, domAnimation } from 'motion/react';
-import { SaloonBackdrop, SceneTransition, usePreloadedImages } from '../shared/SaloonScene';
+import { SaloonBackdrop, SceneTransition } from '../shared/SaloonScene';
 import '../shared/saloon.css';
 import { PROTOCOL_VERSION } from '../generated/protocol';
 import type { ClientMessage, RoomView, ServerMessage } from '../generated/protocol';
 import Room from '../features/rooms/Room';
-import { gameSceneImages } from '../features/game/sceneImages';
-import { selectGameView } from '../features/game/state';
-import { initialGameState, inputLocked, receiveGameState } from '../features/game/state';
-import type { GameSyncState } from '../features/game/state';
+import { consumeFrames, initialGameState, inputLocked, receiveGameState } from '../shared/gameSync';
+import type { GameSyncState } from '../shared/gameSync';
 import { errorMessages } from '../shared/lib/errors';
-import { sound } from '../features/game/sound';
 import { connectSocket } from '../shared/lib/socket';
 import { createRequestTracker } from '../shared/lib/request';
 import { loadSession, retryDelay, saveSession } from '../shared/lib/session';
 import { isValidRoomCode, normalizeRoomCode, roomPath, roomRoute } from '../shared/lib/roomRoute';
+import { loadGame } from '../games/registry';
 import LeaveRoomDialog from './LeaveRoomDialog';
 
 const Lobby = lazy(() => import('../features/lobby/Lobby'));
@@ -46,6 +44,7 @@ export default function App() {
   const [pending, setPending] = useState(false);
   const [requestVersion, setRequestVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const blocker = useBlocker(({ nextLocation }) => Boolean(roomRef.current && roomRoute(nextLocation.pathname).code !== roomRef.current.code));
   const blockerRef = useRef(blocker); blockerRef.current = blocker;
 
@@ -72,7 +71,7 @@ export default function App() {
     const nonce = requests.start(connection);
     if (nonce === null) return;
     setPending(true);
-    setError(null);
+    setError(null); setErrorCode(null);
     try {
       for (const command of Array.isArray(message) ? message : [message]) connection.send(JSON.stringify(command));
       // Commands on this socket are serialized by the server before the final ping barrier.
@@ -82,7 +81,8 @@ export default function App() {
     }
   }
   function setGameSync(next: GameSyncState) { gameRef.current = next; setGameState(next); }
-  function updateRoom(next: RoomView | null) { roomRef.current = next; setRoom(next); }
+  const consumeGameFrames = useCallback((through: number) => setGameSync(consumeFrames(gameRef.current, through)), []);
+  function updateRoom(next: RoomView | null) { roomRef.current = next; setRoom(next); if (next) void loadGame(next.game).catch(() => undefined); }
   function forgetSession() { session.current = null; saveSession(null); }
   function restoreForRoute(connection: WebSocket): boolean {
     if (!canRestore() || membership.current === connection || requests.pending || connection.readyState !== WebSocket.OPEN) return false;
@@ -157,6 +157,9 @@ export default function App() {
             }
             return;
           }
+          const expected = message.type === 'joined' || message.type === 'room_state' ? message.room.game : roomRef.current?.game;
+          const tag = message.type === 'game_started' ? message.view.game : message.type === 'game_update' || message.type === 'game_over' ? message.update.game : message.type === 'joined' ? message.game?.view.game : undefined;
+          if (tag && expected && tag !== expected) throw new Error('Mismatched game tag');
           const before = gameRef.current;
           const next = receiveGameState(before, message);
           setGameSync(next);
@@ -174,7 +177,7 @@ export default function App() {
               updateRoom(message.room);
               setRestoring(false);
               setStatus('Đã kết nối');
-              setError(null);
+              setError(null); setErrorCode(null);
               attempt = 0;
               void navigate(roomPath(message.room_code), { replace: entry.current?.invite || entry.current?.type === 'rejoin_room' });
               entry.current = null;
@@ -193,7 +196,7 @@ export default function App() {
               break;
             case 'error':
               leaving.current = false;
-              if (message.code === 'illegal_action' && gameRef.current.game && !gameRef.current.desynced) void sound.play('invalid');
+              setErrorCode(message.code);
               setError(message.code === 'room_not_found' && entry.current?.code ? `Không tìm thấy phòng ${entry.current.code}` : errorMessages[message.code] ?? 'Không xử lý được yêu cầu. Hãy tải lại trang.');
               if (message.code === 'invalid_token' || message.code === 'room_not_found') forgetSession();
               if (entry.current || message.code === 'invalid_token' || message.code === 'room_not_found') {
@@ -277,19 +280,18 @@ export default function App() {
   }
 
   const disabled = inputLocked({ connected: status === 'Đã kết nối', pending, restoring, desynced: gameState.desynced });
-  const sceneReady = usePreloadedImages(game && room?.phase !== 'waiting' ? gameSceneImages(selectGameView(game.view).table.players, gameState.viewer, window.innerWidth >= 900) : []);
-  const playing = room && room.phase !== 'waiting' && game && sceneReady;
+  const playing = room && room.phase !== 'waiting' && game;
   const sceneKey = room ? `${room.code}-${playing ? 'game' : 'waiting'}` : restoring ? 'restoring' : 'lobby';
   return (
     <LazyMotion features={domAnimation} strict>
-    <main className={`min-h-svh ${playing ? 'game-app' : 'saloon-app'}`}>
+    <main className={`min-h-svh ${playing ? `game-app game-${room.game}` : 'saloon-app'}`}>
       <p className="app-brand text-sm font-medium uppercase tracking-widest text-stone-500">18h40 games</p>
       <h1 className="app-title mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{room ? 'Phòng của bạn' : restoring ? 'Đang vào lại phòng' : 'Hẹn nhau một ván'}</h1>
       <p className="connection-status mt-3 text-sm text-stone-600" role="status" aria-live="polite">{status}{status === 'Đang kết nối lại…' ? ' Hãy kiểm tra mạng; phiên sẽ tự khôi phục.' : status === 'Mất kết nối' ? ' Hãy tải lại trang để vào lại.' : ''}</p>
       {gameState.desynced && <p className="connection-alert mt-5 border-l-2 border-amber-700 pl-3 text-sm text-amber-900" role="alert">Bàn chơi đang mất đồng bộ. Đang kết nối lại để lấy trạng thái mới; tạm khóa thao tác.</p>}
       {error && <p className="connection-alert mt-5 border-l-2 border-red-700 pl-3 text-sm text-red-800" role="alert">{error}</p>}
       <Suspense fallback={null}><div className="app-scenes"><AnimatePresence initial={false}><SceneTransition key={sceneKey}>
-      {room ? <Room room={room} game={sceneReady ? game : null} log={gameState.log} fxBatch={gameState.fxBatch} soundBatch={gameState.soundBatch} fxEnabled={status === 'Đã kết nối' && !restoring && !gameState.desynced} viewer={gameState.viewer} disabled={disabled} pending={pending} requestVersion={requestVersion} actionError={error} send={send} /> : restoring ? <section className="saloon-restoring"><SaloonBackdrop /><div className="saloon-poster"><h2 data-scene-title tabIndex={-1}>Đang vào lại phòng</h2><p role="status">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p></div></section> : <Lobby disabled={disabled} send={send} inviteCode={code === undefined ? null : route.code} previousRoom={session.current?.roomCode} returnToRoom={() => { const saved = session.current; if (saved) void navigate(roomPath(saved.roomCode)); }} dismissInvite={() => void navigate('/')} />}
+      {room ? <Room room={room} sync={gameState} consume={consumeGameFrames} fxEnabled={status === 'Đã kết nối' && !restoring && !gameState.desynced} disabled={disabled} pending={pending} requestVersion={requestVersion} actionError={error} actionErrorCode={errorCode} send={send} /> : restoring ? <section className="saloon-restoring"><SaloonBackdrop /><div className="saloon-poster"><h2 data-scene-title tabIndex={-1}>Đang vào lại phòng</h2><p role="status">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p></div></section> : <Lobby disabled={disabled} send={send} inviteCode={code === undefined ? null : route.code} previousRoom={session.current?.roomCode} returnToRoom={() => { const saved = session.current; if (saved) void navigate(roomPath(saved.roomCode)); }} dismissInvite={() => void navigate('/')} />}
       </SceneTransition></AnimatePresence></div></Suspense>
     </main>
     <Outlet />

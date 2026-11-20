@@ -1,0 +1,4 @@
+.game-werewolf { padding: 24px; }
+.game-werewolf .werewolf-message { margin-block: 12px; }
+.game-werewolf button { min-width: 44px; min-height: 44px; padding: 8px 16px; border: 1px solid currentColor; border-radius: 4px; font: inherit; cursor: pointer; }
+.game-werewolf button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }

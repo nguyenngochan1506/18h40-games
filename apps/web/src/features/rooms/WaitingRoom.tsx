@@ -4,18 +4,18 @@ import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import type { ClientMessage, RoomView } from '../../generated/protocol';
 import { PROTOCOL_VERSION } from '../../generated/protocol';
 import { DecodedImage } from '../../shared/SaloonScene';
-import { landscapeScenes } from '../game/assetMap';
+import { waitingBackdrop } from '../../shared/waitingScene';
+import type { GameClient } from '../../games/types';
 import { waitingSeats } from './waitingSeats';
-import { availableGames } from '../lobby/games';
-import WaitingSettings from './WaitingSettings';
+import { registry } from '../../games/registry';
 import { inviteLink } from '../../shared/lib/roomRoute';
 import { copyText } from '../../shared/lib/clipboard';
 
-type Props = { room: RoomView; disabled: boolean; send: (message: ClientMessage) => void };
+type Props = { room: RoomView; disabled: boolean; send: (message: ClientMessage) => void; Settings?: GameClient['Settings'] };
 
-export default function WaitingRoom({ room, disabled, send }: Props) {
+export default function WaitingRoom({ room, disabled, send, Settings }: Props) {
   const reduced = useReducedMotion();
-  const info = availableGames[room.game];
+  const info = registry[room.game];
   const [copyStatus, setCopyStatus] = useState('');
   const [copying, setCopying] = useState(false);
   const seats = waitingSeats(room);
@@ -38,7 +38,7 @@ export default function WaitingRoom({ room, disabled, send }: Props) {
   }
   return <section className={`saloon-waiting${waiting ? ' with-settings' : ''}`} aria-label={`Phòng ${room.code}`}>
     <div className="waiting-stage">
-      <DecodedImage className="waiting-backdrop" src={landscapeScenes[7]} />
+      <DecodedImage className="waiting-backdrop" src={waitingBackdrop} />
       <div className="waiting-vignette" aria-hidden="true" />
       <header className="waiting-code western-wood">
         <h2 id="room-overview" data-scene-title tabIndex={-1}>Mã phòng</h2>
@@ -66,10 +66,10 @@ export default function WaitingRoom({ room, disabled, send }: Props) {
       </aside>
       <div className="waiting-table-note saloon-poster">
         <p className="saloon-eyebrow">{info.name} · Bàn bạn bè</p>
-        <div className="waiting-status" role="status" aria-live="polite"><h3>{waiting ? 'Đang chờ' : 'Đang chơi'}</h3><p>{seats.length} người chơi · cần {info.minPlayers}–{info.maxPlayers}</p></div>
+        <div className="waiting-status" role="status" aria-live="polite"><h3>{waiting ? 'Đang chờ' : 'Đang chơi'}</h3><p>{seats.length} người chơi · cần {room.min_players}–{room.max_players}</p></div>
         <div className="waiting-primary">
           {you?.role === 'spectator' && waiting && <m.button {...feedback} className="western-button" disabled={disabled || seats.length >= room.max_players} onClick={() => send({ v: PROTOCOL_VERSION, type: 'take_seat' })}>Tham gia ván</m.button>}
-          {host && waiting && <m.button {...feedback} className="western-button" disabled={disabled || missing > 0} aria-describedby="waiting-help" onClick={() => send({ v: PROTOCOL_VERSION, type: 'start_game' })}>Bắt đầu <span aria-hidden="true">→</span></m.button>}
+          {host && waiting && <m.button {...feedback} className="western-button" disabled={disabled || missing > 0 || !Settings} aria-describedby="waiting-help" onClick={() => send({ v: PROTOCOL_VERSION, type: 'start_game' })}>Bắt đầu <span aria-hidden="true">→</span></m.button>}
           {host && !waiting && <m.button {...feedback} className="western-button" disabled={disabled} onClick={() => send({ v: PROTOCOL_VERSION, type: 'end_game' })}>Kết thúc ván</m.button>}
         </div>
         <div id="waiting-help" className="waiting-help" aria-live="polite">
@@ -86,6 +86,6 @@ export default function WaitingRoom({ room, disabled, send }: Props) {
         <m.button {...feedback} className="western-button quiet-button" disabled={disabled} onClick={() => send({ v: PROTOCOL_VERSION, type: 'leave_room' })}>Rời phòng</m.button>
       </nav>
     </div>
-    {waiting && <WaitingSettings key={JSON.stringify([room.settings, seats.length])} settings={room.settings} players={seats.length} editable={host && !disabled} send={send} />}
+    {waiting && Settings && <Settings key={JSON.stringify([room.settings, seats.length])} settings={room.settings} players={seats.length} editable={host && !disabled} onChange={settings => send({ v: PROTOCOL_VERSION, type: 'update_settings', settings })} />}
   </section>;
 }

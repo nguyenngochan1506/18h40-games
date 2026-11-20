@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Build: docker build --target server|web .  (assets/ phải có sẵn: pnpm assets)
+# Build: docker build --target server|web .  (assets/ is included in the repository)
 FROM rust:1-bookworm AS rust
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./

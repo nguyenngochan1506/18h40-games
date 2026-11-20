@@ -150,3 +150,14 @@
  .decoded-image { transition: opacity 100ms ease-out; }
  .saloon-embers, .saloon-lamplight { animation: none; }
 }
+
+/* Shared shell polish is available before any game module loads. */
+@media (min-width: 900px) {
+  .saloon-app :is(button,a,summary):focus-visible { outline: 3px solid #fff0bf; outline-offset: 3px; box-shadow: 0 0 0 6px #24170f; }
+  .saloon-app .saloon-poster :focus-visible { outline-color: #63391d; box-shadow: 0 0 0 6px #fff0bf; }
+  .saloon-app :is(button,a,summary) { cursor: pointer; }
+  .saloon-app button:disabled { cursor: not-allowed; }
+  .saloon-app :is(button,a.western-button):hover:not(:disabled) { filter: brightness(1.1); }
+  .saloon-app :is(button,a):active:not(:disabled) { opacity: .8; }
+  .saloon-app :is(button,a.western-button) { min-width: 36px; min-height: 36px; }
+}

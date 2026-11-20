@@ -3,8 +3,7 @@ import { m, useReducedMotion } from 'motion/react';
 import type { ClientMessage, GameKind } from '../../generated/protocol';
 import { PROTOCOL_VERSION } from '../../generated/protocol';
 import { SaloonBackdrop } from '../../shared/SaloonScene';
-import { Icon } from '../game/TableIcons';
-import { games, availableGames } from './games';
+import { games, availableGames } from '../../games/registry';
 import './lobby.css';
 import { isValidRoomCode, normalizeRoomCode } from '../../shared/lib/roomRoute';
 
@@ -51,17 +50,17 @@ export default function Lobby({ disabled, send, inviteCode, previousRoom, return
             <p id="nickname-hint" className="field-hint">Từ 1 đến 20 ký tự · {nameLength}/20</p>
           </div>
           <div className="game-options" role="group" aria-label="Chọn game để tạo phòng">{games.map(game => {
-            const available = game.status === 'available';
+            const available = game.enabled && game.status === 'available';
             return <m.button key={game.id} type="button" className={`game-choice${selectedGame === game.id ? ' is-selected' : ''}${available ? '' : ' is-soon'}`} data-game-id={game.id}
               disabled={disabled || !available} aria-disabled={!available || disabled} aria-pressed={available ? selectedGame === game.id : undefined}
-              onClick={() => { if (game.status === 'available') setSelectedGame(game.id); }} {...(available ? feedback : {})}>
-              <span className="game-choice-art" aria-hidden="true">{game.id === 'bang' ? <Icon name="gun" /> : game.id === 'uno' ? 'U' : '☾'}</span>
-              <strong>{game.name}</strong><span className="game-choice-meta">{game.status === 'available' ? `${game.minPlayers}–${game.maxPlayers} người` : 'Sắp có'}</span>
+              onClick={() => { if (available) setSelectedGame(game.id); }} {...(available ? feedback : {})}>
+              <span className="game-choice-art" aria-hidden="true">{typeof game.icon === 'string' ? game.icon : <svg viewBox={game.icon.viewBox} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{game.icon.paths.map(path => <path key={path} d={path} />)}</svg>}</span>
+              <strong>{game.name}</strong><span className="game-choice-meta">{game.status === 'available' ? `${game.limits?.[0]}–${game.limits?.[1]} người` : 'Sắp có'}</span>
               <span className="game-choice-description">{game.description}</span>
               {available && <span className="game-choice-state" aria-hidden="true">{selectedGame === game.id ? 'Đã chọn' : 'Chọn game'}</span>}
             </m.button>;
           })}</div>
-          <m.button {...feedback} className="western-button" disabled={disabled || !validName || !selectedGame} type="submit">Tạo phòng{selectedGame ? ` ${availableGames[selectedGame].name}` : ''} <span aria-hidden="true">✦</span></m.button>
+          <m.button {...feedback} className="western-button" disabled={disabled || !validName || !selectedGame} type="submit">Tạo phòng{selectedGame ? ` ${availableGames[selectedGame]?.name}` : ''} <span aria-hidden="true">✦</span></m.button>
         </form>
         <form className="saloon-poster join-poster" aria-labelledby="join-heading" onSubmit={(event) => {
           event.preventDefault();
