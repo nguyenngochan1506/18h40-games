@@ -29,7 +29,7 @@ test('sound maps every public cue, including equipment, shuffle, start and local
   assert.deepEqual(kinds([{ type: 'turn_started', player: 1 }]), []);
   assert.deepEqual(kinds([{ type: 'turn_started', player: 0 }]), ['turn']);
   assert.deepEqual(kinds([{ type: 'turn_started', player: 0 }], null), []);
-  assert.ok(kinds([{ type: 'draw_revealed', player: 1, reason: 'barrel', card: 37 }]).includes('missed'));
+  assert.ok(eventsToSounds(demoFx.barrel_good.events, { ...ctx, waiting: demoFx.barrel_good.waiting }).some(job => job.kind === 'missed'));
 });
 
 test('hidden draws and thefts sound identical regardless of private card faces', () => {
@@ -50,6 +50,19 @@ test('audio timing follows the visual scheduler and batch size stays bounded', (
   const draws: EventKind[] = Array.from({ length: 50 }, () => ({ type: 'cards_drawn', player: 0, count: 3 }));
   assert.ok(eventsToSounds(draws, ctx).length <= SOUND_BATCH_LIMIT);
   assert.ok(eventsToSounds(draws, ctx, true).every(j => j.start <= 2400));
+});
+
+test('manual flips reuse card cues at the flip time and Lucky adds only one staggered card sound', () => {
+  const barrel = eventsToSounds(demoFx.barrel_good.events, { ...ctx, waiting: demoFx.barrel_good.waiting });
+  assert.ok(barrel.some(job => job.kind === 'card' && job.start === 650));
+  assert.ok(barrel.some(job => job.kind === 'missed' && job.start === 900));
+  for (const you of [0, 1, null]) {
+    const lucky = eventsToSounds(demoFx.lucky_offer.events, { ...ctx, you, waiting: demoFx.lucky_offer.waiting });
+    assert.deepEqual(lucky, [{ kind: 'card', start: 650 }, { kind: 'card', start: 900 }]);
+  }
+  assert.ok(kinds(demoFx.jail_held.events).includes('jail'));
+  assert.ok(kinds(demoFx.jail_expired.events).includes('clink'));
+  assert.ok(kinds(demoFx.dynamite_end.events).includes('tap'));
 });
 
 test('snapshot, duplicate, out-of-order, desync and rejoin cannot produce audio batches', () => {

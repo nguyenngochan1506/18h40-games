@@ -76,7 +76,7 @@ export function useCardDrag({ root, game, draft, locked, ready, requestVersion, 
   });
   const face = flight && cardFace(flight.card);
   const destination = flight ? { x: flight.to.x - flight.from.x - flight.from.width / 2, y: flight.to.y - flight.from.y - flight.from.height / 2, scale: .7 } : {};
-  const overlay = createPortal(<AnimatePresence>{flight && face && <m.div key={`${flight.seq}:${flight.card}`} className="drag-flight" aria-hidden="true" data-drag-phase={flight.phase} style={{ left: flight.from.x, top: flight.from.y, width: flight.from.width, height: flight.from.height }}
+  const overlay = createPortal(<AnimatePresence>{flight && face && <m.div key={`${flight.seq}:${flight.card}`} className="drag-flight" aria-hidden="true" data-flight-card={flight.card} data-drag-phase={flight.phase} style={{ left: flight.from.x, top: flight.from.y, width: flight.from.width, height: flight.from.height }}
     initial={{ x: 0, y: 0, opacity: 1, scale: 1 }} variants={{ pending: { ...destination, opacity: .85 }, accepted: { ...destination, opacity: 0 }, rollback: { x: flight.home.x - flight.from.x, y: flight.home.y - flight.from.y, opacity: 1, scale: 1 } }} animate={flight.phase}
     transition={reduced ? { duration: 0 } : tableSpring} onAnimationComplete={phase => { if (phase === flight.phase && phase !== 'pending') setFlight(current => current === flight ? null : current); }}><m.img src={assetUrl(cardFiles[face.kind])} alt="" draggable={false} animate={{ x: flight.phase === 'rollback' && !reduced ? [0, -4, 4, -2, 0] : 0 }} transition={{ delay: .12, duration: .2 }} /></m.div>}</AnimatePresence>, document.body);
   return { dragging, over, flight, props, overlay };

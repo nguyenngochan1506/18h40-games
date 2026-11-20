@@ -180,10 +180,10 @@ test('card flights end at measured anchor centers independently of card size', a
   }
   await fx.render({ batch: { id: 1, events: [{ type: 'cards_drawn', player: 0, count: 1 }], waiting: null } });
   await fx.tick(0);
-  const flight = fx.animationFrames.find(frames => Array.isArray(frames) && frames.length === 3 && String(frames[2].transform).includes('scale(.7)')) as Keyframe[];
+  const flight = fx.animationFrames.find(frames => Array.isArray(frames) && frames.length === 3 && String(frames[2].transform).includes('translate(568px,500px)')) as Keyframe[];
   assert.ok(flight);
-  assert.equal(flight[1].transform, 'translate(268px,210px) translate(-50%,-80%) rotate(8deg) scale(1.1)');
-  assert.equal(flight[2].transform, 'translate(568px,500px) translate(-50%,-50%) rotate(-6deg) scale(.7)');
+  assert.ok(String(flight[1].transform).includes('translate(312.40000000000003px,200px)'));
+  assert.ok(String(flight[2].transform).includes('translate(568px,500px) translate(-50%,-50%)'));
 });
 
 test('equipment arrivals use the actual public face rect inside the moved rack', async t => {
@@ -197,8 +197,8 @@ test('equipment arrivals use the actual public face rect inside the moved rack',
   t.mock.method(face, 'getBoundingClientRect', () => ({ x: 120, y: 160, width: 40, height: 60 }) as DOMRect);
   await fx.render({ batch: { id: 1, events: [{ type: 'card_played', player: 0, card: 66, target: 1 }, { type: 'card_equipped', player: 1, card: 66 }], waiting: null } });
   await fx.tick(0);
-  const flight = fx.animationFrames.find(frames => Array.isArray(frames) && frames.length === 3 && String(frames[2].transform).includes('scale(.7)')) as Keyframe[];
-  assert.equal(flight[2].transform, 'translate(-360px,-360px) translate(-50%,-50%) rotate(-6deg) scale(.7)');
+  const flight = fx.animationFrames.find(frames => Array.isArray(frames) && frames.length === 3 && String(frames[2].transform).includes('translate(-360px,-360px)')) as Keyframe[];
+  assert.ok(flight, 'The flight lands at the actual equipment face, not the rack center');
 });
 
 test('blind store flights start at the measured claimed fan card without a face', async t => {
@@ -228,4 +228,122 @@ test('own Jail stays in the portrait while other players keep their actor cages'
   assert.equal(cages[0].style.top, '200.5px');
   await fx.render({ ctx: { ...ctx, players, you: null } });
   assert.equal(fx.stage.querySelectorAll('.fx-persistent-jail').length, 2, 'Spectators still see every jailed actor');
+});
+
+test('manual flip pauses after its flight, uses two faces and cancels every animation on interruption', async t => {
+  const fx = await mount(t);
+  await fx.render({ batch: { id: 1, events: demoFx.barrel_good.events, waiting: demoFx.barrel_good.waiting } }); await fx.tick(0);
+  assert.equal(fx.layer.querySelectorAll('.fx-check-back[data-face="back"]').length, 1);
+  assert.equal(fx.layer.querySelectorAll('.fx-check-front[data-face="public"]').length, 1);
+  assert.equal(fx.layer.querySelector('[data-result="good"] .fx-label')!.textContent, 'ĐỠ ĐƯỢC!');
+  const flip = fx.animationFrames.find(frames => Array.isArray(frames) && frames[0].transform === 'rotateY(0deg)') as Keyframe[];
+  assert.equal(flip[1].offset, 650 / 1400);
+  assert.ok(Math.abs(Number(flip[2].offset) - 850 / 1400) < 1e-12);
+  await fx.tick(400);
+  await fx.render({ batch: { id: 2, events: demoFx.dynamite_end.events, waiting: null } }); await fx.tick(0);
+  assert.equal(fx.layer.querySelector('.fx-cue-check'), null);
+  assert.ok(fx.layer.querySelector('.fx-cue-extinguish .fx-smokeA'));
+  await fx.unmount(); assert.equal(fx.pending.size, 0); assert.equal(fx.intervals.size, 0);
+});
+
+test('Lucky pairs stagger 250ms, highlight the selected face, and discard private history on a viewer change', async t => {
+  const fx = await mount(t);
+  await fx.render({ batch: { id: 1, events: demoFx.lucky_offer.events, waiting: demoFx.lucky_offer.waiting } }); await fx.tick(0);
+  assert.equal(fx.layer.querySelectorAll('.fx-check-front[data-face="public"]').length, 2);
+  const flips = fx.animationFrames.filter(frames => Array.isArray(frames) && frames[0].transform === 'rotateY(0deg)') as Keyframe[][];
+  assert.ok(Math.abs((Number(flips[1][1].offset) - Number(flips[0][1].offset)) * 1400 - 250) < .01);
+  await fx.tick(1500);
+  await fx.render({ batch: { id: 2, events: demoFx.lucky_chosen.events, waiting: demoFx.lucky_chosen.waiting } }); await fx.tick(0);
+  assert.ok(fx.layer.querySelector('.is-chosen .fx-check-front[data-face="public"]'));
+  assert.ok(fx.layer.querySelector('.is-rejected .fx-check-front[data-face="public"]'));
+  await fx.render({ ctx: { ...ctx, you: null } });
+  assert.equal(fx.layer.children.length, 0);
+  await fx.render({ batch: { id: 3, events: demoFx.lucky_offer.events, waiting: demoFx.lucky_offer.waiting } }); await fx.tick(0);
+  assert.equal(fx.layer.querySelectorAll('[data-face="public"]').length, 0);
+  await fx.render({ batch: { id: 4, events: demoFx.lucky_chosen.events, waiting: demoFx.lucky_chosen.waiting } }); await fx.tick(0);
+  assert.equal(fx.layer.querySelectorAll('[data-face="public"]').length, 1);
+});
+
+test('Jail held shakes the existing cage, while expiry, theft and death clear persistent cages', async t => {
+  const fx = await mount(t);
+  const players = structuredClone(ctx.players);
+  for (const player of players) { player.alive = true; player.in_play = player.id === 1 ? [66] : []; }
+  await fx.render({ ctx: { ...ctx, players }, batch: { id: 1, events: demoFx.jail_held.events, waiting: null } }); await fx.tick(0);
+  assert.equal(fx.stage.querySelectorAll('.fx-persistent-jail').length, 1);
+  await fx.tick(850);
+  assert.ok(fx.animationFrames.some(frames => Array.isArray(frames) && frames.some(frame => String(frame.transform).includes('translateX(8px)'))));
+  for (const [index, events] of [demoFx.jail_expired.events, [{ type: 'in_play_card_affected' as const, source: 0, target: 1, card: 66, kind: 'panic' as const }], [{ type: 'player_eliminated' as const, player: 1, role: 'outlaw' as const }]].entries()) {
+    await fx.render({ ctx: { ...ctx, players: structuredClone(players) } });
+    const removed = structuredClone(players); removed[1].in_play = []; removed[1].alive = index !== 2;
+    await fx.render({ ctx: { ...ctx, players: removed }, batch: { id: index + 2, events, waiting: null } }); await fx.tick(0);
+    assert.equal(fx.stage.querySelectorAll('.fx-persistent-jail').length, 0);
+    if (index === 0) assert.ok(fx.layer.querySelector('.fx-cue-escape .fx-jail'));
+  }
+  await fx.tick(2500); assert.equal(fx.layer.children.length, 0); assert.equal(fx.pending.size, 0);
+});
+
+test('reduced motion shows a short static result without faces, particles or WAAPI and never replays it', async t => {
+  const fx = await mount(t, null, { hidden: false, reduced: true });
+  await fx.render({ batch: { id: 1, events: demoFx.barrel_good.events, waiting: demoFx.barrel_good.waiting } }); await fx.tick(0);
+  assert.equal(fx.layer.querySelector('.fx-static[data-result="good"] .fx-label')!.textContent, 'ĐỠ ĐƯỢC!');
+  assert.equal(fx.layer.querySelector('img,.fx-check-card,.fx-smokeA'), null);
+  assert.equal(fx.animationFrames.length, 0); assert.equal(fx.stage.querySelector('canvas'), null);
+  await fx.tick(701); assert.equal(fx.layer.children.length, 0);
+  await fx.reduced(false); await fx.tick(3000); assert.equal(fx.layer.children.length, 0);
+  await fx.unmount(); assert.equal(fx.pending.size, 0); assert.equal(fx.intervals.size, 0);
+});
+
+function rectangle(t: TestContext, node: Element, x: number, y: number, width: number, height: number) {
+  t.mock.method(node, 'getBoundingClientRect', () => ({ x, y, width, height }) as DOMRect);
+}
+
+test('new hand cards stay hidden until the measured draw flight lands, and snapshot interruption restores them', async t => {
+  const fx = await mount(t);
+  const draw = document.createElement('div'); draw.dataset.animationRegion = 'draw'; fx.stage.append(draw); rectangle(t, draw, 100, 100, 54, 84);
+  const hand = document.createElement('div'); hand.className = 'own-hand'; hand.innerHTML = '<div class="hand-cards" data-animation-region="hand"><button data-card-id="10"><span class="card-visual"></span></button></div>'; fx.stage.append(hand);
+  const target = hand.querySelector<HTMLElement>('button')!; rectangle(t, target.querySelector('span')!, 700, 600, 56, 87);
+  await fx.render({ batch: { id: 1, events: [{ type: 'cards_drawn', player: 0, count: 1 }, { type: 'cards_received', player: 0, cards: [10] }], waiting: null } });
+  assert.equal(target.style.visibility, 'hidden', 'The layout effect hides the destination before paint or a timer callback');
+  const flight = fx.layer.querySelector<HTMLElement>('.fx-cue-card')!;
+  assert.equal(flight.style.left, '127px'); assert.equal(flight.style.top, '142px');
+  assert.ok(fx.animationFrames.some(frames => Array.isArray(frames) && frames.some(frame => String(frame.transform).includes('translate(601px,501.5px)'))));
+  await fx.tick(300); assert.equal(target.style.visibility, 'hidden');
+  await fx.tick(300); assert.equal(target.style.visibility, ''); assert.equal(fx.layer.querySelector('.fx-cue-card'), null);
+  await fx.render({ batch: { id: 2, events: [{ type: 'cards_drawn', player: 0, count: 1 }, { type: 'cards_received', player: 0, cards: [10] }], waiting: null } });
+  assert.equal(target.style.visibility, 'hidden');
+  await fx.render({ batch: null }); assert.equal(target.style.visibility, ''); assert.equal(fx.layer.children.length, 0);
+  await fx.tick(3000); assert.equal(fx.layer.children.length, 0);
+});
+
+test('outgoing cards start at the saved hand rect and the discard face changes only on landing', async t => {
+  const fx = await mount(t);
+  const hand = document.createElement('div'); hand.innerHTML = '<div data-animation-region="hand"><button data-card-id="1"><span class="card-visual"></span></button></div>'; fx.stage.append(hand);
+  rectangle(t, hand.querySelector('span')!, 700, 600, 56, 87);
+  const pile = document.createElement('div'); pile.className = 'discard-pile'; pile.dataset.animationRegion = 'discard'; pile.innerHTML = '<div class="pile-top"><button class="game-card" data-card-id="37">Old discard</button></div>'; fx.stage.append(pile); rectangle(t, pile.querySelector('button')!, 400, 300, 54, 84);
+  await fx.render({ ctx: { ...ctx } });
+  hand.replaceChildren(); pile.querySelector('button')!.dataset.cardId = '1'; pile.querySelector('button')!.textContent = 'New discard';
+  await fx.render({ batch: { id: 1, events: [{ type: 'card_played', player: 0, card: 1, target: null }], waiting: null } });
+  assert.equal(pile.querySelector<HTMLElement>('.pile-top')!.style.visibility, 'hidden');
+  assert.equal(fx.stage.querySelector('.fx-discard-hold')!.textContent, 'Old discard');
+  const flight = fx.layer.querySelector<HTMLElement>('.fx-cue-card')!;
+  assert.equal(flight.style.left, '728px'); assert.equal(flight.style.top, '643.5px');
+  await fx.tick(300); assert.ok(fx.stage.querySelector('.fx-discard-hold'));
+  await fx.tick(300); assert.equal(pile.querySelector<HTMLElement>('.pile-top')!.style.visibility, ''); assert.equal(fx.stage.querySelector('.fx-discard-hold'), null);
+  assert.equal(pile.textContent, 'New discard');
+});
+
+test('other players hand counts wait for arrivals, and reduced motion never hides a new card', async t => {
+  const fx = await mount(t);
+  const badge = document.createElement('span'); badge.dataset.playerId = '1'; badge.innerHTML = '<span class="hand-count" aria-label="5 lá trên tay"></span>'; fx.stage.append(badge);
+  const players = structuredClone(ctx.players); players[1].hand_count = 5;
+  await fx.render({ ctx: { ...ctx, players }, batch: { id: 1, events: [{ type: 'cards_drawn', player: 1, count: 2 }], waiting: null } });
+  assert.equal(badge.querySelector('span')!.getAttribute('aria-label'), '3 lá trên tay');
+  assert.equal(fx.layer.querySelectorAll('[data-face="public"]').length, 0);
+  await fx.tick(300); assert.equal(badge.querySelector('span')!.getAttribute('aria-label'), '3 lá trên tay');
+  await fx.tick(400); assert.equal(badge.querySelector('span')!.getAttribute('aria-label'), '5 lá trên tay');
+  await fx.reduced(true);
+  const hand = document.createElement('div'); hand.className = 'own-hand'; hand.innerHTML = '<div class="hand-cards"><button data-card-id="10"></button></div>'; fx.stage.append(hand);
+  await fx.render({ batch: { id: 2, events: [{ type: 'cards_drawn', player: 0, count: 1 }, { type: 'cards_received', player: 0, cards: [10] }], waiting: null } });
+  assert.equal(hand.querySelector<HTMLElement>('button')!.style.visibility, ''); assert.equal(fx.layer.children.length, 0);
+  await fx.unmount(); assert.equal(fx.pending.size, 0); assert.equal(fx.intervals.size, 0);
 });

@@ -13,6 +13,7 @@ const bursts: Partial<Record<FxKind, readonly Burst[]>> = {
   deflect: [{ kind: 'dust', count: 15 }, { kind: 'spark', count: 8 }],
   jail: [{ kind: 'dust', count: 18 }],
   escape: [{ kind: 'dust', count: 12 }],
+  extinguish: [{ kind: 'smoke', count: 8, origin: true }],
   eliminate: [{ kind: 'smoke', count: 16 }, { kind: 'ash', count: 24 }],
   win: [{ kind: 'confetti', count: 150 }],
 };

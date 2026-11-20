@@ -44,12 +44,17 @@ export function eventsToSounds(events: EventKind[], ctx: FxContext, congested = 
       case 'turn': kind = job.to === ctx.you ? 'turn' : null; break;
       case 'card': kind = job.from === 'draw' && job.to === 'hand' ? 'draw' : 'card'; break;
       case 'reveal': kind = 'card'; break;
+      case 'check': kind = 'card'; break;
+      case 'jail-held': kind = 'jail'; break;
+      case 'escape': kind = 'clink'; break;
+      case 'extinguish': kind = 'tap'; break;
       case 'equip': {
         const face = job.card === undefined ? undefined : cardFace(job.card)?.kind;
         kind = face === 'mustang' ? 'neigh' : face === 'dynamite' ? 'dynamite' : face && ['volcanic', 'schofield', 'remington', 'rev_carabine', 'winchester'].includes(face) ? 'reload' : 'tap'; break;
       }
     }
-    if (kind) jobs.push({ kind, start: job.start });
+    if (kind) jobs.push({ kind, start: job.start + (job.kind === 'check' && job.selected === undefined ? Math.round(job.duration * 650 / 1400) : 0) });
+    if (job.kind === 'check' && job.cards?.length === 2 && job.selected === undefined) jobs.push({ kind: 'card', start: job.start + Math.round(job.duration * 900 / 1400) });
   }
   return jobs.slice(0, SOUND_BATCH_LIMIT);
 }

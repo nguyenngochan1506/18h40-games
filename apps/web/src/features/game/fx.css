@@ -66,7 +66,7 @@
 @keyframes fx-burst { from { opacity: 0; transform: translate(-50%,-50%) scale(.2); } 18% { opacity: 1; transform: translate(-50%,-50%) scale(.95); } 55% { opacity: .8; transform: translate(-50%,-50%) scale(1.15); } to { opacity: 0; transform: translate(-50%,-50%) scale(1.4); } }
 @keyframes fx-explosion-smoke { from { opacity: 0; transform: translate(-50%,-30%) scale(.4); } 35% { opacity: .6; } to { opacity: 0; transform: translate(-50%,-90%) scale(1.4); } }
 @keyframes fx-jail-drop { from { opacity: 0; transform: translate(-50%,-200%); } 40%, 75% { opacity: .9; transform: translate(-50%,-35%); } to { opacity: 0; transform: translate(-50%,-35%); } }
-@keyframes fx-jail-out { from { opacity: .8; transform: translate(-50%,-35%); } to { opacity: 0; transform: translate(-50%,30%); } }
+@keyframes fx-jail-out { from { opacity: .8; transform: translate(-50%,-35%); } to { opacity: 0; transform: translate(-50%,-110%); } }
 @keyframes fx-fuse { from { opacity: .45; transform: scale(.7); } to { opacity: 1; transform: scale(1.2); } }
 @keyframes fx-heal { from { opacity: 0; transform: translate(-50%,-50%) translateX(12px) scale(.4); } 25% { opacity: 1; } to { opacity: 0; transform: translate(-50%,-50%) translateX(76px) scale(1.1); } }
 @keyframes fx-health { from { opacity: 0; transform: translate(-50%,-50%) scale(.6); } 40% { opacity: .9; } to { opacity: 0; transform: translate(-50%,-50%) scale(1.3); } }
@@ -80,7 +80,7 @@
 @keyframes fx-haze { from { transform: translateX(-25px); opacity: .3; } to { transform: translateX(25px); opacity: .65; } }
 @keyframes fx-dust { from { transform: translate(0,50px); opacity: 0; } 35% { opacity: .25; } 65% { opacity: .2; } to { transform: translate(25px,-50px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
- .cinematic .fx-layer, .cinematic .fx-persistent-layer, .cinematic .scene-atmosphere { display: none; }
+ .cinematic .fx-persistent-layer, .cinematic .scene-atmosphere { display: none; }
  .cinematic .fx-layer *, .cinematic .fx-persistent-layer *, .cinematic .scene-atmosphere * { animation: none !important; }
 }
 
@@ -108,3 +108,32 @@
 @media (max-width: 899px), (prefers-reduced-motion: reduce) { .particle-layer { display: none; } }
 
 .fx-cue-card, .fx-cue-reveal { width: var(--flight-card-w, 60px); height: auto; aspect-ratio: 250 / 389; }
+.fx-check-spread { display: flex; gap: 14px; width: max-content; transform: translate(-50%,-50%); perspective: 900px; }
+.fx-check-card { position: relative; width: var(--check-card-w, 76px); aspect-ratio: 250 / 389; transform-style: preserve-3d; }
+.fx-check-card .fx-card { position: absolute; inset: 0; width: 100%; height: 100%; backface-visibility: hidden; }
+.fx-check-card .fx-check-front { transform: rotateY(180deg); }
+.fx-check-card .fx-card-rank { font-size: clamp(14px, 1.2vw, 20px); }
+.fx-cue-check .fx-label { top: calc(var(--check-card-w, 76px) * .85); animation: none; }
+.fx-cue[data-result="good"] { --result-color: #8bdd8f; }
+.fx-cue[data-result="bad"] { --result-color: #ff7867; }
+.fx-cue[data-result="neutral"] { --result-color: #e8bd6a; }
+.fx-cue-check .fx-check-front, .fx-check-card.is-chosen .fx-card { border-color: var(--result-color); box-shadow: 0 0 0 2px var(--result-color), 0 0 14px color-mix(in srgb, var(--result-color) 65%, transparent); }
+.fx-check-card.is-rejected .fx-check-front { opacity: .3; }
+.fx-cue-check .fx-label, .fx-static .fx-label { color: var(--result-color, #ffe1a1); border-color: var(--result-color, #c59b51); }
+.fx-static .fx-label { top: 0; animation: none; }
+.fx-fuse { position: absolute; right: -4px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: #ffe0a0; box-shadow: 0 0 9px 4px #f67326; animation: fx-fuse .35s steps(2,end) infinite alternate; }
+.fx-fuse::after { content: '✦'; color: #ffdc78; position: absolute; left: -8px; top: -12px; font-size: 24px; }
+.fx-cue-extinguish { width: var(--flight-card-w, 60px); }
+.fx-cue-extinguish > .fx-card { transform: translate(-50%,-50%); }
+.fx-flight-body { display: block; position: relative; width: 100%; aspect-ratio: 250 / 389; transform-style: preserve-3d; }
+.fx-flight-body .fx-card { width: 100%; height: 100%; }
+.fx-flight-body:has(.fx-flight-front) .fx-card { position: absolute; inset: 0; backface-visibility: hidden; }
+.fx-flight-front { transform: rotateY(180deg); }
+.fx-cue-card { perspective: 900px; }
+.fx-discard-hold { position: absolute; z-index: 44; width: min(calc(var(--scene-width) * .0414), calc(var(--scene-height) * .075)); aspect-ratio: 250 / 389; transform: translate(-50%,-50%); pointer-events: none; }
+.fx-discard-hold * { pointer-events: none !important; }
+.fx-discard-hold > * { width: 100% !important; height: 100%; margin: 0; }
+.fx-discard-hold .game-art { width: 100%; }
+.hand-count[data-flight-count] > .motion-count { visibility: hidden; }
+.hand-count[data-flight-count]::after { content: attr(data-flight-count); }
+@media (prefers-reduced-motion: reduce) { .fx-fuse { display: none; } }
