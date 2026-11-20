@@ -107,7 +107,8 @@ test('returning to the lobby from the result explicitly leaves the room', async 
   const game = structuredClone(demoGame);
   if (game.view.perspective === 'player') game.view.view.table.winner = 'outlaws';
   await act(async () => root.render(createElement(Room, { room: { ...demoRoom, phase: 'playing' }, game, log: [], fxBatch: null, soundBatch: null, fxEnabled: false, viewer: 0, disabled: false, send: message => sent.push(message) })));
-  for (let i = 0; i < 50 && !container.querySelector('.game-result'); i++) await act(async () => { await new Promise(resolve => setImmediate(resolve)); });
+  // Module BANG! tải lazy: đợi tối đa 10 giây theo đồng hồ thật (Date/setTimeout đang bị mock; runner CI chậm hơn máy dev).
+  for (const start = process.hrtime.bigint(); process.hrtime.bigint() - start < 10_000_000_000n && !container.querySelector('.game-result');) await act(async () => { await new Promise(resolve => setImmediate(resolve)); });
   const leave = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Về sảnh');
   assert.ok(leave); await act(() => leave.click());
   assert.deepEqual(sent, [{ v: PROTOCOL_VERSION, type: 'leave_room' }]);
