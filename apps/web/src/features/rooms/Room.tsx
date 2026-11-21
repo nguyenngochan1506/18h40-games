@@ -9,20 +9,23 @@ import WaitingRoom from './WaitingRoom';
 type Props = { room: RoomView; sync: GameSyncState; fxEnabled: boolean; disabled: boolean; pending?: boolean; requestVersion?: number; actionError?: string | null; actionErrorCode?: string | null; consume: (through: number) => void; send: (message: ClientMessage) => void };
 export default function Room({ room, sync, fxEnabled, disabled, pending = false, requestVersion = 0, actionError = null, actionErrorCode = null, consume, send }: Props) {
   const [loaded, setLoaded] = useState<{ kind: string; client: GameClient } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failedGame, setFailedGame] = useState<RoomView['game'] | null>(null);
   const [retry, setRetry] = useState(0);
   const info = registry[room.game];
   useEffect(() => {
     let active = true;
-    setLoaded(null); setError(null);
-    void loadGame(room.game).then(client => { if (active) setLoaded({ kind: room.game, client }); }).catch(() => { if (active) setError('Không tải được trò chơi. Hãy thử lại hoặc rời phòng.'); });
+    setLoaded(null); setFailedGame(null);
+    void loadGame(room.game).then(client => { if (active) setLoaded({ kind: room.game, client }); }).catch(() => { if (active) setFailedGame(room.game); });
     return () => { active = false; };
   }, [room.code, room.game, retry]);
   const leaveRoom = () => send({ v: PROTOCOL_VERSION, type: 'leave_room' });
-  if (!info?.enabled || error) return <section className="saloon-restoring"><div className="saloon-poster"><h2>{info?.name ?? 'Trò chơi không hỗ trợ'}</h2><p role="alert">{!info?.enabled ? 'Trò chơi chưa được hỗ trợ. Bạn vẫn có thể rời phòng.' : error}</p>{info?.enabled && <button className="western-button" onClick={() => setRetry(value => value + 1)}>Thử tải lại</button>}<button className="western-button" disabled={disabled} onClick={leaveRoom}>Rời phòng</button></div></section>;
+  const retryLoad = () => setRetry(value => value + 1);
+  const loadFailed = failedGame === room.game;
+  const waiting = room.phase === 'waiting';
+  if (!info?.enabled || (!waiting && loadFailed)) return <section className="saloon-restoring"><div className="saloon-poster"><h2>{info?.name ?? 'Trò chơi không hỗ trợ'}</h2><p role="alert">{info?.enabled ? 'Không tải được trò chơi. Hãy thử lại hoặc rời phòng.' : 'Trò chơi chưa được hỗ trợ. Bạn vẫn có thể rời phòng.'}</p>{info?.enabled && <button className="western-button" onClick={retryLoad}>Thử tải lại</button>}<button className="western-button" disabled={disabled} onClick={leaveRoom}>Rời phòng</button></div></section>;
   const client = loaded?.kind === room.game ? loaded.client : null;
   const Root = client?.Root ?? Fragment;
-  if (room.phase === 'waiting') return <Root><WaitingRoom room={room} disabled={disabled} send={send} Settings={client?.Settings} /></Root>;
+  if (waiting) return <Root><WaitingRoom room={room} disabled={disabled} send={send} Settings={client?.Settings} retryLoad={loadFailed ? retryLoad : undefined} /></Root>;
   if (!sync.game || !client) return <section className="saloon-restoring"><div className="saloon-poster"><h2>Phòng {room.code}</h2><p role="status">Đang tải trò chơi…</p><button className="western-button" disabled={disabled} onClick={leaveRoom}>Rời phòng</button></div></section>;
   const Board = client.Board;
   const host = room.host === room.you;

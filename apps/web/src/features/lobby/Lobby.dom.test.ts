@@ -33,7 +33,7 @@ after(async () => {
   for (const name of Object.keys(globals)) { if (previous[name]) Object.defineProperty(globalThis, name, previous[name]); else Reflect.deleteProperty(globalThis, name); }
 });
 
-// Drive the shell with authoritative v7 snapshots while keeping DOM scenarios readable.
+// Drive the shell with authoritative snapshots while keeping DOM scenarios readable.
 type RoomProps = { room: RoomView; game: typeof demoGame | null; disabled: boolean; fxEnabled: boolean; viewer: number; log: unknown[]; fxBatch: null; soundBatch: null; send: (message: ClientMessage) => void };
 function Room(props: RoomProps) {
   const snapshot = () => receiveGameState(initialGameState, { v: PROTOCOL_VERSION, type: 'joined', room_code: props.room.code, token: 'test', room: props.room, game: props.game ? { ...props.game, view: { game: 'bang', payload: props.game.view } } : null });

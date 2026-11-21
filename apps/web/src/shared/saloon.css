@@ -55,7 +55,7 @@
 .saloon-restoring h2 { font: 700 24px/1.3 Georgia, serif; margin-bottom: 16px; }
 /* Seven fixed chairs share the board's measured landscape positions on every client. */
 .saloon-waiting { min-height: 100svh; display: grid; place-items: center; background: #130d09; }
-.waiting-stage { position: relative; isolation: isolate; width: min(100%, calc(100svh * 16 / 9)); aspect-ratio: 16 / 9; }
+.waiting-stage { position: relative; isolation: isolate; container-type: inline-size; width: min(100%, calc(100svh * 16 / 9)); aspect-ratio: 16 / 9; }
 .waiting-backdrop, .waiting-vignette { position: absolute; z-index: -1; inset: 0; width: 100%; height: 100%; }
 .waiting-backdrop { object-fit: fill; }
 .waiting-vignette { pointer-events: none; background: radial-gradient(ellipse at center, transparent 35%, #0c070344 80%, #0c070388); }
@@ -81,7 +81,7 @@
 .waiting-seat { position: absolute; left: var(--seat-x); bottom: calc(100% - var(--seat-y)); height: var(--actor-height); width: calc(var(--actor-height) * .5625 * .75); margin-left: calc(var(--actor-height) * -.5625 * .375); }
 .waiting-portrait { width: 100%; height: 100%; }
 .waiting-portrait img { width: 100%; height: 100%; object-fit: contain; mask-image: linear-gradient(#000 0 97%, transparent 100%); }
-.waiting-name { position: absolute; z-index: 2; top: 96%; left: 50%; transform: translateX(-50%); width: clamp(104px, 12vw, 180px); padding: 6px 10px; border: 1px solid #996f36; outline: 1px solid #edca86; outline-offset: -3px; background: linear-gradient(95deg, #bd9259, #f1d7a1 20%, #e2bb7c 90%, #a77a44); box-shadow: 0 4px 8px #13090499; color: #352414; text-align: center; }
+.waiting-name { position: absolute; z-index: 2; top: 96%; left: 50%; transform: translateX(-50%); width: clamp(104px, 13cqw, 180px); padding: 6px 10px; border: 1px solid #996f36; outline: 1px solid #edca86; outline-offset: -3px; background: linear-gradient(95deg, #bd9259, #f1d7a1 20%, #e2bb7c 90%, #a77a44); box-shadow: 0 4px 8px #13090499; color: #352414; text-align: center; }
 .waiting-name > strong { display: block; overflow-wrap: anywhere; font: 700 clamp(14px, 1vw, 17px)/1.3 Georgia, 'Times New Roman', serif; }
 .waiting-name > span { display: block; margin-top: 2px; font: 12px/1.3 system-ui, sans-serif; color: #62431e; }
 .waiting-name small { font: 12px/1.3 system-ui, sans-serif; white-space: nowrap; }
@@ -98,7 +98,7 @@
 .waiting-spectators li strong { display: block; font: 600 13px/1.4 system-ui, sans-serif; }
 .waiting-spectators li small { display: block; color: #bea078; font: 12px/1.4 system-ui, sans-serif; }
 .waiting-spectators li.is-offline { opacity: .6; }
-.waiting-table-note { position: absolute; top: 28%; left: 50%; transform: translateX(-50%) rotate(-1deg); width: 27%; max-width: 420px; padding: 16px 24px; text-align: center; }
+.waiting-table-note { position: absolute; top: max(28%, 184px); left: 50%; transform: translateX(-50%) rotate(-1deg); width: 27%; max-width: 420px; padding: 16px 24px; text-align: center; }
 .waiting-table-note > .saloon-eyebrow { color: #79552b; letter-spacing: .12em; }
 .waiting-status h3 { font-size: clamp(24px, 2.4vw, 32px); margin: 4px 0; }
 .waiting-status > p { font: 13px/1.5 system-ui, sans-serif; }
@@ -107,6 +107,10 @@
 .waiting-primary:empty { display: none; }
 .waiting-help { margin-top: 8px; color: #614326; font: 12px/1.5 system-ui, sans-serif; text-wrap: pretty; }
 .waiting-help p + p { margin-top: 6px; }
+.waiting-options { display: grid; justify-items: center; gap: 16px; width: min(100%, 680px); padding-bottom: 20px; }
+.waiting-game-switch, .waiting-load-error { display: grid; gap: 8px; width: 100%; padding: 20px; }
+.waiting-game-switch label, .waiting-game-switch .field-hint { margin: 0; }
+.waiting-game-switch select { margin-top: 4px; }
 .waiting-actions { position: absolute; bottom: 24px; left: 24px; display: flex; gap: 12px; }
 .quiet-button { font-size: 13px; background-color: #2b1b10; }
 @media (min-width: 900px) and (max-height: 800px) {
@@ -123,8 +127,11 @@
  .saloon-lobby { padding: 64px 20px 24px; }
  .lobby-posters { gap: 20px; }
  .lobby-posters > .saloon-poster { padding: 24px 20px; transform: none; }
+}
+@media (width < 1000px), (max-height: 560px) {
  .saloon-waiting { display: block; padding-top: 44px; }
  .waiting-stage { width: 100%; aspect-ratio: auto; display: flex; flex-direction: column; gap: 20px; padding: 20px; }
+ .waiting-game-switch, .waiting-load-error { width: calc(100% - 40px); }
  .waiting-backdrop { height: 100%; object-fit: cover; opacity: .4; }
  .waiting-code, .waiting-spectators, .waiting-table-note, .waiting-actions { position: relative; inset: auto; transform: none; width: 100%; max-width: none; }
  .waiting-code { order: 0; }

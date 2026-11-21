@@ -1,19 +1,40 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import type { ClientMessage, RoomView } from '../../generated/protocol';
 import { PROTOCOL_VERSION } from '../../generated/protocol';
 import { DecodedImage } from '../../shared/SaloonScene';
 import { waitingBackdrop } from '../../shared/waitingScene';
-import type { GameClient } from '../../games/types';
+import type { GameClient, GameInfo } from '../../games/types';
 import { waitingSeats } from './waitingSeats';
-import { registry } from '../../games/registry';
+import { games, registry } from '../../games/registry';
 import { inviteLink } from '../../shared/lib/roomRoute';
 import { copyText } from '../../shared/lib/clipboard';
 
-type Props = { room: RoomView; disabled: boolean; send: (message: ClientMessage) => void; Settings?: GameClient['Settings'] };
+type Props = { room: RoomView; disabled: boolean; send: (message: ClientMessage) => void; Settings?: GameClient['Settings']; retryLoad?: () => void };
 
-export default function WaitingRoom({ room, disabled, send, Settings }: Props) {
+function ChangeGameForm({ options, disabled, send }: Pick<Props, 'disabled' | 'send'> & { options: GameInfo[] }) {
+  const hintId = useId();
+  const [selection, setSelection] = useState('');
+  const nextGame = options.find(game => game.id === selection);
+
+  return <form className="waiting-game-switch saloon-poster" onSubmit={event => {
+    event.preventDefault();
+    if (!disabled && nextGame) send({ v: PROTOCOL_VERSION, type: 'change_game', game: nextGame.id });
+  }}>
+    <label>
+      Game tiếp theo
+      <select className="saloon-field" value={selection} disabled={disabled} aria-describedby={hintId} onChange={event => setSelection(event.target.value)}>
+        <option value="" disabled>Chọn game khác</option>
+        {options.map(game => <option key={game.id} value={game.id}>{game.name}</option>)}
+      </select>
+    </label>
+    <p id={hintId} className="field-hint">Mọi người sẽ cần vào ghế lại. Ai muốn chơi ván mới bấm Tham gia ván.</p>
+    <button className="western-button" type="submit" disabled={disabled || !nextGame}>Đổi game</button>
+  </form>;
+}
+
+export default function WaitingRoom({ room, disabled, send, Settings, retryLoad }: Props) {
   const reduced = useReducedMotion();
   const info = registry[room.game];
   const [copyStatus, setCopyStatus] = useState('');
@@ -23,8 +44,10 @@ export default function WaitingRoom({ room, disabled, send, Settings }: Props) {
   const you = room.members.find(member => member.id === room.you);
   const host = room.host === room.you;
   const waiting = room.phase === 'waiting';
+  const nextGames = host && waiting ? games.filter(game => game.enabled && game.id !== room.game) : [];
   const missing = Math.max(0, room.min_players - seats.length);
   const feedback = { whileHover: { scale: reduced || disabled ? 1 : 1.02 }, whileTap: { scale: reduced || disabled ? 1 : .98 }, transition: { duration: .1 } };
+  const settings = waiting && Settings && <Settings key={JSON.stringify([room.settings, seats.length])} settings={room.settings} players={seats.length} editable={host && !disabled} onChange={settings => send({ v: PROTOCOL_VERSION, type: 'update_settings', settings })} />;
   async function copyCode(link = false) {
     setCopying(true);
     try {
@@ -65,7 +88,7 @@ export default function WaitingRoom({ room, disabled, send, Settings }: Props) {
         {spectators.length === 0 ? <p>Bạn bè có thể vào xem.</p> : <ul aria-live="polite">{spectators.map(member => <li key={member.id} className={member.online ? '' : 'is-offline'}><strong>{member.nickname}{member.id === room.you ? ' (bạn)' : ''}{member.id === room.host ? ' ★' : ''}</strong><small>{member.online ? 'Đang xem' : 'Mất kết nối'}{member.id === room.host ? ' · Chủ phòng' : ''}</small></li>)}</ul>}
       </aside>
       <div className="waiting-table-note saloon-poster">
-        <p className="saloon-eyebrow">{info.name} · Bàn bạn bè</p>
+        <p className="saloon-eyebrow" aria-live="polite">{info.name} · Bàn bạn bè</p>
         <div className="waiting-status" role="status" aria-live="polite"><h3>{waiting ? 'Đang chờ' : 'Đang chơi'}</h3><p>{seats.length} người chơi · cần {room.min_players}–{room.max_players}</p></div>
         <div className="waiting-primary">
           {you?.role === 'spectator' && waiting && <m.button {...feedback} className="western-button" disabled={disabled || seats.length >= room.max_players} onClick={() => send({ v: PROTOCOL_VERSION, type: 'take_seat' })}>Tham gia ván</m.button>}
@@ -86,6 +109,13 @@ export default function WaitingRoom({ room, disabled, send, Settings }: Props) {
         <m.button {...feedback} className="western-button quiet-button" disabled={disabled} onClick={() => send({ v: PROTOCOL_VERSION, type: 'leave_room' })}>Rời phòng</m.button>
       </nav>
     </div>
-    {waiting && Settings && <Settings key={JSON.stringify([room.settings, seats.length])} settings={room.settings} players={seats.length} editable={host && !disabled} onChange={settings => send({ v: PROTOCOL_VERSION, type: 'update_settings', settings })} />}
+    {nextGames.length > 0 || retryLoad ? <div className="waiting-options">
+      {retryLoad && <div className="waiting-load-error saloon-poster">
+        <p role="alert">Không tải được trò chơi. Hãy thử tải lại.</p>
+        <button className="western-button" type="button" onClick={retryLoad}>Thử tải lại</button>
+      </div>}
+      {nextGames.length > 0 && <ChangeGameForm key={`${room.code}:${room.game}`} options={nextGames} disabled={disabled} send={send} />}
+      {settings}
+    </div> : settings}
   </section>;
 }

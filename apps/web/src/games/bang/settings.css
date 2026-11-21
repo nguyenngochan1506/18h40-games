@@ -1,6 +1,5 @@
 .game-bang .saloon-waiting.with-settings { grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 48px 16px 24px; }
-@media (min-width: 1200px) {
- .game-bang .with-settings .waiting-name { width: clamp(104px, 10vw, 160px); }
+@media (min-width: 1360px) and (height > 560px) {
  .game-bang .with-settings .waiting-actions { bottom: 12px; left: 16px; }
 }
 .game-bang .room-settings { width: 100%; padding: 20px; align-self: center; }
@@ -24,11 +23,11 @@
 .game-bang .settings-reset { color: #573317; text-decoration: underline; padding: 4px 0; font-size: 13px; cursor: pointer; }
 .game-bang .settings-error { color: #732b1c; font-weight: 600; }
 .game-bang .room-settings > .western-button { width: 100%; }
-@media (max-width: 1199px) {
+@media (width < 1360px), (max-height: 560px) {
  .game-bang .saloon-waiting.with-settings { grid-template-columns: minmax(0, 1fr); }
  .game-bang .room-settings { max-width: 680px; justify-self: center; }
 }
-@media (max-width: 899px) {
+@media (width < 1000px), (max-height: 560px) {
  .game-bang .saloon-waiting.with-settings { padding: 44px 0 20px; display: grid; }
  .game-bang .room-settings { width: calc(100% - 40px); }
  .game-bang .role-stepper button, .game-bang .role-stepper input { height: 44px; }

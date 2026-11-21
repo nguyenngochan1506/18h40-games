@@ -8,6 +8,7 @@ import { act, createElement } from 'react';
 import type { RouteObject } from 'react-router';
 import type { ClientMessage, ServerMessage } from '../generated/protocol.ts';
 import { PROTOCOL_VERSION } from '../generated/protocol.ts';
+import type { GameSettingsProps } from '../games/types.ts';
 import { demoRoom } from '../testFixtures.ts';
 import { saveSession } from '../shared/lib/session.ts';
 import type { Session } from '../shared/lib/session.ts';
@@ -109,6 +110,93 @@ test('creating pushes a room URL and leaving replaces it with the lobby', async 
   await fx.receive({ v: PROTOCOL_VERSION, type: 'left' });
   assert.equal(fx.router.state.location.pathname, '/'); assert.equal(window.localStorage.getItem('18h40.session'), null);
   assert.equal(document.title, '18h40 — Phòng chơi cùng hội'); assert.equal(TestSocket.instances.length, 1);
+});
+
+test('only a waiting host can request a new game and the room follows the server snapshot', async t => {
+  const fx = await mount(t, '/r/ABCDE', saved);
+  const session = joined();
+  assert.equal(session.type, 'joined');
+  await fx.receive(session);
+  const picker = '.waiting-game-switch';
+  assert.equal(fx.container.querySelector(picker), null);
+
+  const { registry } = await vite.ssrLoadModule('/src/games/registry.ts');
+  registry.uno.enabled = true;
+  t.after(() => { registry.uno.enabled = false; });
+  t.mock.method(registry.uno, 'load', async () => ({
+    Board: () => null,
+    Settings: ({ settings, editable, onChange }: GameSettingsProps) => createElement('button', {
+      disabled: !editable,
+      onClick: () => onChange(settings),
+      'aria-label': 'Áp dụng cài đặt UNO',
+    }),
+  }));
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: { ...session.room, you: '2' } }, false);
+  assert.equal(fx.container.querySelector(picker), null);
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: { ...session.room, phase: 'playing' } }, false);
+  assert.equal(fx.container.querySelector(picker), null);
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: session.room }, false);
+  const select = fx.container.querySelector<HTMLSelectElement>(`${picker} select`)!;
+  const button = fx.container.querySelector<HTMLButtonElement>(`${picker} button`)!;
+  assert.equal(button.disabled, true);
+  assert.deepEqual([...select.options].map(option => option.value), ['', 'uno']);
+  await act(() => { select.value = 'uno'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  assert.equal(button.disabled, false);
+  await fx.click(`${picker} button`);
+  assert.deepEqual(fx.connection.commands().slice(1), [{ v: PROTOCOL_VERSION, type: 'change_game', game: 'uno' }]);
+  assert.ok(select.disabled && button.disabled);
+  assert.match(fx.container.querySelector('.waiting-table-note')!.textContent!, /BANG!/);
+  const storedSession = window.localStorage.getItem('18h40.session');
+
+  const nextRoom = {
+    ...session.room, game: 'uno' as const, settings: { game: 'uno' as const, payload: {} }, min_players: 2, max_players: 10,
+    members: session.room.members.map(member => ({ ...member, role: 'spectator' as const })),
+  };
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: nextRoom }, false);
+  assert.match(fx.container.querySelector('.waiting-table-note')!.textContent!, /UNO.*0 người chơi.*2–10/s);
+  const applySettings = '[aria-label="Áp dụng cài đặt UNO"]';
+  assert.equal(fx.container.querySelector<HTMLButtonElement>(applySettings)!.disabled, true);
+  assert.ok(fx.container.querySelector<HTMLSelectElement>(`${picker} select`)!.disabled);
+  await act(() => fx.connection.ack());
+  assert.equal(fx.container.querySelector<HTMLSelectElement>(`${picker} select`)!.disabled, false);
+  await fx.click(applySettings);
+  assert.deepEqual(fx.connection.commands().at(-1), { v: PROTOCOL_VERSION, type: 'update_settings', settings: nextRoom.settings });
+  await act(() => fx.connection.ack());
+  assert.equal(fx.router.state.location.pathname, '/r/ABCDE');
+  assert.equal(window.localStorage.getItem('18h40.session'), storedSession);
+  assert.equal(TestSocket.instances.length, 1);
+});
+
+test('a waiting host can switch back when the new game fails to load', async t => {
+  const { registry } = await vite.ssrLoadModule('/src/games/registry.ts');
+  registry.werewolf.enabled = true;
+  t.after(() => { registry.werewolf.enabled = false; });
+  const loader = t.mock.method(registry.werewolf, 'load', async () => { throw new Error('Import failed'); });
+  const fx = await mount(t, '/r/ABCDE', saved);
+  const session = joined();
+  assert.equal(session.type, 'joined');
+  await fx.receive(session);
+  const changeGame = async (kind: 'werewolf' | 'bang') => {
+    const select = fx.container.querySelector<HTMLSelectElement>('.waiting-game-switch select')!;
+    await act(() => { select.value = kind; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    await fx.click('.waiting-game-switch button');
+    assert.deepEqual(fx.connection.commands().at(-1), { v: PROTOCOL_VERSION, type: 'change_game', game: kind });
+  };
+  await changeGame('werewolf');
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: {
+    ...session.room, game: 'werewolf', settings: { game: 'werewolf', payload: {} }, max_players: 16,
+  } });
+  assert.match(fx.container.querySelector('.waiting-load-error [role="alert"]')!.textContent!, /Không tải được/);
+  assert.equal(fx.container.querySelector<HTMLButtonElement>('.waiting-primary button')!.disabled, true);
+  const attempts = loader.mock.callCount();
+  await fx.click('.waiting-load-error button');
+  assert.equal(loader.mock.callCount(), attempts + 1);
+  await changeGame('bang');
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: session.room });
+  assert.equal(fx.container.querySelector('.waiting-load-error'), null);
+  assert.match(fx.container.querySelector('.waiting-table-note')!.textContent!, /BANG!/);
+  assert.equal(fx.router.state.location.pathname, '/r/ABCDE');
+  assert.equal(TestSocket.instances.length, 1);
 });
 
 for (const path of ['/', '/r/ABCDE']) test(`the saved room rejoins from ${path} without a second socket`, async t => {
