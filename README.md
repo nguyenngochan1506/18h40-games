@@ -1,6 +1,6 @@
 # 18h40 games
 
-Nền tảng phòng chơi board game cho nhóm bạn: server Rust/Axum, web React/TypeScript/Tailwind, WebSocket JSON có version (hiện là v7). Nền tảng lo phòng, ghế, kết nối và phiên; mỗi game là một module độc lập cắm vào. Type TypeScript sinh từ Rust.
+Nền tảng phòng chơi board game cho nhóm bạn: server Rust/Axum, web React/TypeScript/Tailwind, WebSocket JSON có version (hiện là v8). Nền tảng lo phòng, ghế, kết nối và phiên; mỗi game là một module độc lập cắm vào. Type TypeScript sinh từ Rust.
 
 | Game | Trạng thái | Tài liệu |
 | --- | --- | --- |
@@ -73,7 +73,9 @@ cargo build --workspace
 pnpm --filter web build
 ```
 
-Web build ra `apps/web/dist/`; web chạy qua Vite, server chưa phục vụ file tĩnh. Sau khi đổi protocol Rust, chạy `pnpm gen:types` và đưa `apps/web/src/generated/protocol.ts` vào cùng thay đổi. Script dùng ts-rs, sinh cả hằng version và type; chạy lại không đổi nội dung nếu Rust không đổi. `ping`/`pong` vẫn hỗ trợ, ví dụ `{"v":7,"type":"ping","nonce":42}`.
+Web build ra `apps/web/dist/`; web chạy qua Vite, server chưa phục vụ file tĩnh. Sau khi đổi protocol Rust, chạy `pnpm gen:types` và đưa `apps/web/src/generated/protocol.ts` vào cùng thay đổi. Script dùng ts-rs, sinh cả hằng version và type; chạy lại không đổi nội dung nếu Rust không đổi. `ping`/`pong` vẫn hỗ trợ, ví dụ `{"v":8,"type":"ping","nonce":42}`.
+
+Ở phòng chờ, chủ phòng có thể dùng `change_game` với trường `game` để chọn một game đã bật. Phòng giữ mã, thành viên và token vào lại. Người muốn chơi bấm **Tham gia ván**, còn chủ phòng có thể chỉnh cài đặt của game mới trước khi bắt đầu.
 
 ## Triển khai
 

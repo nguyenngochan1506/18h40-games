@@ -69,11 +69,12 @@ Bổ sung cho các mục trên; chốt khi M1 xong.
 - Khi vào lại: server gửi **snapshot** (`GameSnapshot{seq, seats, view}` với `view` là `GameView` đã lọc theo người nhận: người chơi, khán giả hoặc người bị loại), sau đó tiếp tục bằng event.
 - Frontend dùng chuỗi event để diễn animation (`motion`) thay vì chỉ so sánh hai snapshot.
 
-### Message (protocol v7) **[Chốt]**
+### Message (protocol v8) **[Chốt]**
 
-Mọi message có `v` và `type` (snake_case). Hiện `v = 7`; client và server phải cập nhật cùng nhau mỗi khi đổi wire.
+Mọi message có `v` và `type` (snake_case). Hiện `v = 8`. Client và server phải cập nhật cùng nhau mỗi khi đổi giao thức.
 
-- **Client gửi:** `create_room{nickname, game}`, `join_room{room_code, nickname}`, `rejoin_room{room_code, token}`, `leave_room`, `take_seat`, `start_game`, `update_settings{settings}`, `game_action{action}`, `host_skip`, `end_game`, `ping{nonce}`.
+- **Client gửi:** `create_room{nickname, game}`, `join_room{room_code, nickname}`, `rejoin_room{room_code, token}`, `leave_room`, `take_seat`, `change_game{game}`, `start_game`, `update_settings{settings}`, `game_action{action}`, `host_skip`, `end_game`, `ping{nonce}`.
+- **Đổi game:** Chủ phòng dùng `change_game` khi phòng đang chờ và game đích đã bật. Khi chọn game khác, server dùng cài đặt mặc định và giới hạn ghế của game mới, đưa mọi người về khán giả rồi gửi `room_state`. Mã phòng, thành viên và token vào lại được giữ. Chọn lại game hiện tại giữ ghế và cài đặt đang dùng.
 - **Server gửi:** `joined{room_code, token, room, game?}` (trả lời create/join/rejoin; `game` là snapshot ván nếu đang chơi), `room_state{room}`, `game_started{seq, seats, view}`, `game_update{seq, update}`, `game_over{seq, update}`, `left`, `pong{nonce}`, `error{code, message}`.
 - **Payload theo game** là enum có tag `game` + payload có type, **không dùng JSON tự do**: `GameSettings`, `GameAction`, `GameView` (`{game, payload}`), `GameDelta` (`{game, events, view}`). Mỗi game có kiểu riêng; event đi qua wrapper chỉ tạo được bằng hàm lọc theo người nhận (doctest `compile_fail` chặn đưa state/event thô vào wire).
 - **`room`** (`RoomView`): `code`, `game` (`bang`|`uno`|`werewolf`), `settings` (`GameSettings`), `phase` (`waiting`|`playing`), `host`, `you`, `min_players`, `max_players`, `members[]` gồm `id`, `nickname`, `role` (`player`|`spectator`), `online`.
