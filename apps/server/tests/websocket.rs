@@ -1,5 +1,6 @@
 use futures_util::{SinkExt, StreamExt};
 use protocol::{ErrorCode, PROTOCOL_VERSION, ServerMessage};
+use serde_json::{Value, json};
 use std::time::Duration;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
@@ -14,28 +15,38 @@ async fn ping_pong_and_errors_keep_the_connection_usable() {
                 .unwrap()
         });
         let (mut socket, _) = connect_async(format!("ws://{address}/ws")).await.unwrap();
+        let current_message = |mut value: Value| {
+            value["v"] = json!(PROTOCOL_VERSION);
+            Message::Text(value.to_string().into())
+        };
 
         let invalid_frames = [
             (
-                Message::Text(r#"{"v":7,"type":"update_settings","settings":{"game":"bang","payload":{"mode":"unknown","roles":{"deputy":0,"outlaw":2,"renegade":1}}}}"#.into()),
+                current_message(json!({"type":"update_settings","settings":{"game":"bang","payload":{"mode":"unknown","roles":{"deputy":0,"outlaw":2,"renegade":1}}}})),
                 ErrorCode::InvalidMessage,
             ),
             (
-                Message::Text(r#"{"v":7,"type":"update_settings","settings":{"game":"bang","payload":{"mode":"classic","roles":{"deputy":-1,"outlaw":2,"renegade":1}}}}"#.into()),
+                current_message(json!({"type":"update_settings","settings":{"game":"bang","payload":{"mode":"classic","roles":{"deputy":-1,"outlaw":2,"renegade":1}}}})),
                 ErrorCode::InvalidMessage,
             ),
             (
-                Message::Text(
-                    r#"{"v":7,"type":"create_room","nickname":"Unknown","game":"unknown"}"#.into(),
-                ),
+                current_message(json!({"type":"create_room","nickname":"Unknown","game":"unknown"})),
                 ErrorCode::InvalidMessage,
             ),
             (
-                Message::Text(r#"{"v":7,"type":"create_room","nickname":"Missing"}"#.into()),
+                current_message(json!({"type":"create_room","nickname":"Missing"})),
                 ErrorCode::InvalidMessage,
             ),
             (
-                Message::Text(r#"{"v":6,"type":"ping","nonce":7}"#.into()),
+                current_message(json!({"type":"change_game","game":"unknown"})),
+                ErrorCode::InvalidMessage,
+            ),
+            (
+                current_message(json!({"type":"change_game"})),
+                ErrorCode::InvalidMessage,
+            ),
+            (
+                Message::Text(r#"{"v":7,"type":"ping","nonce":7}"#.into()),
                 ErrorCode::UnsupportedVersion,
             ),
             (
@@ -56,11 +67,11 @@ async fn ping_pong_and_errors_keep_the_connection_usable() {
                 ErrorCode::InvalidMessage,
             ),
             (
-                Message::Text(r#"{"v":7,"type":"unknown"}"#.into()),
+                current_message(json!({"type":"unknown"})),
                 ErrorCode::InvalidMessage,
             ),
             (
-                Message::Text(r#"{"v":7,"type":"ping","nonce":"7"}"#.into()),
+                current_message(json!({"type":"ping","nonce":"7"})),
                 ErrorCode::InvalidMessage,
             ),
             (
@@ -70,7 +81,7 @@ async fn ping_pong_and_errors_keep_the_connection_usable() {
         ];
 
         socket
-            .send(Message::Text(r#"{"v":7,"type":"ping","nonce":0}"#.into()))
+            .send(current_message(json!({"type":"ping","nonce":0})))
             .await
             .unwrap();
         let response = socket.next().await.unwrap().unwrap().into_text().unwrap();
@@ -94,9 +105,7 @@ async fn ping_pong_and_errors_keep_the_connection_usable() {
                 other => panic!("Expected error, got {other:?}"),
             }
             socket
-                .send(Message::Text(
-                    r#"{"v":7,"type":"ping","nonce":4294967295}"#.into(),
-                ))
+                .send(current_message(json!({"type":"ping","nonce":u32::MAX})))
                 .await
                 .unwrap();
             let response = socket.next().await.unwrap().unwrap().into_text().unwrap();

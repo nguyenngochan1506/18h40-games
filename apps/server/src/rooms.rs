@@ -423,6 +423,27 @@ impl Room {
                         module(self.game_kind).validate_settings(&settings, self.players())?;
                         self.settings = settings;
                     }
+                    ClientMessage::ChangeGame { game, .. } => {
+                        if self.members[index].view.id != self.host {
+                            return Err(ErrorCode::NotHost);
+                        }
+                        if self.phase != Phase::Waiting {
+                            return Err(ErrorCode::WrongPhase);
+                        }
+                        let target = module(game);
+                        if !target.enabled() {
+                            return Err(ErrorCode::GameUnavailable);
+                        }
+                        if game == self.game_kind {
+                            return Ok(false);
+                        }
+                        self.game_kind = game;
+                        self.settings = target.default_settings();
+                        for member in &mut self.members {
+                            member.view.role = Role::Spectator;
+                        }
+                        return Ok(true);
+                    }
                     ClientMessage::StartGame { .. } | ClientMessage::EndGame { .. } => {
                         if self.members[index].view.id != self.host {
                             return Err(ErrorCode::NotHost);

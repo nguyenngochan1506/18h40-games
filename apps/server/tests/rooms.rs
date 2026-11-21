@@ -471,6 +471,48 @@ async fn create_room_delivers_joined_then_initial_snapshot() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn change_game_checks_membership_host_phase_and_availability() {
+    let server = TestServer::new(Config::default()).await;
+    let (mut host, joined) = server.create("Host").await;
+    let mut guest = server.connect().await;
+    let change = json!({"type":"change_game","game":"uno"});
+    guest.send(change.clone()).await;
+    guest.error("not_in_room").await;
+    guest
+        .send(json!({"type":"join_room","room_code":code(&joined),"nickname":"Guest"}))
+        .await;
+    guest.until("joined").await;
+    guest.send(change.clone()).await;
+    guest.error("not_host").await;
+    host.send(change.clone()).await;
+    host.error("game_unavailable").await;
+
+    let (_third, _) = server.join(code(&joined), "Third").await;
+    let (_fourth, _) = server.join(code(&joined), "Fourth").await;
+    let mut custom = joined["room"]["settings"].clone();
+    custom["payload"]["mode"] = json!("club");
+    host.send(json!({"type":"update_settings","settings":custom}))
+        .await;
+    let room = host.state(|room| room["settings"] == custom).await;
+    assert_eq!(room["game"], "bang");
+    host.send(json!({"type":"change_game","game":"bang"})).await;
+    host.send(json!({"type":"ping","nonce":8})).await;
+    assert_eq!(host.receive().await["type"], "pong");
+
+    host.send(json!({"type":"start_game"})).await;
+    host.until("game_started").await;
+    let playing = host.state(|room| room["phase"] == "playing").await;
+    assert_eq!(playing["settings"], custom);
+    assert_eq!(playing["members"], room["members"]);
+    host.send(change).await;
+    host.error("wrong_phase").await;
+    host.send(json!({"type":"end_game"})).await;
+    let waiting = host.state(|room| room["phase"] == "waiting").await;
+    assert_eq!(waiting["game"], "bang");
+    assert_eq!(waiting["settings"], custom);
+}
+
+#[tokio::test(start_paused = true)]
 async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() {
     let server = TestServer::new(Config {
         game_seed: Some(42),

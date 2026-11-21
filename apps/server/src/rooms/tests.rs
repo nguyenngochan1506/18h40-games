@@ -226,3 +226,108 @@ async fn starting_with_mismatched_roles_rejects_without_repairing_settings() {
     assert_eq!(room.phase, Phase::Waiting);
     assert!(room.game.is_none());
 }
+
+#[tokio::test(start_paused = true)]
+async fn changing_game_broadcasts_the_new_room_and_preserves_rejoin() {
+    let (mut room, mut host_messages) = timer_room(Phase::Waiting, true);
+    room.game_kind = GameKind::Uno;
+    room.settings = module(GameKind::Uno).default_settings();
+    let guest_token = [2; 16];
+    room.members[1].token = guest_token;
+    let (online_outgoing, mut online_messages) = mpsc::channel(QUEUE_CAPACITY);
+    let (online_shutdown, _) = tokio::sync::watch::channel(None);
+    room.members.push(MemberState {
+        view: Member {
+            id: "3".into(),
+            nickname: "Guest".into(),
+            role: Role::Player,
+            online: true,
+        },
+        token: [3; 16],
+        connection: Some(Peer {
+            id: 3,
+            outgoing: online_outgoing,
+            shutdown: online_shutdown,
+        }),
+        offline_since: None,
+    });
+    room.next_id = 4;
+    let previous = room.view("1");
+    let host = room.members[0].connection.clone().unwrap();
+    let (sender, receiver) = mpsc::channel(QUEUE_CAPACITY);
+    let task = tokio::spawn(room.run(receiver));
+
+    assert!(
+        request(
+            &sender,
+            &host,
+            ClientMessage::ChangeGame {
+                v: PROTOCOL_VERSION,
+                game: GameKind::Bang,
+            }
+        )
+        .await
+    );
+    let ServerMessage::RoomState { room: changed, .. } = host_messages.recv().await.unwrap() else {
+        panic!("Expected room state after changing game");
+    };
+    assert_eq!(changed.code, previous.code);
+    assert_eq!(changed.host, previous.host);
+    assert_eq!(changed.phase, Phase::Waiting);
+    assert_eq!(changed.game, GameKind::Bang);
+    assert_eq!(changed.settings, module(GameKind::Bang).default_settings());
+    assert_eq!((changed.min_players, changed.max_players), (4, 7));
+    let mut previous_members = previous.members;
+    for member in &mut previous_members {
+        member.role = Role::Spectator;
+    }
+    assert_eq!(changed.members, previous_members);
+    let ServerMessage::RoomState {
+        room: online_update,
+        ..
+    } = online_messages.try_recv().unwrap()
+    else {
+        panic!("Expected a room state for the connected guest");
+    };
+    let mut expected_online = changed.clone();
+    expected_online.you = "3".into();
+    assert_eq!(online_update, expected_online);
+
+    let (outgoing, mut guest_messages) = mpsc::channel(QUEUE_CAPACITY);
+    let (shutdown, _) = tokio::sync::watch::channel(None);
+    let guest = Peer {
+        id: 2,
+        outgoing,
+        shutdown,
+    };
+    let token = encode_token(&guest_token);
+    assert!(
+        request(
+            &sender,
+            &guest,
+            ClientMessage::RejoinRoom {
+                v: PROTOCOL_VERSION,
+                room_code: changed.code.clone(),
+                token: token.clone(),
+            }
+        )
+        .await
+    );
+    let ServerMessage::Joined {
+        room: rejoined,
+        token: confirmed,
+        game: None,
+        ..
+    } = guest_messages.recv().await.unwrap()
+    else {
+        panic!("Expected rejoin to the new game in the waiting room");
+    };
+    assert_eq!(confirmed, token);
+    assert_eq!(rejoined.you, "2");
+    let mut expected = changed;
+    expected.you = "2".into();
+    expected.members[1].online = true;
+    assert_eq!(rejoined, expected);
+    drop(sender);
+    task.await.unwrap();
+}

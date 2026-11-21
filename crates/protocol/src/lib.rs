@@ -3,7 +3,7 @@ pub mod bang;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 7;
+pub const PROTOCOL_VERSION: u32 = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -81,6 +81,10 @@ pub enum ClientMessage {
     },
     TakeSeat {
         v: u32,
+    },
+    ChangeGame {
+        v: u32,
+        game: GameKind,
     },
     StartGame {
         v: u32,
@@ -230,6 +234,7 @@ mod tests {
             json!({"v":PROTOCOL_VERSION,"type":"rejoin_room","room_code":"ABCDE","token":"secret"}),
             json!({"v":PROTOCOL_VERSION,"type":"leave_room"}),
             json!({"v":PROTOCOL_VERSION,"type":"take_seat"}),
+            json!({"v":PROTOCOL_VERSION,"type":"change_game","game":"uno"}),
             json!({"v":PROTOCOL_VERSION,"type":"start_game"}),
             json!({"v":PROTOCOL_VERSION,"type":"end_game"}),
         ];
