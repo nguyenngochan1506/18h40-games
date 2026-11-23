@@ -122,7 +122,7 @@ test('GameFx changing the view cancels pending cues without replaying the same b
 });
 
 test('GameFx snapshots and remounts never replay events from joined/rejoin', async t => {
-  const joined = receiveGameState(initialGameState, { v: PROTOCOL_VERSION, type: 'joined', room_code: demoRoom.code, token: 'snapshot', room: demoRoom, game: demoGame });
+  const joined = receiveGameState(initialGameState, { v: PROTOCOL_VERSION, type: 'joined', voice_enabled: false, room_code: demoRoom.code, token: 'snapshot', room: demoRoom, game: demoGame });
   const fx = await mount(t, { id: demoGame.seq, events: demoFx.shot.events, waiting: null });
   await fx.tick(3000);
   assert.equal(fx.counts().started, 0, 'An initial batch is a snapshot marker');

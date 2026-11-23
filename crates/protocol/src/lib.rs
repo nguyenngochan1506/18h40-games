@@ -3,7 +3,7 @@ pub mod bang;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 8;
+pub const PROTOCOL_VERSION: u32 = 9;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -58,6 +58,14 @@ pub enum GameDelta {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
     Ping {
+        v: u32,
+        nonce: u32,
+    },
+    VoiceToken {
+        v: u32,
+        nonce: u32,
+    },
+    VoiceLeave {
         v: u32,
         nonce: u32,
     },
@@ -130,6 +138,7 @@ pub enum ServerMessage {
         token: String,
         room: RoomView,
         game: Option<GameSnapshot>,
+        voice_enabled: bool,
     },
     RoomState {
         v: u32,
@@ -142,11 +151,56 @@ pub enum ServerMessage {
         v: u32,
         nonce: u32,
     },
+    VoiceTokenResult {
+        v: u32,
+        nonce: u32,
+        result: VoiceTokenResult,
+    },
+    VoiceLeaveResult {
+        v: u32,
+        nonce: u32,
+        error: Option<VoiceError>,
+    },
     Error {
         v: u32,
         code: ErrorCode,
         message: String,
     },
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum VoiceTokenResult {
+    Ok {
+        url: String,
+        token: String,
+        #[ts(type = "number")]
+        expires_at: u64,
+    },
+    Error {
+        code: VoiceError,
+    },
+}
+
+impl std::fmt::Debug for VoiceTokenResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ok { expires_at, .. } => f
+                .debug_struct("Ok")
+                .field("expires_at", expires_at)
+                .finish_non_exhaustive(),
+            Self::Error { code } => f.debug_struct("Error").field("code", code).finish(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceError {
+    VoiceDisabled,
+    NotInRoom,
+    VoiceUnavailable,
+    RateLimited,
 }
 
 /// Public identity fixed at start_game, including members who later leave.
@@ -234,6 +288,8 @@ mod tests {
             json!({"v":PROTOCOL_VERSION,"type":"rejoin_room","room_code":"ABCDE","token":"secret"}),
             json!({"v":PROTOCOL_VERSION,"type":"leave_room"}),
             json!({"v":PROTOCOL_VERSION,"type":"take_seat"}),
+            json!({"v":PROTOCOL_VERSION,"type":"voice_token","nonce":1}),
+            json!({"v":PROTOCOL_VERSION,"type":"voice_leave","nonce":2}),
             json!({"v":PROTOCOL_VERSION,"type":"change_game","game":"uno"}),
             json!({"v":PROTOCOL_VERSION,"type":"start_game"}),
             json!({"v":PROTOCOL_VERSION,"type":"end_game"}),
@@ -252,7 +308,7 @@ mod tests {
         }
         let room = json!({"code":"ABCDE","game":"bang","settings":GameSettings::Bang(::bang::GameConfig::default()),"phase":"waiting","host":"1","you":"1","min_players":4,"max_players":7,"members":[{"id":"1","nickname":"Hân","role":"player","online":true}]});
         for value in [
-            json!({"v":PROTOCOL_VERSION,"type":"joined","room_code":"ABCDE","token":"secret","room":room,"game":null}),
+            json!({"v":PROTOCOL_VERSION,"type":"joined","room_code":"ABCDE","token":"secret","room":room,"game":null,"voice_enabled":false}),
             json!({"v":PROTOCOL_VERSION,"type":"room_state","room":room}),
             json!({"v":PROTOCOL_VERSION,"type":"left"}),
         ] {
@@ -497,7 +553,7 @@ mod tests {
             missing.as_object_mut().unwrap().remove("v");
             assert!(serde_json::from_value::<ClientMessage>(missing).is_err());
         }
-        let joined = ServerMessage::Joined { v: PROTOCOL_VERSION, room_code: "ABCDE".into(), token: "secret".into(), game: Some(GameSnapshot { seq: 2, seats, view: GameView::Bang(player) }), room: serde_json::from_value(json!({"code":"ABCDE","game":"bang","settings":GameSettings::Bang(::bang::GameConfig::default()),"phase":"playing","host":"1","you":"1","min_players":4,"max_players":7,"members":[]})).unwrap() };
+        let joined = ServerMessage::Joined { v: PROTOCOL_VERSION, room_code: "ABCDE".into(), token: "secret".into(), game: Some(GameSnapshot { seq: 2, seats, view: GameView::Bang(player) }), voice_enabled: false, room: serde_json::from_value(json!({"code":"ABCDE","game":"bang","settings":GameSettings::Bang(::bang::GameConfig::default()),"phase":"playing","host":"1","you":"1","min_players":4,"max_players":7,"members":[]})).unwrap() };
         for field in ["seq", "seats", "view"] {
             let mut value = serde_json::to_value(&joined).unwrap();
             value["game"].as_object_mut().unwrap().remove(field);

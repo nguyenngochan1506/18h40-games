@@ -11,6 +11,7 @@
     "boundaries": "node ../../scripts/check-game-boundaries.mjs"
   },
   "dependencies": {
+    "livekit-client": "2.22.2",
     "motion": "14.11.1",
     "pixi.js": "8.23.0",
     "react": "^19.3.1",

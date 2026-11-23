@@ -1,6 +1,7 @@
 mod config;
 mod games;
 mod rooms;
+mod voice;
 
 use axum::{
     Router,
@@ -14,10 +15,15 @@ use axum::{
 };
 pub use config::Config;
 use futures_util::SinkExt;
-use protocol::{ClientMessage, ErrorCode, PROTOCOL_VERSION, ServerMessage};
+use protocol::{ClientMessage, ErrorCode, PROTOCOL_VERSION, ServerMessage, VoiceError};
 use serde::Deserialize;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::{
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
+};
 use tokio::sync::{mpsc, watch};
+use tokio::time::Instant;
+pub use voice::VoiceConfig;
 
 pub(crate) const QUEUE_CAPACITY: usize = 64;
 const _: () = assert!(QUEUE_CAPACITY >= 2);
@@ -151,16 +157,31 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
         shutdown,
     };
     let mut room = None;
+    let heartbeat = state.config.voice.is_some();
+    let mut heartbeat_due = Instant::now() + Duration::from_secs(20);
+    let mut awaiting_pong = false;
+    let mut heartbeat_nonce = 0_u64;
     loop {
         tokio::select! {
             biased;
             _ = closed.changed() => break,
+            _ = tokio::time::sleep_until(heartbeat_due), if heartbeat => {
+                if awaiting_pong { break; }
+                heartbeat_nonce = heartbeat_nonce.wrapping_add(1);
+                let ping = Message::Ping(heartbeat_nonce.to_be_bytes().to_vec().into());
+                if !matches!(tokio::time::timeout(Duration::from_secs(5), socket.send(ping)).await, Ok(Ok(()))) {
+                    break;
+                }
+                awaiting_pong = true;
+                heartbeat_due = Instant::now() + Duration::from_secs(20);
+            }
             outgoing = receiver.recv() => {
                 let Some(outgoing) = outgoing else { break; };
                 let Ok(text) = serde_json::to_string(&outgoing) else { break; };
                 tokio::select! {
                     biased;
                     _ = closed.changed() => break,
+                        _ = tokio::time::sleep(Duration::from_secs(5)), if heartbeat => break,
                     result = socket.send(Message::Text(text.into())) => { if result.is_err() { break; } }
                 }
             }
@@ -171,11 +192,28 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                         Err(code) => { peer.send(error(code)); continue; }
                     },
                     Some(Ok(Message::Binary(_))) => { peer.send(error(ErrorCode::InvalidMessage)); continue; }
-                    Some(Ok(Message::Ping(_) | Message::Pong(_))) => continue,
+                    Some(Ok(Message::Pong(bytes))) => {
+                        if bytes.as_ref() == heartbeat_nonce.to_be_bytes() { awaiting_pong = false; }
+                        continue;
+                    }
+                    Some(Ok(Message::Ping(_))) => continue,
                     _ => break,
                 };
                 if let ClientMessage::Ping { nonce, .. } = message {
                     peer.send(ServerMessage::Pong { v: PROTOCOL_VERSION, nonce });
+                    continue;
+                }
+                let voice = match &message {
+                    ClientMessage::VoiceToken { nonce, .. } => Some(rooms::VoiceRequest::Token(*nonce)),
+                    ClientMessage::VoiceLeave { nonce, .. } => Some(rooms::VoiceRequest::Leave(*nonce)),
+                    _ => None,
+                };
+                if let Some(request) = voice {
+                    let response = match &room {
+                        Some(sender) => rooms::request_voice(sender, peer.id, request).await,
+                        None => request.error(VoiceError::NotInRoom),
+                    };
+                    peer.send(response);
                     continue;
                 }
                 let entering = matches!(message, ClientMessage::CreateRoom { .. } | ClientMessage::JoinRoom { .. } | ClientMessage::RejoinRoom { .. });

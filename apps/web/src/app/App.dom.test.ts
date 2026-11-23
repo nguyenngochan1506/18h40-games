@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import type { TestContext } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { Window } from 'happy-dom';
 import { createServer } from 'vite';
@@ -9,7 +10,8 @@ import type { RouteObject } from 'react-router';
 import type { ClientMessage, ServerMessage } from '../generated/protocol.ts';
 import { PROTOCOL_VERSION } from '../generated/protocol.ts';
 import type { GameSettingsProps } from '../games/types.ts';
-import { demoRoom } from '../testFixtures.ts';
+import { demoGame, demoRoom } from '../testFixtures.ts';
+import type { VoiceMedia } from '../features/rooms/voice.ts';
 import { saveSession } from '../shared/lib/session.ts';
 import type { Session } from '../shared/lib/session.ts';
 
@@ -33,14 +35,27 @@ class TestSocket {
 
 const dom = new Window({ url: 'http://localhost/', width: 1280, height: 720, settings: { enableImageFileLoading: false, enableCSSFileLoading: false, disableJavaScriptFileLoading: true } });
 Reflect.deleteProperty(dom.Element.prototype, 'animate');
-const globals = { window: dom, document: dom.document, navigator: dom.navigator, HTMLElement: dom.HTMLElement, HTMLInputElement: dom.HTMLInputElement, SVGElement: dom.SVGElement, Element: dom.Element, Node: dom.Node, Image: dom.Image, Event: dom.Event, MouseEvent: dom.MouseEvent, KeyboardEvent: dom.KeyboardEvent, WebSocket: TestSocket, getComputedStyle: dom.getComputedStyle.bind(dom), matchMedia: dom.matchMedia.bind(dom), requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 16), cancelAnimationFrame: (id: number) => clearTimeout(id), IS_REACT_ACT_ENVIRONMENT: true };
+const voiceMedia = { opened: 0, closed: 0 };
+const fakeVoice = (): VoiceMedia => ({
+  async connect() { voiceMedia.opened++; }, close() { voiceMedia.closed++; },
+  async publish(track) { track.enabled = true; }, unpublish() {}, async startAudio() {},
+});
+const globals = { window: dom, document: dom.document, navigator: dom.navigator, HTMLElement: dom.HTMLElement, HTMLInputElement: dom.HTMLInputElement, SVGElement: dom.SVGElement, Element: dom.Element, Node: dom.Node, Image: dom.Image, Event: dom.Event, MouseEvent: dom.MouseEvent, KeyboardEvent: dom.KeyboardEvent, WebSocket: TestSocket, getComputedStyle: dom.getComputedStyle.bind(dom), matchMedia: dom.matchMedia.bind(dom), requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 16), cancelAnimationFrame: (id: number) => clearTimeout(id), IS_REACT_ACT_ENVIRONMENT: true, fakeVoice };
 const previous = Object.getOwnPropertyDescriptors(globalThis);
 for (const [name, value] of Object.entries(globals)) Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
 document.execCommand = () => false;
 const { createRoot } = await import('react-dom/client');
 const { createMemoryRouter } = await import('react-router');
 const { RouterProvider } = await import('react-router/dom');
-const vite = await createServer({ root: fileURLToPath(new URL('../../', import.meta.url)), configFile: false, optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false, watch: null } });
+const vite = await createServer({
+  root: fileURLToPath(new URL('../../', import.meta.url)), configFile: false, optimizeDeps: { noDiscovery: true },
+  server: { middlewareMode: true, hmr: false, ws: false, watch: null },
+  plugins: [{
+    name: 'test-voice-media',
+    enforce: 'pre',
+    load: id => id.endsWith('/features/rooms/livekitVoice.ts') ? 'export const createLiveKitVoice = globalThis.fakeVoice;' : undefined,
+  }],
+});
 let appRoutes: RouteObject[];
 try {
   await vite.ssrLoadModule('/src/features/lobby/Lobby.tsx');
@@ -56,7 +71,7 @@ after(async () => {
 });
 
 const saved = { roomCode: 'ABCDE', token: 'ab'.repeat(16) };
-const joined = (code = 'ABCDE'): ServerMessage => ({ v: PROTOCOL_VERSION, type: 'joined', room_code: code, token: 'cd'.repeat(16), room: { ...demoRoom, code, phase: 'waiting' }, game: null });
+const joined = (code = 'ABCDE'): ServerMessage => ({ v: PROTOCOL_VERSION, type: 'joined', voice_enabled: false, room_code: code, token: 'cd'.repeat(16), room: { ...demoRoom, code, phase: 'waiting' }, game: null });
 async function mount(t: TestContext, path: string | string[] = '/', session?: Session) {
   TestSocket.instances = []; window.localStorage.clear(); if (session) saveSession(session);
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
@@ -374,4 +389,120 @@ for (const reconnect of [false, true]) test(`a rejected rejoin leaves a usable l
   assert.equal(fx.container.querySelector('.connection-status')!.textContent, 'Đã kết nối');
   assert.equal(fx.container.querySelector<HTMLButtonElement>('.join-poster button[type="submit"]')!.disabled, false);
   const count = connection.commands().length; await fx.tick(1000); assert.equal(connection.commands().length, count);
+});
+
+test('room voice signaling and its controls survive a game transition while game commands are pending', async t => {
+  const fx = await mount(t, '/r/ABCDE', saved);
+  const session = joined();
+  assert.equal(session.type, 'joined');
+  await fx.receive({ ...session, voice_enabled: true });
+  const voice = fx.container.querySelector('.room-voice');
+  assert.ok(voice);
+  assert.deepEqual(fx.connection.commands().map(message => message.type), ['rejoin_room']);
+  assert.equal(voiceMedia.opened, 0);
+
+  await fx.click('.waiting-primary button');
+  await fx.click('[data-voice-join]');
+  const request = fx.connection.commands().at(-1);
+  assert.equal(request?.type, 'voice_token');
+  assert.match(voice.textContent!, /Đang vào thoại/);
+  assert.equal(fx.connection.sent.filter(message => message.type === 'ping').length, 2);
+  await vite.ssrLoadModule('/src/features/rooms/livekitVoice.ts');
+  const grant = {
+    v: PROTOCOL_VERSION, type: 'voice_token_result', nonce: request.nonce,
+    result: { status: 'ok', url: 'ws://127.0.0.1:1', token: 'test.header.signature', expires_at: 4_000_000_000 },
+  } satisfies ServerMessage;
+  await fx.receive(grant, false);
+  await act(async () => {
+    for (let turn = 0; !voiceMedia.opened && turn < 50; turn++) await delay(20);
+  });
+  assert.equal(voiceMedia.opened, 1, voice.textContent!);
+  assert.match(voice.textContent!, /Đã vào thoại · Mic tắt/);
+  assert.equal(fx.container.querySelector<HTMLButtonElement>('.waiting-primary button')!.disabled, true);
+
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: { ...session.room, phase: 'playing' } }, false);
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'game_started', seq: 0, seats: demoGame.seats,
+    view: { game: 'bang', payload: demoGame.view } });
+  assert.equal(fx.container.querySelector('.room-voice'), voice);
+
+  assert.ok(demoGame.view.perspective === 'player');
+  const table = { ...demoGame.view.view.table, winner: 'outlaws' } as const;
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'game_over', seq: 1,
+    update: { game: 'bang', events: [], view: { perspective: 'spectator', view: table } } }, false);
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: {
+    ...session.room, game: 'uno', settings: { game: 'uno', payload: {} },
+  } }, false);
+  assert.equal(fx.container.querySelector('.room-voice'), voice);
+  assert.match(voice.textContent!, /Đã vào thoại · Mic tắt/);
+  assert.equal(voiceMedia.closed, 0);
+
+  const createTrack = () => Object.assign(new dom.EventTarget(), {
+    enabled: true, readyState: 'live',
+    stop() { this.readyState = 'ended'; },
+  });
+  const tracks: ReturnType<typeof createTrack>[] = [];
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+    async getUserMedia() {
+      const track = createTrack();
+      tracks.push(track);
+      return { getTracks: () => [track], getAudioTracks: () => [track] };
+    },
+  } });
+  t.after(() => { Reflect.deleteProperty(navigator, 'mediaDevices'); });
+  assert.equal(tracks.length, 0, 'Listening must not open the microphone');
+  const mode = voice.querySelector<HTMLSelectElement>('select')!;
+  await act(() => { mode.value = 'hold'; mode.dispatchEvent(new Event('change', { bubbles: true })); });
+  const hold = voice.querySelector<HTMLButtonElement>('.voice-hold')!;
+  await act(() => hold.focus());
+  const pointer = (type: string) => new dom.PointerEvent(type, { bubbles: true, pointerId: 9, isPrimary: true, pointerType: 'touch' }) as unknown as PointerEvent;
+  await act(() => hold.dispatchEvent(pointer('pointerdown')));
+  assert.equal(tracks[0]?.enabled, true);
+  await act(() => window.dispatchEvent(pointer('pointercancel')));
+  assert.equal(tracks[0]?.readyState, 'ended');
+
+  const key = (type: string, options?: KeyboardEventInit) => new KeyboardEvent(type, { key: 'v', code: 'KeyV', bubbles: true, ...options });
+  await act(() => hold.dispatchEvent(key('keydown')));
+  assert.equal(tracks.length, 1, 'V is disabled by default');
+  await fx.click('.voice-options input');
+  await act(() => hold.focus());
+  await act(() => hold.dispatchEvent(key('keydown', { isComposing: true })));
+  assert.equal(tracks.length, 1);
+  await act(() => hold.dispatchEvent(key('keydown')));
+  assert.equal(tracks[1]?.enabled, true);
+  await act(() => hold.dispatchEvent(key('keyup')));
+  assert.equal(tracks[1]?.readyState, 'ended');
+
+  await fx.click('.saloon-restoring button');
+  assert.deepEqual(fx.connection.commands().map(message => message.type), ['rejoin_room', 'start_game', 'voice_token', 'voice_leave', 'leave_room']);
+  assert.equal(voiceMedia.closed, 1);
+  await fx.receive(grant, false);
+  assert.equal(voiceMedia.opened, 1);
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'left' });
+  assert.equal(fx.container.querySelector('.room-voice'), null);
+  assert.equal(TestSocket.instances.length, 1);
+});
+
+test('a malformed voice grant leaves the game request pending until its own pong', async t => {
+  const fx = await mount(t, '/r/ABCDE', saved);
+  const session = joined();
+  assert.equal(session.type, 'joined');
+  await fx.receive({ ...session, voice_enabled: true });
+  const start = fx.container.querySelector<HTMLButtonElement>('.waiting-primary button')!;
+  await fx.click('.waiting-primary button');
+
+  for (const v of [PROTOCOL_VERSION, PROTOCOL_VERSION - 1]) {
+    await fx.click('[data-voice-join]');
+    const request = fx.connection.commands().at(-1);
+    assert.equal(request?.type, 'voice_token');
+    await fx.receive({ v, type: 'voice_token_result', nonce: request.nonce, result: null } as unknown as ServerMessage, false);
+    assert.equal(fx.connection.readyState, TestSocket.OPEN);
+    assert.equal(TestSocket.instances.length, 1);
+    assert.equal(start.disabled, true);
+    assert.equal(fx.connection.commands().at(-1)?.type, 'voice_leave');
+    assert.match(fx.container.querySelector('.voice-error')?.textContent ?? '', /thoại không hợp lệ/);
+    assert.equal(fx.container.querySelector('.connection-alert'), null);
+  }
+
+  await act(() => fx.connection.ack());
+  assert.equal(start.disabled, false);
 });

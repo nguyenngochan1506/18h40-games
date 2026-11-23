@@ -12,7 +12,9 @@ rand_chacha = "0.9.0"
 axum = { version = "0.8.9", features = ["ws"] }
 futures-util = { version = "0.3.34", features = ["sink"] }
 getrandom = "0.4.3"
+jsonwebtoken = { version = "9.3.1", default-features = false }
 protocol = { path = "../../crates/protocol" }
+reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls"] }
 serde.workspace = true
 serde_json.workspace = true
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "net", "sync", "time"] }

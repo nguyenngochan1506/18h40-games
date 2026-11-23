@@ -170,7 +170,7 @@ test('reducer keeps only fresh filtered events; setup/join/rejoin/gaps never rep
   state = receiveGameState(state, update(2, demoFx.heal.events));
   assert.deepEqual(state.fxBatch?.events, demoFx.heal.events);
   const gap = receiveGameState(state, update(4)); assert.equal(gap.fxBatch, null); assert.equal(gap.desynced, true);
-  const joined: ServerMessage = { v: PROTOCOL_VERSION, type: 'joined', room_code: 'ABCDE', token: 'private', room: demoRoom, game: demoGame };
+  const joined: ServerMessage = { v: PROTOCOL_VERSION, type: 'joined', voice_enabled: false, room_code: 'ABCDE', token: 'private', room: demoRoom, game: demoGame };
   state = receiveGameState(gap, joined); assert.equal(state.fxBatch, null);
   assert.equal(receiveGameState(state, update(17)), state);
   state = receiveGameState(state, update(18)); assert.equal(state.fxBatch?.id, 18);

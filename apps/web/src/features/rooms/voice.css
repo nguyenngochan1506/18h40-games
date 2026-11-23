@@ -1,0 +1,22 @@
+.room-voice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 16px;
+  padding: 6px max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left));
+  border-block: 1px solid #755330;
+  color: #f4deb3;
+  background: #26180e;
+  font: 500 13px/1.4 system-ui, sans-serif;
+}
+.voice-actions, .voice-options { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.voice-options label { display: flex; align-items: center; gap: 6px; min-height: 44px; }
+.room-voice .voice-actions .western-button, .room-voice select { min-height: 44px; }
+.room-voice select { padding: 0 6px; border: 1px solid #a78354; border-radius: 4px; background: #402918; color: inherit; }
+.room-voice :is(button, select, input):focus-visible { outline: 2px solid #ffe3a0; outline-offset: 2px; }
+.room-voice .voice-hold { touch-action: none; user-select: none; -webkit-touch-callout: none; }
+.room-voice p { margin: 0; overflow-wrap: anywhere; }
+.voice-speakers { color: #bce6a1; }
+.voice-error { color: #ffbea4; }
+main:is(.saloon-app, .game-app):has(> .room-voice) > .connection-status { position: static; padding: 6px 12px; }

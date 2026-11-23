@@ -7,7 +7,7 @@ import { consumeFrames, GAME_QUEUE_LIMIT, initialGameState, inputLocked, receive
 const room: RoomView = { code: 'ABCDE', game: 'uno', settings: { game: 'uno', payload: {} }, phase: 'playing', host: 'a', you: 'a', min_players: 2, max_players: 10, members: [] };
 const start: ServerMessage = { v: PROTOCOL_VERSION, type: 'game_started', seq: 0, seats: [{ player_id: 0, member_id: 'a', nickname: 'A' }], view: { game: 'uno', payload: {} } };
 const update = (seq: number): ServerMessage => ({ v: PROTOCOL_VERSION, type: 'game_update', seq, update: { game: 'uno', events: {}, view: {} } });
-const joined: ServerMessage = { v: PROTOCOL_VERSION, type: 'joined', room_code: room.code, token: 'test', room, game: null };
+const joined: ServerMessage = { v: PROTOCOL_VERSION, type: 'joined', voice_enabled: false, room_code: room.code, token: 'test', room, game: null };
 
 test('opaque sync preserves ordered early frames including setup seq0 until the module consumes them', () => {
   let state = receiveGameState(initialGameState, joined);

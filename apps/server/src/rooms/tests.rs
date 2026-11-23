@@ -55,6 +55,8 @@ fn timer_room(phase: Phase, online: bool) -> (Room, mpsc::Receiver<ServerMessage
                     shutdown,
                 }),
                 offline_since: (!online).then_some(now),
+                voice: None,
+                last_voice_grant: None,
             },
             MemberState {
                 view: Member {
@@ -66,12 +68,16 @@ fn timer_room(phase: Phase, online: bool) -> (Room, mpsc::Receiver<ServerMessage
                 token: [0; 16],
                 connection: None,
                 offline_since: Some(now),
+                voice: None,
+                last_voice_grant: None,
             },
         ],
         next_id: 3,
         empty_since: (!online).then_some(now),
         config: Config::default(),
         registry: Weak::new(),
+        voice: None,
+        next_voice_id: 1,
     };
     (room, receiver)
 }
@@ -204,6 +210,8 @@ async fn starting_with_mismatched_roles_rejects_without_repairing_settings() {
             token: [0; 16],
             connection: None,
             offline_since: None,
+            voice: None,
+            last_voice_grant: None,
         });
     }
     room.settings = GameSettings::Bang(bang::GameConfig {
@@ -250,6 +258,8 @@ async fn changing_game_broadcasts_the_new_room_and_preserves_rejoin() {
             shutdown: online_shutdown,
         }),
         offline_since: None,
+        voice: None,
+        last_voice_grant: None,
     });
     room.next_id = 4;
     let previous = room.view("1");

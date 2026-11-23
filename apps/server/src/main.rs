@@ -1,4 +1,4 @@
-use server::Config;
+use server::{Config, VoiceConfig};
 use std::{str::FromStr, time::Duration};
 
 fn setting<T: FromStr>(name: &str, default: T) -> Result<T, Box<dyn std::error::Error>> {
@@ -7,6 +7,24 @@ fn setting<T: FromStr>(name: &str, default: T) -> Result<T, Box<dyn std::error::
         Err(std::env::VarError::NotPresent) => Ok(default),
         Err(error) => Err(error.into()),
     }
+}
+
+fn voice_config() -> Option<VoiceConfig> {
+    let get = |name| std::env::var(name).unwrap_or_default();
+    let voice = match setting("VOICE_ENABLED", false) {
+        Ok(false) => return None,
+        Ok(true) => VoiceConfig::new(
+            &get("LIVEKIT_PUBLIC_URL"),
+            &get("LIVEKIT_INTERNAL_URL"),
+            &get("LIVEKIT_API_KEY"),
+            &get("LIVEKIT_API_SECRET"),
+            &std::env::var("LIVEKIT_ROOM_NAMESPACE").unwrap_or_else(|_| "18h40".into()),
+        ),
+        Err(_) => Err("Invalid VOICE_ENABLED"),
+    };
+    voice
+        .inspect_err(|reason| tracing::warn!(%reason, "Room voice disabled"))
+        .ok()
 }
 
 #[tokio::main]
@@ -37,6 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .filter(|origin| !origin.is_empty())
             .map(str::to_owned)
             .collect(),
+        voice: voice_config(),
     };
     config.validate()?;
     let address = std::env::var("BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".into());

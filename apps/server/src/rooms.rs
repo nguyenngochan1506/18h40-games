@@ -1,12 +1,14 @@
 use crate::games::{GameSession, module};
+use crate::voice::{VoiceLease, VoiceRoom};
 use crate::{Config, Peer, QUEUE_CAPACITY, error};
 use protocol::{
     ClientMessage, ErrorCode, GameKind, GameSeat, GameSettings, Member, PROTOCOL_VERSION, Phase,
-    Role, RoomView, ServerMessage,
+    Role, RoomView, ServerMessage, VoiceError, VoiceTokenResult,
 };
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, Weak},
+    time::Duration,
 };
 use tokio::{
     sync::{mpsc, oneshot},
@@ -32,6 +34,38 @@ pub(crate) enum Command {
     Disconnect {
         connection_id: u64,
     },
+    Voice {
+        connection_id: u64,
+        request: VoiceRequest,
+        reply: oneshot::Sender<ServerMessage>,
+    },
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum VoiceRequest {
+    Token(u32),
+    Leave(u32),
+}
+
+impl VoiceRequest {
+    pub fn error(self, code: VoiceError) -> ServerMessage {
+        match self {
+            Self::Token(nonce) => ServerMessage::VoiceTokenResult {
+                v: PROTOCOL_VERSION,
+                nonce,
+                result: VoiceTokenResult::Error { code },
+            },
+            Self::Leave(nonce) => Self::left(nonce, Some(code)),
+        }
+    }
+
+    fn left(nonce: u32, error: Option<VoiceError>) -> ServerMessage {
+        ServerMessage::VoiceLeaveResult {
+            v: PROTOCOL_VERSION,
+            nonce,
+            error,
+        }
+    }
 }
 
 impl Registry {
@@ -85,6 +119,11 @@ impl Registry {
         };
         let (sender, receiver) = mpsc::channel(QUEUE_CAPACITY);
         rooms.insert(code.clone(), sender.clone());
+        let voice = self.config.voice.as_ref().and_then(|config| {
+            let mut instance = [0; 16];
+            getrandom::fill(&mut instance).ok()?;
+            Some(config.room(&encode_token(&instance)))
+        });
         let room = Room {
             game_kind,
             settings: module(game_kind).default_settings(),
@@ -97,9 +136,44 @@ impl Registry {
             empty_since: Some(Instant::now()),
             config: self.config.clone(),
             registry: Arc::downgrade(&self.rooms),
+            voice,
+            next_voice_id: 1,
         };
         tokio::spawn(room.run(receiver));
         Ok(sender)
+    }
+}
+
+pub(crate) async fn request_voice(
+    sender: &mpsc::Sender<Command>,
+    connection_id: u64,
+    request: VoiceRequest,
+) -> ServerMessage {
+    let (reply, result) = oneshot::channel();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let command = Command::Voice {
+        connection_id,
+        request,
+        reply,
+    };
+    match sender.try_send(command) {
+        Ok(()) => {}
+        Err(mpsc::error::TrySendError::Full(command))
+            if matches!(request, VoiceRequest::Leave(_)) =>
+        {
+            match tokio::time::timeout_at(deadline, sender.send(command)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) => return request.error(VoiceError::NotInRoom),
+                Err(_) => return request.error(VoiceError::VoiceUnavailable),
+            }
+        }
+        Err(mpsc::error::TrySendError::Full(_)) => return request.error(VoiceError::RateLimited),
+        Err(mpsc::error::TrySendError::Closed(_)) => return request.error(VoiceError::NotInRoom),
+    }
+    match tokio::time::timeout_at(deadline, result).await {
+        Ok(Ok(response)) => response,
+        Ok(Err(_)) => request.error(VoiceError::NotInRoom),
+        Err(_) => request.error(VoiceError::VoiceUnavailable),
     }
 }
 
@@ -163,6 +237,8 @@ struct MemberState {
     token: [u8; 16],
     connection: Option<Peer>,
     offline_since: Option<Instant>,
+    voice: Option<VoiceLease>,
+    last_voice_grant: Option<Instant>,
 }
 
 struct Room {
@@ -177,6 +253,8 @@ struct Room {
     empty_since: Option<Instant>,
     config: Config,
     registry: Weak<Rooms>,
+    voice: Option<VoiceRoom>,
+    next_voice_id: u64,
 }
 
 impl Room {
@@ -201,10 +279,18 @@ impl Room {
                         let member = self.members.iter().any(|m| m.connection.as_ref().is_some_and(|p| p.id == peer.id));
                         let _ = reply.send(member);
                     }
+                    Some(Command::Voice { connection_id, request, reply }) => {
+                        let now = Instant::now();
+                        if self.expire(now) { break; }
+                        if !reply.is_closed() || matches!(request, VoiceRequest::Leave(_)) {
+                            let _ = reply.send(self.voice_request(connection_id, request, now));
+                        }
+                    }
                     Some(Command::Disconnect { connection_id }) => {
                         let now = Instant::now();
                         if let Some(member) = self.members.iter_mut().find(|m| m.connection.as_ref().is_some_and(|p| p.id == connection_id)) {
                             member.connection = None;
+                            member.voice = None;
                             member.view.online = false;
                             member.offline_since = Some(now);
                             self.track_empty(now);
@@ -223,6 +309,51 @@ impl Room {
         }
         if let Some(registry) = self.registry.upgrade() {
             registry.lock().unwrap().remove(&self.code);
+        }
+    }
+
+    fn voice_request(
+        &mut self,
+        connection_id: u64,
+        request: VoiceRequest,
+        now: Instant,
+    ) -> ServerMessage {
+        let Some(member) = self
+            .members
+            .iter_mut()
+            .find(|m| m.connection.as_ref().is_some_and(|p| p.id == connection_id))
+        else {
+            return request.error(VoiceError::NotInRoom);
+        };
+        match request {
+            VoiceRequest::Leave(nonce) => {
+                member.voice = None;
+                VoiceRequest::left(nonce, None)
+            }
+            VoiceRequest::Token(nonce) => {
+                let Some(room) = &self.voice else {
+                    return request.error(VoiceError::VoiceDisabled);
+                };
+                if member
+                    .last_voice_grant
+                    .is_some_and(|last| now.duration_since(last) < Duration::from_secs(2))
+                {
+                    return request.error(VoiceError::RateLimited);
+                }
+                let identity = format!("m-{}-a-{}", member.view.id, self.next_voice_id);
+                let (result, lease) = match room.grant(identity) {
+                    Ok(grant) => grant,
+                    Err(code) => return request.error(code),
+                };
+                self.next_voice_id += 1;
+                member.last_voice_grant = Some(now);
+                member.voice = Some(lease);
+                ServerMessage::VoiceTokenResult {
+                    v: PROTOCOL_VERSION,
+                    nonce,
+                    result,
+                }
+            }
         }
     }
 
@@ -350,6 +481,8 @@ impl Room {
                     token,
                     connection: Some(peer.clone()),
                     offline_since: None,
+                    voice: None,
+                    last_voice_grant: None,
                 });
                 self.empty_since = None;
                 self.maintain_host(now);
@@ -360,6 +493,7 @@ impl Room {
                     token: encode_token(&token),
                     room: self.view(&id),
                     game: self.game.as_ref().map(|game| game.snapshot(&id)),
+                    voice_enabled: self.voice.is_some(),
                 });
             }
             ClientMessage::RejoinRoom { token, .. } => {
@@ -372,6 +506,8 @@ impl Room {
                 if let Some(old) = member.connection.replace(peer.clone()) {
                     old.replace();
                 }
+                member.voice = None;
+                member.last_voice_grant = None;
                 member.view.online = true;
                 member.offline_since = None;
                 let id = member.view.id.clone();
@@ -384,6 +520,7 @@ impl Room {
                     token: encode_token(&token),
                     room: self.view(&id),
                     game: self.game.as_ref().map(|game| game.snapshot(&id)),
+                    voice_enabled: self.voice.is_some(),
                 });
             }
             message => {

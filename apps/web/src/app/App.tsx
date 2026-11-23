@@ -6,6 +6,8 @@ import '../shared/saloon.css';
 import { PROTOCOL_VERSION } from '../generated/protocol';
 import type { ClientMessage, RoomView, ServerMessage } from '../generated/protocol';
 import Room from '../features/rooms/Room';
+import VoiceControls from '../features/rooms/VoiceControls';
+import { createVoice } from '../features/rooms/voice';
 import { consumeFrames, initialGameState, inputLocked, receiveGameState } from '../shared/gameSync';
 import type { GameSyncState } from '../shared/gameSync';
 import { errorMessages } from '../shared/lib/errors';
@@ -30,6 +32,7 @@ export default function App() {
   const session = useRef(initialSession);
   const socket = useRef<WebSocket | null>(null);
   const membership = useRef<WebSocket | null>(null);
+  const [voice] = useState(createVoice);
   const [room, setRoom] = useState<RoomView | null>(null);
   const roomRef = useRef<RoomView | null>(null);
   const entry = useRef<{ type: 'create_room' | 'join_room' | 'rejoin_room'; code?: string; invite: boolean; path: string; cancelled?: boolean } | null>(null);
@@ -52,7 +55,8 @@ export default function App() {
     reconnect(connection, 'Máy chủ chưa phản hồi sau 15 giây. Đang kết nối lại để đồng bộ trạng thái.');
   }));
 
-  function clearRequest(connection: WebSocket) {
+  function clearRequest(connection: WebSocket, mayResume = true) {
+    voice.detach(connection, mayResume);
     requests.cancel(connection);
     membership.current = null;
     switching.current = null; entry.current = null;
@@ -83,7 +87,11 @@ export default function App() {
   function setGameSync(next: GameSyncState) { gameRef.current = next; setGameState(next); }
   const consumeGameFrames = useCallback((through: number) => setGameSync(consumeFrames(gameRef.current, through)), []);
   function updateRoom(next: RoomView | null) { roomRef.current = next; setRoom(next); if (next) void loadGame(next.game).catch(() => undefined); }
-  function forgetSession() { session.current = null; saveSession(null); }
+  function forgetSession() {
+    if (socket.current) voice.detach(socket.current, false);
+    session.current = null;
+    saveSession(null);
+  }
   function restoreForRoute(connection: WebSocket): boolean {
     if (!canRestore() || membership.current === connection || requests.pending || connection.readyState !== WebSocket.OPEN) return false;
     const saved = session.current!;
@@ -111,6 +119,17 @@ export default function App() {
     if (connection) restoreForRoute(connection);
   }, [location.pathname]);
   useEffect(() => { document.title = room ? `18h40 — Phòng ${room.code}` : '18h40 — Phòng chơi cùng hội'; }, [room?.code]);
+  useEffect(() => {
+    const onVisibility = () => { if (document.hidden) voice.stopMic(); };
+    window.addEventListener('blur', voice.stopMic);
+    window.addEventListener('pagehide', voice.leave);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('blur', voice.stopMic);
+      window.removeEventListener('pagehide', voice.leave);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [voice]);
 
   useEffect(() => {
     let stopped = false;
@@ -131,6 +150,10 @@ export default function App() {
         try {
           if (socket.current !== connection) return;
           const message: ServerMessage = JSON.parse(event.data);
+          if (message.type === 'voice_token_result' || message.type === 'voice_leave_result') {
+            voice.receive(connection, message);
+            return;
+          }
           if (message.v !== PROTOCOL_VERSION) throw new Error('Unsupported protocol version');
           // Only a user-initiated entry switches the saved membership; opening an invite never does.
           if (switching.current === 'restore' && (message.type === 'joined' || message.type === 'error')) {
@@ -172,6 +195,7 @@ export default function App() {
           switch (message.type) {
             case 'joined':
               membership.current = connection;
+              voice.attach(connection, message.token, message.voice_enabled === true);
               session.current = { roomCode: message.room_code, token: message.token };
               saveSession(session.current);
               updateRoom(message.room);
@@ -196,6 +220,7 @@ export default function App() {
               break;
             case 'error':
               leaving.current = false;
+              if (message.code === 'not_in_room') voice.detach(connection, false);
               setErrorCode(message.code);
               setError(message.code === 'room_not_found' && entry.current?.code ? `Không tìm thấy phòng ${entry.current.code}` : errorMessages[message.code] ?? 'Không xử lý được yêu cầu. Hãy tải lại trang.');
               if (message.code === 'invalid_token' || message.code === 'room_not_found') forgetSession();
@@ -222,11 +247,14 @@ export default function App() {
           reconnect(connection, 'Không đọc được phản hồi từ máy chủ. Đang kết nối lại để đồng bộ trạng thái.');
         }
       };
-      connection.onerror = () => connection.close();
+      connection.onerror = () => {
+        if (socket.current === connection) voice.detach(connection, true);
+        connection.close();
+      };
       connection.onclose = (event) => {
         if (stopped || socket.current !== connection) return;
         connection.onopen = null; connection.onmessage = null; connection.onerror = null; connection.onclose = null;
-        clearRequest(connection);
+        clearRequest(connection, event.code !== 4001);
         if (event.code === 4001) {
           setStatus('Mất kết nối');
           setRestoring(false);
@@ -244,6 +272,7 @@ export default function App() {
       clearTimeout(timer);
       const connection = socket.current;
       if (connection) {
+        voice.detach(connection, false);
         requests.cancel(connection);
         connection.onopen = null;
         connection.onmessage = null;
@@ -258,7 +287,10 @@ export default function App() {
   function send(message: ClientMessage) {
     const connection = socket.current;
     if (connection?.readyState !== WebSocket.OPEN || inputLocked({ connected: status === 'Đã kết nối', pending: requests.pending, restoring, desynced: gameRef.current.desynced })) return;
-    if (message.type === 'leave_room') leaving.current = true;
+    if (message.type === 'leave_room') {
+      leaving.current = true;
+      voice.leave();
+    }
     if (message.type === 'join_room' || message.type === 'create_room') {
       if (message.type === 'join_room') {
         const normalized = normalizeRoomCode(message.room_code);
@@ -290,6 +322,7 @@ export default function App() {
       <p className="connection-status mt-3 text-sm text-stone-600" role="status" aria-live="polite">{status}{status === 'Đang kết nối lại…' ? ' Hãy kiểm tra mạng; phiên sẽ tự khôi phục.' : status === 'Mất kết nối' ? ' Hãy tải lại trang để vào lại.' : ''}</p>
       {gameState.desynced && <p className="connection-alert mt-5 border-l-2 border-amber-700 pl-3 text-sm text-amber-900" role="alert">Bàn chơi đang mất đồng bộ. Đang kết nối lại để lấy trạng thái mới; tạm khóa thao tác.</p>}
       {error && <p className="connection-alert mt-5 border-l-2 border-red-700 pl-3 text-sm text-red-800" role="alert">{error}</p>}
+      {room && <VoiceControls voice={voice} members={room.members} blocked={leaving.current || blocker.state === 'blocked'} />}
       <Suspense fallback={null}><div className="app-scenes"><AnimatePresence initial={false}><SceneTransition key={sceneKey}>
       {room ? <Room room={room} sync={gameState} consume={consumeGameFrames} fxEnabled={status === 'Đã kết nối' && !restoring && !gameState.desynced} disabled={disabled} pending={pending} requestVersion={requestVersion} actionError={error} actionErrorCode={errorCode} send={send} /> : restoring ? <section className="saloon-restoring"><SaloonBackdrop /><div className="saloon-poster"><h2 data-scene-title tabIndex={-1}>Đang vào lại phòng</h2><p role="status">Đang khôi phục phiên. Bạn sẽ trở về đúng chỗ khi kết nối thành công.</p></div></section> : <Lobby disabled={disabled} send={send} inviteCode={code === undefined ? null : route.code} previousRoom={session.current?.roomCode} returnToRoom={() => { const saved = session.current; if (saved) void navigate(roomPath(saved.roomCode)); }} dismissInvite={() => void navigate('/')} />}
       </SceneTransition></AnimatePresence></div></Suspense>

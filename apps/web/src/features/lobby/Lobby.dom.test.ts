@@ -36,7 +36,7 @@ after(async () => {
 // Drive the shell with authoritative snapshots while keeping DOM scenarios readable.
 type RoomProps = { room: RoomView; game: typeof demoGame | null; disabled: boolean; fxEnabled: boolean; viewer: number; log: unknown[]; fxBatch: null; soundBatch: null; send: (message: ClientMessage) => void };
 function Room(props: RoomProps) {
-  const snapshot = () => receiveGameState(initialGameState, { v: PROTOCOL_VERSION, type: 'joined', room_code: props.room.code, token: 'test', room: props.room, game: props.game ? { ...props.game, view: { game: 'bang', payload: props.game.view } } : null });
+  const snapshot = () => receiveGameState(initialGameState, { v: PROTOCOL_VERSION, type: 'joined', voice_enabled: false, room_code: props.room.code, token: 'test', room: props.room, game: props.game ? { ...props.game, view: { game: 'bang', payload: props.game.view } } : null });
   const [sync, setSync] = useState(snapshot);
   const previous = useRef({ game: props.game, phase: props.room.phase });
   if (previous.current.game !== props.game || previous.current.phase !== props.room.phase) {

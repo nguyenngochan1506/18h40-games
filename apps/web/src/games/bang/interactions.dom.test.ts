@@ -426,7 +426,7 @@ for (const success of [true, false]) test(`real Client drag ${success ? 'waits f
   let receive!: (message: ServerMessage) => void;
   let nonce!: number;
   function Harness() {
-    const [sync, setSync] = useState(() => receiveGameState(initialGameState, { v: PROTOCOL_VERSION, type: 'joined', room_code: demoRoom.code, token: 'test', room: demoRoom, game: { ...game, view: { game: 'bang', payload: game.view } } }));
+    const [sync, setSync] = useState(() => receiveGameState(initialGameState, { v: PROTOCOL_VERSION, type: 'joined', voice_enabled: false, room_code: demoRoom.code, token: 'test', room: demoRoom, game: { ...game, view: { game: 'bang', payload: game.view } } }));
     const [pending, setPending] = useState(false), [requestVersion, setRequestVersion] = useState(0), [error, setError] = useState<string | null>(null);
     const consume = useCallback((through: number) => setSync(current => consumeFrames(current, through)), []);
     receive = message => {

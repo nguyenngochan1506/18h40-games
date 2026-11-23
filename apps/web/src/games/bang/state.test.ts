@@ -44,7 +44,7 @@ test('seq accepts the next snapshot and ignores duplicate setup, stale, backward
 });
 
 test('authoritative joined snapshots resync any seq; waiting/left clear the board', () => {
-  const joined: ServerMessage = { v: PROTOCOL_VERSION, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game: demoGame };
+  const joined: ServerMessage = { v: PROTOCOL_VERSION, type: 'joined', voice_enabled: false, room_code: 'ABCDE', room: demoRoom, token: 'secret', game: demoGame };
   assert.equal(receiveGame(initial, joined), demoGame);
   assert.equal(receiveGame(demoGame, { v: PROTOCOL_VERSION, type: 'room_state', room: demoRoom }), demoGame);
   assert.equal(receiveGame(demoGame, { v: PROTOCOL_VERSION, type: 'room_state', room: { ...demoRoom, phase: 'waiting' } }), null);
@@ -61,7 +61,7 @@ test('seq gaps lock the board until an authoritative snapshot, while stale packe
   assert.equal(gap.desynced, true);
   assert.equal(inputLocked({ connected: true, pending: false, restoring: false, desynced: gap.desynced }), true);
   assert.equal(receiveGameState(gap, update(1)), gap);
-  const restored = receiveGameState(gap, { v: PROTOCOL_VERSION, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game: demoGame });
+  const restored = receiveGameState(gap, { v: PROTOCOL_VERSION, type: 'joined', voice_enabled: false, room_code: 'ABCDE', room: demoRoom, token: 'secret', game: demoGame });
   assert.equal(restored.game, demoGame);
   assert.equal(restored.desynced, false);
 });
@@ -101,7 +101,7 @@ test('rejoin starts a bounded history without replay, preserves own nickname aft
   const table = structuredClone(selectGameView(demoGame.view).table);
   table.players[0].alive = false;
   const deadGame = { ...demoGame, view: { perspective: 'spectator' as const, view: table } };
-  const joined = { v: PROTOCOL_VERSION, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game: deadGame } satisfies ServerMessage;
+  const joined = { v: PROTOCOL_VERSION, type: 'joined', voice_enabled: false, room_code: 'ABCDE', room: demoRoom, token: 'secret', game: deadGame } satisfies ServerMessage;
   state = receiveGameState(gap, joined);
   assert.equal(state.log.length, 1);
   assert.match(state.log[0].text, /Lịch sử trước đó không có/);
@@ -122,7 +122,7 @@ test('blind store snapshots retain only slot counts and rejoin never replays a p
   game.view.view.table.store_slots = 3;
   game.view.view.table.waiting = { player: 0, pending_id: 104, kind: { type: 'general_store' } };
   game.view.view.choices = [];
-  const joined = { v: PROTOCOL_VERSION, type: 'joined', room_code: 'ABCDE', room: demoRoom, token: 'secret', game } satisfies ServerMessage;
+  const joined = { v: PROTOCOL_VERSION, type: 'joined', voice_enabled: false, room_code: 'ABCDE', room: demoRoom, token: 'secret', game } satisfies ServerMessage;
   const state = receiveGameState(initialGameState, joined);
   assert.equal(selectGameView(state.game!.view).table.store_slots, 3);
   assert.deepEqual(selectGameView(state.game!.view).choices, []);

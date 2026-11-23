@@ -1,6 +1,7 @@
 use protocol::{
     ClientMessage, ErrorCode, GameAction, GameDelta, GameKind, GameSeat, GameSettings,
     GameSnapshot, GameView, Member, PROTOCOL_VERSION, Phase, Role, RoomView, ServerMessage,
+    VoiceError, VoiceTokenResult,
 };
 use std::{fs, path::Path};
 use ts_rs::TS;
@@ -55,6 +56,8 @@ fn main() -> std::io::Result<()> {
         Member::decl(&config),
         GameKind::decl(&config),
         RoomView::decl(&config),
+        VoiceError::decl(&config),
+        VoiceTokenResult::decl(&config),
         ClientMessage::decl(&config),
         ServerMessage::decl(&config),
     ];

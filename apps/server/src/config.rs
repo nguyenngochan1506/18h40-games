@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use crate::VoiceConfig;
+
 #[derive(Clone)]
 pub struct Config {
     pub game_seed: Option<u64>,
@@ -9,6 +11,7 @@ pub struct Config {
     pub max_rooms: usize,
     pub max_message_bytes: usize,
     pub allowed_origins: Vec<String>,
+    pub voice: Option<VoiceConfig>,
 }
 
 impl Default for Config {
@@ -21,6 +24,7 @@ impl Default for Config {
             max_rooms: 1000,
             max_message_bytes: 16 * 1024,
             allowed_origins: Vec::new(),
+            voice: None,
         }
     }
 }

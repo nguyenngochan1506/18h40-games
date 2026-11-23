@@ -74,7 +74,7 @@ test('snapshot, duplicate, out-of-order, desync and rejoin cannot produce audio 
   state = receiveGameState(state, setup); assert.deepEqual(kinds(state.soundBatch!.events), ['gamestart']);
   assert.equal(receiveGameState(state, setup), state);
   const gap = receiveGameState(state, { ...setup, seq: 2 }); assert.equal(gap.soundBatch, null);
-  const joined = receiveGameState(gap, { v: PROTOCOL_VERSION, type: 'joined', room_code: 'ABCDE', token: 'secret', room: demoRoom, game: { ...demoGame, seq: 0 } });
+  const joined = receiveGameState(gap, { v: PROTOCOL_VERSION, type: 'joined', voice_enabled: false, room_code: 'ABCDE', token: 'secret', room: demoRoom, game: { ...demoGame, seq: 0 } });
   assert.equal(joined.soundBatch, null); assert.equal(receiveGameState(joined, setup), joined);
   const batch = { id: 3, events: demoFx.shot.events, waiting: null };
   const ready = { enabled: true, hidden: false, muted: false };
