@@ -73,9 +73,43 @@ cargo build --workspace
 pnpm --filter web build
 ```
 
-Web build ra `apps/web/dist/`; web chạy qua Vite, server chưa phục vụ file tĩnh. Sau khi đổi protocol Rust, chạy `pnpm gen:types` và đưa `apps/web/src/generated/protocol.ts` vào cùng thay đổi. Script dùng ts-rs, sinh cả hằng version và type; chạy lại không đổi nội dung nếu Rust không đổi. `ping`/`pong` vẫn hỗ trợ, ví dụ `{"v":8,"type":"ping","nonce":42}`.
+Web build ra `apps/web/dist/`; web chạy qua Vite, server chưa phục vụ file tĩnh. Sau khi đổi protocol Rust, chạy `pnpm gen:types` và đưa `apps/web/src/generated/protocol.ts` vào cùng thay đổi. Script dùng ts-rs, sinh cả hằng version và type; chạy lại không đổi nội dung nếu Rust không đổi. `ping`/`pong` vẫn hỗ trợ, ví dụ `{"v":9,"type":"ping","nonce":42}`.
 
 Ở phòng chờ, chủ phòng có thể dùng `change_game` với trường `game` để chọn một game đã bật. Phòng giữ mã, thành viên và token vào lại. Người muốn chơi bấm **Tham gia ván**, còn chủ phòng có thể chỉnh cài đặt của game mới trước khi bắt đầu.
+
+## Thoại phòng
+
+Khi bật LiveKit, người chơi, khán giả và người đã bị loại đều có thể bấm **Vào thoại**. Thoại tiếp tục qua phòng chờ, bàn chơi, kết quả và các ván tiếp theo. Mic mặc định tắt. Chọn **Bật/tắt** hoặc **Giữ để nói** bằng chuột, chạm, Enter hay Space khi nút có tiêu điểm. Có thể bật thêm phím V trong chế độ giữ. Khi trình duyệt chặn phát tiếng, bấm **Bật âm thanh thoại**. **Rời thoại** giữ nguyên phiên chơi.
+
+### Chạy cục bộ
+
+Khởi động LiveKit bằng `livekit-server --dev --config deploy/livekit.voice.yml`. Trên Linux có thể dùng Compose với mạng host. [Tài liệu chạy LiveKit cục bộ](https://docs.livekit.io/transport/self-hosting/local/)
+
+```sh
+docker compose -f deploy/compose.livekit.yml up
+```
+
+Trong terminal chạy game server, dùng cặp khóa dev của LiveKit.
+
+```sh
+VOICE_ENABLED=true \
+LIVEKIT_PUBLIC_URL=ws://127.0.0.1:7880 \
+LIVEKIT_INTERNAL_URL=http://127.0.0.1:7880 \
+LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=secret \
+LIVEKIT_ROOM_NAMESPACE=18h40-local pnpm dev:server
+```
+
+Chạy `pnpm dev:web`, mở `http://localhost:5173` trong hai phiên trình duyệt riêng, vào cùng một phòng rồi thử nói và nghe theo cả hai chiều. Chế độ giữ tắt hẳn track mic khi nhả hoặc hủy. Nếu lần đầu hộp xin quyền mở lâu hơn lượt giữ, hãy giữ lại sau khi cấp quyền.
+
+### Cấu hình môi trường thật
+
+- `VOICE_ENABLED` mặc định là `false`. Game và `/healthz` vẫn chạy khi cấu hình thoại thiếu hoặc sai định dạng.
+- `LIVEKIT_PUBLIC_URL` là endpoint `wss://` trình duyệt truy cập qua TLS. Chỉ địa chỉ loopback được dùng `ws://`. `LIVEKIT_INTERNAL_URL` là endpoint gốc `http://` hoặc `https://` mà server game truy cập để gọi RoomService. Dùng HTTPS cho trang game khi thử trên điện thoại.
+- Đưa `LIVEKIT_API_KEY` và `LIVEKIT_API_SECRET` vào môi trường server qua secret của môi trường triển khai. Ngoài loopback, secret phải dài ít nhất 32 byte. Dùng `LIVEKIT_ROOM_NAMESPACE` riêng cho mỗi môi trường (mặc định `18h40`, tối đa 24 ký tự ASCII chữ, số và dấu gạch ngang).
+- Dùng một instance LiveKit riêng cho thoại game. Áp dụng `room.enabled_codecs` từ [deploy/livekit.voice.yml](deploy/livekit.voice.yml) để chỉ thương lượng `audio/opus` và `audio/red`. Nếu tạo room tường minh, giữ cùng danh sách codec cho room đó. [Cấu hình codec LiveKit v1.13.11](https://github.com/livekit/livekit/blob/v1.13.11/config-sample.yaml#L232-L249)
+- Mở cổng WebRTC và cấu hình TURN theo mạng triển khai. Tránh ghi query string của signaling và header Authorization trong log proxy vì SDK dùng token để bắt tay. [Cổng và firewall LiveKit](https://docs.livekit.io/transport/self-hosting/ports-firewall/)
+
+Server chỉ cấp JWT bắt tay 60 giây cho WebSocket đang giữ phiên thành viên. Khi rời thoại, rời phòng, mất kết nối hoặc bị thay tab, server dừng cấp token cho lượt cũ và dùng RoomService để ngắt participant. Với LiveKit tự host, token đã cấp vẫn có thể được dùng đến khi hết hạn. LiveKit cũng tự cấp token kết nối lại có thời hạn ít nhất 10 phút. Đây là giới hạn thu hồi của bản tự host với client cố tình giữ token. [Vòng đời và thu hồi token LiveKit](https://docs.livekit.io/frontends/reference/tokens-grants/#token-lifecycle)
 
 ## Triển khai
 

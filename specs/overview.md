@@ -26,7 +26,7 @@ BANG! làm trước và đã chơi được. Nền tảng đã module hóa theo 
 
 - Tài khoản, đăng nhập, DB, lịch sử ván, bảng xếp hạng.
 - Bot/AI làm người chơi.
-- Chat, voice (nhóm tự dùng kênh khác).
+- Chat văn bản.
 - Nhiều server, đa ngôn ngữ (i18n).
 
 ## 4. Quyết định của nền tảng

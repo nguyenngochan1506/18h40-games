@@ -1,0 +1,7 @@
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.11
+    network_mode: host
+    command: ["--dev", "--bind", "127.0.0.1", "--config", "/etc/livekit.yaml"]
+    volumes:
+      - ./livekit.voice.yml:/etc/livekit.yaml:ro

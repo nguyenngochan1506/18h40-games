@@ -1,0 +1,4 @@
+room:
+  enabled_codecs:
+    - mime: audio/opus
+    - mime: audio/red
