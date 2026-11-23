@@ -31,6 +31,8 @@ const reachable = new Set();
 function visit(key) { if (reachable.has(key)) return; reachable.add(key); for (const next of manifest[key]?.imports ?? []) visit(next); }
 for (const [key, value] of Object.entries(manifest)) if (value.isEntry) visit(key);
 assert.ok(!reachable.has('src/games/bang/index.ts') && !reachable.has('src/games/bang/fx/ParticleRenderer.ts'), 'Shell must not eagerly import BANG or Pixi');
+const voiceKey = 'src/features/rooms/livekitVoice.ts';
+assert.ok(manifest[voiceKey]?.isDynamicEntry && !reachable.has(voiceKey), 'The LiveKit adapter must load only after joining voice');
 for (const game of ['uno', 'werewolf']) {
   const key = `src/games/${game}/client.ts`;
   assert.ok(manifest[key]?.isDynamicEntry, `${game} scaffold must be a lazy production chunk`);
