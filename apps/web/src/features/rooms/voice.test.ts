@@ -91,7 +91,6 @@ test('a listening membership resumes muted after two socket drops and ignores th
   const { voice, grant, opened, closed } = harness(async () => mic.stream);
   const first = socket(), second = socket(), third = socket(), fourth = socket();
   voice.attach(first, 'member-A', true);
-  voice.join();
   const initialRequest = first.sent.at(-1);
   grant(first);
   await settle();
@@ -131,6 +130,12 @@ test('a listening membership resumes muted after two socket drops and ignores th
   await settle();
   assert.equal(opened(), 2);
   assert.equal(voice.snapshot().available, false);
+
+  const nextRoom = socket();
+  voice.attach(nextRoom, 'member-B', true);
+  assert.equal(nextRoom.sent[0]?.type, 'voice_token');
+  assert.equal(voice.snapshot().mic, 'off');
+  voice.detach(nextRoom, false);
 });
 
 for (const mediaFirst of [true, false]) {
@@ -174,7 +179,8 @@ for (const mediaFirst of [true, false]) {
     voice.detach(second, mediaFirst);
     const third = socket();
     voice.attach(third, 'member-A', true);
-    assert.equal(third.sent.length, 0);
+    assert.deepEqual(third.sent.map(message => message.type), mediaFirst ? [] : ['voice_token']);
+    voice.detach(third, false);
   });
 }
 

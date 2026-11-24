@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { useIsPresent } from 'motion/react';
 import type { Member } from '../../generated/protocol.ts';
 import type { Voice } from './voice.ts';
 import './voice.css';
@@ -7,11 +8,26 @@ const editTarget = 'input,textarea,select,[contenteditable]:not([contenteditable
 const interactiveTarget = 'button,a,summary,[role="button"]';
 const overlayTarget = 'dialog[open],:popover-open,[aria-modal="true"]';
 
+const paths = {
+  mic: 'M9 5a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0ZM5 10v1a7 7 0 0 0 14 0v-1M12 18v4m-4 0h8',
+  muted: 'm3 3 18 18M9 8V5a3 3 0 0 1 6 0v6M9 11a3 3 0 0 0 4.6 2.5M5 9v2a7 7 0 0 0 11.3 5.5M19 9v2c0 .8-.1 1.6-.4 2.3M12 18v4m-4 0h8',
+  headphones: 'M3 14v-2a9 9 0 0 1 18 0v2M3 14h4v6H3Zm14 0h4v6h-4Z',
+  settings: 'M4 7h8m4 0h4M4 17h4m4 0h8M12 7a2 2 0 1 0 4 0 2 2 0 0 0-4 0ZM8 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0Z',
+  audio: 'M3 9h4l5-4v14l-5-4H3Zm12 0a4 4 0 0 1 0 6m3-8a7 7 0 0 1 0 10',
+};
+
+function VoiceIcon({ name }: { name: keyof typeof paths }) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
+}
+
 export default function VoiceControls({ voice, members, blocked }: { voice: Voice; members: Member[]; blocked: boolean }) {
   const state = useSyncExternalStore(voice.subscribe, voice.snapshot);
+  const present = useIsPresent();
+  const id = useId();
   const holdButton = useRef<HTMLButtonElement>(null);
+  const settingsButton = useRef<HTMLButtonElement>(null);
   const owner = useRef(Symbol('voice controls')).current;
-  const holding = state.phase === 'listening' && state.mode === 'hold' && !blocked;
+  const holding = present && state.phase === 'listening' && state.mode === 'hold' && !blocked;
 
   useLayoutEffect(() => { if (blocked) voice.stopMic(); }, [blocked, voice]);
   useEffect(() => {
@@ -68,36 +84,66 @@ export default function VoiceControls({ voice, members, blocked }: { voice: Voic
     };
   }, [holding, owner, state.shortcut, voice]);
 
-  if (!state.available) return null;
+  if (!state.available || !present) return null;
   const listening = state.phase === 'listening';
   const joined = listening || state.phase === 'joining' || state.phase === 'reconnecting';
   const speakers = members.filter(member => state.speakers.includes(member.id)).map(member => member.nickname);
-  const mic = state.mic === 'on' ? 'Mic đang bật' : state.mic === 'starting' ? 'Đang mở mic…' : 'Mic tắt';
-  return <section className="room-voice" aria-label="Thoại phòng">
-    <div className="voice-actions">
-      {!joined && <button type="button" className="western-button" data-voice-join disabled={blocked || state.phase === 'offline'} onClick={voice.join}>Vào thoại</button>}
-      {listening && (state.mode === 'toggle'
-        ? <button type="button" className="western-button" data-voice-mic disabled={blocked} onClick={voice.toggleMic}>{state.mic === 'off' ? 'Bật mic' : 'Tắt mic'}</button>
-        : <button type="button" className="western-button voice-hold" data-voice-mic ref={holdButton} disabled={blocked} aria-keyshortcuts={state.shortcut ? 'V' : undefined}
-          onPointerDown={event => {
-            if (!event.isPrimary || event.button !== 0 || document.querySelector(overlayTarget)) return;
-            if (voice.startHold(owner, `pointer:${event.pointerId}`)) {
-              try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Window listeners also end the hold. */ }
-            }
-          }}
-          onPointerMove={event => { if (event.pointerType === 'mouse' && event.buttons === 0) voice.endHold(owner, `pointer:${event.pointerId}`); }}
-          onLostPointerCapture={event => voice.endHold(owner, `pointer:${event.pointerId}`)}
-          onBlur={() => voice.endHold(owner)}
-          onContextMenu={event => event.preventDefault()}>Giữ để nói</button>)}
-      {(joined || state.resumeOnReconnect) && <button type="button" className="western-button quiet-button" data-voice-leave disabled={blocked} onClick={voice.leave}>Rời thoại</button>}
-      {listening && state.playbackBlocked && <button type="button" className="western-button" disabled={blocked} onClick={voice.startAudio}>Bật âm thanh thoại</button>}
-    </div>
-    {listening && <div className="voice-options">
+  const micOn = state.mic === 'on';
+  const connecting = !listening && (joined || state.phase === 'offline');
+  const micLabel = listening
+    ? state.mode === 'hold' ? 'Giữ để nói' : state.mic === 'off' ? 'Bật mic' : 'Tắt mic'
+    : state.phase === 'joining' ? 'Đang vào thoại' : connecting ? 'Đang kết nối lại thoại' : 'Vào thoại';
+  const shortcut = holding && state.shortcut;
+  return <div className="room-voice" role="group" aria-label="Thoại phòng">
+    <span className="icon-hint">
+      <button type="button" className={`western-button voice-icon${holding ? ' voice-hold' : ''}`} ref={holdButton}
+        data-voice-mic={listening ? '' : undefined} data-voice-join={!joined ? '' : undefined} data-live={micOn}
+        disabled={blocked || connecting} aria-label={micLabel} aria-describedby={`${id}-mic`}
+        aria-keyshortcuts={shortcut ? 'V' : undefined} aria-busy={connecting || state.mic === 'starting' || undefined}
+        aria-pressed={listening && state.mode === 'toggle' ? micOn : undefined}
+        onClick={!listening ? voice.join : state.mode === 'toggle' ? voice.toggleMic : undefined}
+        onPointerDown={holding ? event => {
+          if (!event.isPrimary || event.button !== 0 || document.querySelector(overlayTarget)) return;
+          if (voice.startHold(owner, `pointer:${event.pointerId}`)) {
+            try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Window listeners also end the hold. */ }
+          }
+        } : undefined}
+        onPointerMove={event => { if (event.pointerType === 'mouse' && event.buttons === 0) voice.endHold(owner, `pointer:${event.pointerId}`); }}
+        onLostPointerCapture={event => voice.endHold(owner, `pointer:${event.pointerId}`)}
+        onBlur={() => voice.endHold(owner)}
+        onContextMenu={holding ? event => event.preventDefault() : undefined}>
+        <VoiceIcon name={micOn ? 'mic' : listening || connecting ? 'muted' : 'headphones'} />
+      </button>
+      <span className="icon-hint-text" id={`${id}-mic`} role="tooltip">{micLabel}{shortcut && <> <kbd>V</kbd></>}</span>
+    </span>
+    {listening && state.playbackBlocked && <span className="icon-hint">
+      <button type="button" className="western-button voice-icon" disabled={blocked} aria-label="Bật âm thanh thoại" aria-describedby={`${id}-audio`} onClick={voice.startAudio}><VoiceIcon name="audio" /></button>
+      <span className="icon-hint-text" id={`${id}-audio`} role="tooltip">Bật âm thanh thoại</span>
+    </span>}
+    <span className="icon-hint">
+      <button type="button" className="western-button voice-icon" ref={settingsButton} disabled={blocked}
+        aria-label="Mở cài đặt thoại" aria-describedby={`${id}-settings`} popoverTarget={id}><VoiceIcon name="settings" /></button>
+      <span className="icon-hint-text" id={`${id}-settings`} role="tooltip">Mở cài đặt thoại</span>
+    </span>
+    <div className="voice-options western-wood" id={id} popover="auto" onBeforeToggle={event => {
+      if (event.newState !== 'open' || !settingsButton.current) return;
+      voice.endHold(owner);
+      const { top, bottom, right } = settingsButton.current.getBoundingClientRect();
+      const below = window.innerHeight - bottom >= Math.min(top, 250);
+      const panel = event.currentTarget;
+      panel.style.left = `clamp(12px, ${right - 260}px, 100% - min(260px, 100% - 24px) - 12px)`;
+      panel.style.top = below ? `${bottom + 8}px` : 'auto';
+      panel.style.bottom = below ? 'auto' : `${window.innerHeight - top + 8}px`;
+      panel.style.maxHeight = `${Math.max(0, (below ? window.innerHeight - bottom : top) - 20)}px`;
+    }}>
       <label>Chế độ mic <select value={state.mode} disabled={blocked} onChange={event => voice.setMode(event.currentTarget.value === 'hold' ? 'hold' : 'toggle')}><option value="toggle">Bật/tắt</option><option value="hold">Giữ để nói</option></select></label>
-      {state.mode === 'hold' && <label><input type="checkbox" checked={state.shortcut} disabled={blocked} onChange={event => voice.setShortcut(event.currentTarget.checked)} /> Phím V</label>}
-    </div>}
-    {(joined || state.phase === 'offline') && <p className="voice-status" role="status">{listening ? `Đã vào thoại · ${mic}` : state.phase === 'joining' ? 'Đang vào thoại…' : 'Đang kết nối lại thoại…'}</p>}
-    {speakers.length > 0 && <p className="voice-speakers">Đang nói · {speakers.join(', ')}</p>}
+      {state.mode === 'hold' && <label><input type="checkbox" checked={state.shortcut} disabled={blocked} onChange={event => voice.setShortcut(event.currentTarget.checked)} /> Bật phím tắt <kbd>V</kbd></label>}
+      {speakers.length > 0 && <p className="voice-speakers">Đang nói · {speakers.join(', ')}</p>}
+      {(joined || state.resumeOnReconnect) && <button type="button" className="western-button quiet-button" data-voice-leave disabled={blocked} onClick={event => {
+        event.currentTarget.closest<HTMLElement>('[popover]')?.hidePopover();
+        voice.leave();
+      }}>Rời thoại</button>}
+    </div>
     {state.error && <p className="voice-error" role="status">{state.error}</p>}
-  </section>;
+  </div>;
 }

@@ -33,12 +33,12 @@ function Board(props: GameBoardProps) {
   useEffect(() => {
     if (props.actionErrorCode === 'illegal_action' && props.fxEnabled) void sound.play('invalid');
   }, [props.actionErrorCode]);
-  if (!game || !ready) return <section className="saloon-restoring"><p role="status">Đang tải bàn chơi…</p><button className="western-button" onClick={props.leaveRoom}>Rời phòng</button></section>;
+  if (!game || !ready) return <section className="saloon-restoring"><p role="status">Đang tải bàn chơi…</p><button className="western-button" onClick={props.leaveRoom}>Rời phòng</button>{props.roomTools}</section>;
   const over = !!selectGameView(game.view).table.winner;
   return <RawBoard game={game} room={room} log={state.log} fxBatch={state.fxBatch} soundBatch={state.soundBatch} viewer={sync.viewer}
     disabled={props.disabled || sync.frames.length > 0} pending={props.pending} requestVersion={boardRequestVersion} actionError={props.actionError}
     fxEnabled={props.fxEnabled} sendAction={payload => props.sendAction({ game: 'bang', payload })} endGame={props.endGame} leaveRoom={props.leaveRoom}
-    roomMenu={<>{props.roomMenu}{room.host === room.you && !over && <button className="action secondary" disabled={props.disabled} onClick={props.hostSkip}>Bỏ qua lượt chờ</button>}</>} />;
+    roomTools={props.roomTools} roomMenu={<>{props.roomMenu}{room.host === room.you && !over && <button className="action secondary" disabled={props.disabled} onClick={props.hostSkip}>Bỏ qua lượt chờ</button>}</>} />;
 }
 
 export const client: GameClient = { Board, Settings, Root: GameLifetime };

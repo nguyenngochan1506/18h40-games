@@ -5,7 +5,8 @@ import type { MediaEvents, VoiceMedia } from './voice.ts';
 setLogLevel('silent');
 
 export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
-  const room = new Room();
+  // Separate send and receive negotiation to avoid Chromium errors during simultaneous muted joins.
+  const room = new Room({ singlePeerConnection: false });
   const audio = new Map<RemoteTrack, HTMLMediaElement>();
   let closed = false;
   let micWork = Promise.resolve();

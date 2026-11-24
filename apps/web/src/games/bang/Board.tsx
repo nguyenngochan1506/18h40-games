@@ -1,5 +1,5 @@
 import GameScope from './GameScope';
-import { Fragment, forwardRef, lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, forwardRef, lazy, Suspense, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, m, useIsPresent, useDragControls } from 'motion/react';
 import { GameMotion, MotionCount, MotionPanel, tableSpring, useTableMotion } from './GameMotion';
 import GameDeal from './GameDeal';
@@ -174,7 +174,7 @@ function Seat({ player, nickname, own, turn, waiting, presence, inspect, inspect
   </article>;
 }
 
-function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch = null, soundBatch = fxBatch, fxEnabled = true, ambientEnabled = true, viewer = game.view.perspective === 'player' ? game.view.view.you : null, endGame, leaveRoom, roomMenu, pending = false, requestVersion = 0, actionError = null }: { game: GameSnapshot; room: RoomView; disabled?: boolean; pending?: boolean; requestVersion?: number; actionError?: string | null; sendAction?: (action: Action) => void; log?: LogEntry[]; fxBatch?: FxBatch | null; soundBatch?: FxBatch | null; fxEnabled?: boolean; ambientEnabled?: boolean; viewer?: number | null; endGame?: () => void; leaveRoom?: () => void; roomMenu?: ReactNode }) {
+function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch = null, soundBatch = fxBatch, fxEnabled = true, ambientEnabled = true, viewer = game.view.perspective === 'player' ? game.view.view.you : null, endGame, leaveRoom, roomMenu, roomTools, pending = false, requestVersion = 0, actionError = null }: { game: GameSnapshot; room: RoomView; disabled?: boolean; pending?: boolean; requestVersion?: number; actionError?: string | null; sendAction?: (action: Action) => void; log?: LogEntry[]; fxBatch?: FxBatch | null; soundBatch?: FxBatch | null; fxEnabled?: boolean; ambientEnabled?: boolean; viewer?: number | null; endGame?: () => void; leaveRoom?: () => void; roomMenu?: ReactNode; roomTools?: ReactNode }) {
   const { table, you, hand, choices } = selectGameView(game.view);
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   useEffect(() => {
@@ -206,6 +206,7 @@ function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch
   const [selectedPlayer, setSelectedPlayer] = useState<number | null>(null);
   const [effectsEnabled, setEffectsEnabled] = useState(true);
   const [journalOpen, setJournalOpen] = useState(false);
+  const journalTip = useId();
   const journalButton = useRef<HTMLButtonElement>(null);
   const journalScroll = useRef({ following: true, top: 0 });
   const inspectedOrigin = useRef<HTMLButtonElement | null>(null);
@@ -285,7 +286,7 @@ function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch
     <header className="board-heading"><p className="game-eyebrow">Phòng {room.code} · {table.players.length} người</p><h2 data-scene-title tabIndex={-1}>BANG!</h2><span className="view-label">{you === null ? 'Góc nhìn khán giả' : 'Miền Tây chờ bạn'}</span></header>
     {(() => { const banner = turnBanner(table, new Map(game.seats.map(seat => [seat.player_id, seat.nickname])), viewer ?? null); return <div className="turn-banner-slot" role="status" aria-live="polite"><AnimatePresence mode="wait" initial={false}>{banner && <m.div key={banner.key} className={`turn-banner${banner.own ? ' is-own' : ''}`} data-ui-motion="turn-banner" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: .18 }}>{banner.text}</m.div>}</AnimatePresence></div>; })()}
     {own && <aside className="player-hud" aria-label="Thông tin của bạn"><div className="hud-gun"><Icon name="gun" /><span>{guns?.length ? guns.map(gun => cards[gun!.kind].name).join(' + ') : 'Colt .45'}<strong>Tầm bắn: {own.weapon_range}</strong></span></div><div className="hud-health"><span>Máu</span><Bullets player={own} /></div><div className="hud-distance" title={distanceEffects || 'Không có hiệu chỉnh'}><Icon name="horse" /><span>{distanceEffects || 'Không có hiệu chỉnh'}</span></div>{ownJail !== undefined && <p className="hud-jail" role="status" aria-label={jailTurnsLabel(own, ownJail) ?? 'Bị Jail'}>Bị Jail{own.jail_turns_left != null ? ` · ${own.jail_turns_left} lượt` : ''}</p>}</aside>}
-    <nav className="table-tools" aria-label="Công cụ bàn chơi"><button type="button" className="round-control" title="Mở nhật ký" aria-label="Mở nhật ký" aria-expanded={journalOpen} aria-controls="table-journal" ref={journalButton} onClick={toggleJournal}><Icon name="log" /></button><button type="button" className="round-control" popoverTarget="room-menu" title="Cài đặt phòng" aria-label="Cài đặt phòng"><Icon name="gear" /></button></nav>
+    <nav className="table-tools" aria-label="Công cụ bàn chơi">{roomTools}<span className="icon-hint"><button type="button" className="round-control" aria-label="Mở nhật ký" aria-describedby={journalTip} aria-expanded={journalOpen} aria-controls="table-journal" ref={journalButton} onClick={toggleJournal}><Icon name="log" /></button><span className="icon-hint-text" id={journalTip} role="tooltip">Mở nhật ký</span></span><button type="button" className="round-control" popoverTarget="room-menu" title="Cài đặt phòng" aria-label="Cài đặt phòng"><Icon name="gear" /></button></nav>
     <RoomMenu><SoundControls />{stage && <section className="shortcut-help" aria-label="Phím tắt"><h3>Phím tắt</h3><p><kbd>1–9</kbd> Chọn hoặc xem lá tương ứng trên tay</p><p><kbd>Enter</kbd> Xác nhận hành động đang sẵn sàng</p><p><kbd>Esc</kbd> Hủy chọn hoặc đóng bảng đang xem</p><p><kbd>Tab</kbd> / <kbd>Shift+Tab</kbd> Chuyển giữa các thao tác</p></section>}{stage && <button type="button" className="action secondary" aria-pressed={effectsEnabled} onClick={() => setEffectsEnabled(!effectsEnabled)}>{effectsEnabled ? 'Tắt hiệu ứng' : 'Bật hiệu ứng'}</button>}{roomMenu ?? <><h3>Phòng {room.code}</h3><a className="action secondary" href="/">Về phòng</a></>}</RoomMenu>
     <AnimatePresence initial={false}>{!table.winner && <MotionPanel key={status} className="game-wait" role="status"><span aria-hidden="true">✦</span><p>{status}</p></MotionPanel>}</AnimatePresence>
     <div className="table-stage">

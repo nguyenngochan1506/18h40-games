@@ -4,7 +4,7 @@ import type { GameSyncState } from '../shared/gameSync.ts';
 
 export type GameBoardProps = {
   room: RoomView; sync: GameSyncState; disabled: boolean; pending: boolean; requestVersion: number;
-  actionError: string | null; actionErrorCode: string | null; fxEnabled: boolean; roomMenu: ReactNode;
+  actionError: string | null; actionErrorCode: string | null; fxEnabled: boolean; roomMenu: ReactNode; roomTools?: ReactNode;
   consume: (through: number) => void; sendAction: (action: GameAction) => void;
   endGame: () => void; leaveRoom: () => void; hostSkip: () => void;
 };

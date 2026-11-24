@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import type { ClientMessage, RoomView } from '../../generated/protocol';
 import { PROTOCOL_VERSION } from '../../generated/protocol';
@@ -11,7 +11,7 @@ import { games, registry } from '../../games/registry';
 import { inviteLink } from '../../shared/lib/roomRoute';
 import { copyText } from '../../shared/lib/clipboard';
 
-type Props = { room: RoomView; disabled: boolean; send: (message: ClientMessage) => void; Settings?: GameClient['Settings']; retryLoad?: () => void };
+type Props = { room: RoomView; roomTools?: ReactNode; disabled: boolean; send: (message: ClientMessage) => void; Settings?: GameClient['Settings']; retryLoad?: () => void };
 
 function ChangeGameForm({ options, disabled, send }: Pick<Props, 'disabled' | 'send'> & { options: GameInfo[] }) {
   const hintId = useId();
@@ -34,7 +34,7 @@ function ChangeGameForm({ options, disabled, send }: Pick<Props, 'disabled' | 's
   </form>;
 }
 
-export default function WaitingRoom({ room, disabled, send, Settings, retryLoad }: Props) {
+export default function WaitingRoom({ room, roomTools, disabled, send, Settings, retryLoad }: Props) {
   const reduced = useReducedMotion();
   const info = registry[room.game];
   const [copyStatus, setCopyStatus] = useState('');
@@ -105,6 +105,7 @@ export default function WaitingRoom({ room, disabled, send, Settings, retryLoad 
         </div>
       </div>
       <nav className="waiting-actions" aria-label="Thao tác phòng">
+        {roomTools}
         {waiting && <a className="western-button quiet-button" href="#room-overview">Về phòng</a>}
         <m.button {...feedback} className="western-button quiet-button" disabled={disabled} onClick={() => send({ v: PROTOCOL_VERSION, type: 'leave_room' })}>Rời phòng</m.button>
       </nav>

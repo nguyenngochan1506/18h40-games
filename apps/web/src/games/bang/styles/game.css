@@ -124,3 +124,11 @@
 .game-bang .sound-controls input:focus-visible { outline: 3px solid #ffe3a0; outline-offset: 3px; }
 
 .game-bang[data-bang-root], .game-bang-lifetime { display: contents; }
+
+@media (max-width: 600px) {
+ .game-bang .table-tools:has(.room-voice) { display: grid; grid-template-columns: repeat(2, 44px); }
+ .game-bang .table-tools > .room-voice { grid-column: 1 / -1; grid-row: 2; justify-self: end; gap: 4px; }
+ .game-bang.game-app:has(.table-tools .room-voice) > .connection-status,
+ .game-bang .bang-board:has(.table-tools .room-voice) #table-journal { top: 112px; }
+ .game-bang.game-app:has(.table-tools .room-voice) > .connection-alert { top: 144px; }
+}

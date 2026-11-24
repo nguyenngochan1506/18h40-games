@@ -168,3 +168,23 @@
   .saloon-app :is(button,a):active:not(:disabled) { opacity: .8; }
   .saloon-app :is(button,a.western-button) { min-width: 36px; min-height: 36px; }
 }
+
+.icon-hint { position: relative; display: inline-flex; flex-shrink: 0; }
+.icon-hint-text {
+  visibility: hidden;
+  position: absolute;
+  z-index: 2;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  max-width: 200px;
+  padding: 5px 8px;
+  background: #21160e;
+  border: 1px solid #a47e4e;
+  border-radius: 4px;
+  color: #ffe7bc;
+  font: 500 12px/1.4 system-ui, sans-serif;
+  pointer-events: none;
+}
+.icon-hint:hover > .icon-hint-text, .icon-hint > :focus-visible + .icon-hint-text { visibility: visible; }
+.table-tools .icon-hint-text { top: calc(100% + 6px); bottom: auto; left: auto; right: 0; }

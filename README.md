@@ -79,7 +79,7 @@ Web build ra `apps/web/dist/`; web chạy qua Vite, server chưa phục vụ fil
 
 ## Thoại phòng
 
-Khi bật LiveKit, người chơi, khán giả và người đã bị loại đều có thể bấm **Vào thoại**. Thoại tiếp tục qua phòng chờ, bàn chơi, kết quả và các ván tiếp theo. Mic mặc định tắt. Chọn **Bật/tắt** hoặc **Giữ để nói** bằng chuột, chạm, Enter hay Space khi nút có tiêu điểm. Có thể bật thêm phím V trong chế độ giữ. Khi trình duyệt chặn phát tiếng, bấm **Bật âm thanh thoại**. **Rời thoại** giữ nguyên phiên chơi.
+Khi bật LiveKit, người chơi, khán giả và người đã bị loại đều tự vào thoại khi vào phòng. Thoại tiếp tục qua phòng chờ, bàn chơi, kết quả và các ván tiếp theo. Mic mặc định tắt. Trong **Cài đặt thoại**, chọn **Bật/tắt** hoặc **Giữ để nói**. Dùng nút mic với chuột, chạm, Enter hoặc Space khi nút có tiêu điểm. Có thể bật thêm phím V trong chế độ giữ. Khi trình duyệt chặn phát tiếng, bấm **Bật âm thanh thoại**. Dùng **Rời thoại** trong menu để ngắt thoại và tiếp tục ở trong phòng.
 
 ### Chạy cục bộ
 

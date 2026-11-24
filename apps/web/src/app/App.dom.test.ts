@@ -396,16 +396,15 @@ test('room voice signaling and its controls survive a game transition while game
   const session = joined();
   assert.equal(session.type, 'joined');
   await fx.receive({ ...session, voice_enabled: true });
-  const voice = fx.container.querySelector('.room-voice');
+  const voice = fx.container.querySelector('.waiting-actions .room-voice');
   assert.ok(voice);
-  assert.deepEqual(fx.connection.commands().map(message => message.type), ['rejoin_room']);
+  assert.deepEqual(fx.connection.commands().map(message => message.type), ['rejoin_room', 'voice_token']);
   assert.equal(voiceMedia.opened, 0);
 
-  await fx.click('.waiting-primary button');
-  await fx.click('[data-voice-join]');
   const request = fx.connection.commands().at(-1);
   assert.equal(request?.type, 'voice_token');
-  assert.match(voice.textContent!, /Đang vào thoại/);
+  assert.equal(voice.querySelector('[aria-busy="true"]')?.getAttribute('aria-label'), 'Đang vào thoại');
+  await fx.click('.waiting-primary button');
   assert.equal(fx.connection.sent.filter(message => message.type === 'ping').length, 2);
   await vite.ssrLoadModule('/src/features/rooms/livekitVoice.ts');
   const grant = {
@@ -417,23 +416,28 @@ test('room voice signaling and its controls survive a game transition while game
     for (let turn = 0; !voiceMedia.opened && turn < 50; turn++) await delay(20);
   });
   assert.equal(voiceMedia.opened, 1, voice.textContent!);
-  assert.match(voice.textContent!, /Đã vào thoại · Mic tắt/);
+  assert.equal(voice.querySelector('[data-voice-mic]')?.getAttribute('aria-pressed'), 'false');
+  assert.equal(voice.querySelector('.voice-status'), null);
   assert.equal(fx.container.querySelector<HTMLButtonElement>('.waiting-primary button')!.disabled, true);
 
   await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: { ...session.room, phase: 'playing' } }, false);
   await fx.receive({ v: PROTOCOL_VERSION, type: 'game_started', seq: 0, seats: demoGame.seats,
     view: { game: 'bang', payload: demoGame.view } });
-  assert.equal(fx.container.querySelector('.room-voice'), voice);
+  for (let turn = 0; !fx.container.querySelector('.table-tools .room-voice') && turn < 10; turn++) await fx.tick();
+  assert.equal(fx.container.querySelector('.table-tools [data-voice-mic]')?.getAttribute('aria-pressed'), 'false');
 
   assert.ok(demoGame.view.perspective === 'player');
   const table = { ...demoGame.view.view.table, winner: 'outlaws' } as const;
   await fx.receive({ v: PROTOCOL_VERSION, type: 'game_over', seq: 1,
     update: { game: 'bang', events: [], view: { perspective: 'spectator', view: table } } }, false);
+  await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: session.room }, false);
+  assert.equal(fx.container.querySelector('.waiting-actions [data-voice-mic]')?.getAttribute('aria-pressed'), 'false');
   await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: {
     ...session.room, game: 'uno', settings: { game: 'uno', payload: {} },
   } }, false);
-  assert.equal(fx.container.querySelector('.room-voice'), voice);
-  assert.match(voice.textContent!, /Đã vào thoại · Mic tắt/);
+  const currentVoice = fx.container.querySelector('.saloon-restoring .room-voice');
+  assert.ok(currentVoice);
+  assert.equal(currentVoice.querySelector('[data-voice-mic]')?.getAttribute('aria-pressed'), 'false');
   assert.equal(voiceMedia.closed, 0);
 
   const createTrack = () => Object.assign(new dom.EventTarget(), {
@@ -450,9 +454,9 @@ test('room voice signaling and its controls survive a game transition while game
   } });
   t.after(() => { Reflect.deleteProperty(navigator, 'mediaDevices'); });
   assert.equal(tracks.length, 0, 'Listening must not open the microphone');
-  const mode = voice.querySelector<HTMLSelectElement>('select')!;
+  const mode = currentVoice.querySelector<HTMLSelectElement>('select')!;
   await act(() => { mode.value = 'hold'; mode.dispatchEvent(new Event('change', { bubbles: true })); });
-  const hold = voice.querySelector<HTMLButtonElement>('.voice-hold')!;
+  const hold = currentVoice.querySelector<HTMLButtonElement>('.voice-hold')!;
   await act(() => hold.focus());
   const pointer = (type: string) => new dom.PointerEvent(type, { bubbles: true, pointerId: 9, isPrimary: true, pointerType: 'touch' }) as unknown as PointerEvent;
   await act(() => hold.dispatchEvent(pointer('pointerdown')));
@@ -473,7 +477,7 @@ test('room voice signaling and its controls survive a game transition while game
   assert.equal(tracks[1]?.readyState, 'ended');
 
   await fx.click('.saloon-restoring button');
-  assert.deepEqual(fx.connection.commands().map(message => message.type), ['rejoin_room', 'start_game', 'voice_token', 'voice_leave', 'leave_room']);
+  assert.deepEqual(fx.connection.commands().map(message => message.type), ['rejoin_room', 'voice_token', 'start_game', 'voice_leave', 'leave_room']);
   assert.equal(voiceMedia.closed, 1);
   await fx.receive(grant, false);
   assert.equal(voiceMedia.opened, 1);
@@ -491,8 +495,7 @@ test('a malformed voice grant leaves the game request pending until its own pong
   await fx.click('.waiting-primary button');
 
   for (const v of [PROTOCOL_VERSION, PROTOCOL_VERSION - 1]) {
-    await fx.click('[data-voice-join]');
-    const request = fx.connection.commands().at(-1);
+    const request = fx.connection.commands().filter(message => message.type === 'voice_token').at(-1);
     assert.equal(request?.type, 'voice_token');
     await fx.receive({ v, type: 'voice_token_result', nonce: request.nonce, result: null } as unknown as ServerMessage, false);
     assert.equal(fx.connection.readyState, TestSocket.OPEN);
@@ -501,6 +504,7 @@ test('a malformed voice grant leaves the game request pending until its own pong
     assert.equal(fx.connection.commands().at(-1)?.type, 'voice_leave');
     assert.match(fx.container.querySelector('.voice-error')?.textContent ?? '', /thoại không hợp lệ/);
     assert.equal(fx.container.querySelector('.connection-alert'), null);
+    if (v === PROTOCOL_VERSION) await fx.click('[data-voice-join]');
   }
 
   await act(() => fx.connection.ack());

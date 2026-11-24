@@ -78,7 +78,7 @@ export function createVoice(
   let state: VoiceState = { available: false, resumeOnReconnect: false, phase: 'offline', mode: 'toggle', shortcut: false, mic: 'off', playbackBlocked: false, speakers: [], error: null };
   const listeners = new Set<() => void>();
   let membership: Membership | null = null;
-  let resume: string | null = null;
+  let intent: { id: string; join: boolean } | null = null;
   let run: VoiceAttempt | null = null;
   let left: GiveUp | null = null;
   let mic: MicAttempt | null = null;
@@ -92,7 +92,7 @@ export function createVoice(
   };
 
   function update(patch: Partial<VoiceState>) {
-    state = { ...state, ...patch, resumeOnReconnect: resume !== null };
+    state = { ...state, ...patch, resumeOnReconnect: intent?.join === true };
     for (const notify of listeners) notify();
   }
   function clearLeave() {
@@ -138,6 +138,7 @@ export function createVoice(
   }
   function join() {
     if (!membership || run) return;
+    intent = { id: membership.id, join: true };
     clearLeave();
     const nonce = nextNonce = (nextNonce + 1) >>> 0;
     const attempt: VoiceAttempt = { membership, nonce, connected: false };
@@ -172,7 +173,6 @@ export function createVoice(
       if (run !== attempt) return;
       clearTimeout(attempt.timer);
       attempt.connected = true;
-      resume = attempt.membership.id;
       update({ phase: 'listening' });
     } catch { fail(attempt, errors.voice_unavailable); }
   }
@@ -217,18 +217,17 @@ export function createVoice(
     subscribe(notify: () => void) { listeners.add(notify); return () => { listeners.delete(notify); }; },
     snapshot: () => state,
     attach(socket: Connection, id: string, available: boolean) {
-      if (membership?.socket === socket && membership.id === id) return;
-      const shouldResume = available && resume === id;
+      if (available && membership?.socket === socket && membership.id === id) return;
       membership = available ? { socket, id } : null;
-      if (!shouldResume) resume = null;
+      if (intent?.id !== id) intent = null;
       clearLeave();
       closeRun();
       update({ available, error: null });
-      if (shouldResume) join();
+      if (available && intent?.join !== false) join();
     },
     detach(socket: Connection, mayResume: boolean) {
       if (membership && membership.socket !== socket) return;
-      if (!mayResume) resume = null;
+      if (!mayResume) intent = null;
       membership = null;
       clearLeave();
       closeRun();
@@ -265,7 +264,8 @@ export function createVoice(
     join,
     leave() {
       const attempt = run;
-      resume = null;
+      const id = membership?.id ?? intent?.id;
+      intent = id === undefined ? null : { id, join: false };
       closeRun();
       update({ error: null });
       if (attempt) signalLeave(attempt.membership.socket);
