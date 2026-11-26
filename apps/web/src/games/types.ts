@@ -1,10 +1,11 @@
 import type { ComponentType, ReactNode } from 'react';
 import type { GameAction, GameKind, GameSettings, RoomView } from '../generated/protocol.ts';
 import type { GameSyncState } from '../shared/gameSync.ts';
+import type { MemberVoice } from '../shared/MemberList.tsx';
 
 export type GameBoardProps = {
   room: RoomView; sync: GameSyncState; disabled: boolean; pending: boolean; requestVersion: number;
-  actionError: string | null; actionErrorCode: string | null; fxEnabled: boolean; roomMenu: ReactNode; roomTools?: ReactNode;
+  actionError: string | null; actionErrorCode: string | null; fxEnabled: boolean; roomMenu: ReactNode; roomTools?: ReactNode; voice?: MemberVoice;
   consume: (through: number) => void; sendAction: (action: GameAction) => void;
   endGame: () => void; leaveRoom: () => void; hostSkip: () => void;
 };

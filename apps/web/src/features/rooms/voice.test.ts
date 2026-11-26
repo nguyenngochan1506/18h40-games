@@ -228,3 +228,35 @@ test('only a correlated, valid voice response can reach the media adapter', asyn
   assert.equal(opened(), 0);
   voice.detach(ws, false);
 });
+
+test('microphone presence is replaced, reset on reconnect and scoped to the current voice session', async () => {
+  const { voice, grant, net } = harness(async () => microphone().stream);
+  const ws = socket();
+  voice.attach(ws, 'member-A', true);
+  grant(ws);
+  await settle();
+  const first = net();
+  assert.deepEqual(voice.snapshot().micOn, []);
+  first.micOn(['1', '2']);
+  assert.deepEqual(voice.snapshot().micOn, ['1', '2']);
+  first.micOn(['2']);
+  assert.deepEqual(voice.snapshot().micOn, ['2']);
+
+  first.connection('reconnecting');
+  first.micOn(['1']);
+  assert.deepEqual(voice.snapshot().micOn, []);
+  first.connection('connected');
+  first.micOn(['2']);
+  assert.deepEqual(voice.snapshot().micOn, ['2']);
+
+  voice.leave();
+  assert.deepEqual(voice.snapshot().micOn, []);
+  voice.join();
+  grant(ws);
+  await settle();
+  net().micOn(['3']);
+  first.micOn(['1']);
+  assert.deepEqual(voice.snapshot().micOn, ['3']);
+  voice.detach(ws, false);
+  assert.deepEqual(voice.snapshot().micOn, []);
+});

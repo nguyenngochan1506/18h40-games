@@ -6,9 +6,10 @@ import { loadGame, registry } from '../../games/registry';
 import type { GameClient } from '../../games/types';
 import type { GameSyncState } from '../../shared/gameSync';
 import WaitingRoom from './WaitingRoom';
+import type { Voice } from './voice.ts';
 
-type Props = { room: RoomView; roomTools?: ReactNode; sync: GameSyncState; fxEnabled: boolean; disabled: boolean; pending?: boolean; requestVersion?: number; actionError?: string | null; actionErrorCode?: string | null; consume: (through: number) => void; send: (message: ClientMessage) => void };
-export default function Room({ room, roomTools, sync, fxEnabled, disabled, pending = false, requestVersion = 0, actionError = null, actionErrorCode = null, consume, send }: Props) {
+type Props = { room: RoomView; roomTools?: ReactNode; voice?: Voice; sync: GameSyncState; fxEnabled: boolean; disabled: boolean; pending?: boolean; requestVersion?: number; actionError?: string | null; actionErrorCode?: string | null; consume: (through: number) => void; send: (message: ClientMessage) => void };
+export default function Room({ room, roomTools, voice, sync, fxEnabled, disabled, pending = false, requestVersion = 0, actionError = null, actionErrorCode = null, consume, send }: Props) {
   const [loaded, setLoaded] = useState<{ kind: string; client: GameClient } | null>(null);
   const [failedGame, setFailedGame] = useState<RoomView['game'] | null>(null);
   const [retry, setRetry] = useState(0);
@@ -31,7 +32,7 @@ export default function Room({ room, roomTools, sync, fxEnabled, disabled, pendi
   const Board = client.Board;
   const host = room.host === room.you;
   const players = room.members.filter(member => member.role === 'player').length;
-  return <Root><Board key={sync.generation} room={room} roomTools={roomTools} sync={sync} consume={consume} disabled={disabled || sync.frames.length > 0} pending={pending} requestVersion={requestVersion} actionError={actionError} actionErrorCode={actionErrorCode} fxEnabled={fxEnabled}
+  return <Root><Board key={sync.generation} room={room} roomTools={roomTools} voice={voice} sync={sync} consume={consume} disabled={disabled || sync.frames.length > 0} pending={pending} requestVersion={requestVersion} actionError={actionError} actionErrorCode={actionErrorCode} fxEnabled={fxEnabled}
     sendAction={action => { if (!disabled && sync.frames.length === 0) send({ v: PROTOCOL_VERSION, type: 'game_action', action }); }}
     endGame={() => send({ v: PROTOCOL_VERSION, type: 'end_game' })} leaveRoom={leaveRoom} hostSkip={() => send({ v: PROTOCOL_VERSION, type: 'host_skip' })}
     roomMenu={<><h2 id="room-overview">{info.name} · Phòng {room.code}</h2><p>{players} người chơi · Đang chơi</p><ul className="room-presence">{room.members.map(member => <li key={member.id}><span>{member.nickname}{member.id === room.you ? ' (bạn)' : ''}</span><span>{member.online ? 'Đang kết nối' : 'Mất kết nối'}</span></li>)}</ul><a className="action secondary" href="#room-overview">Về phòng</a>{host && <button className="action secondary" disabled={disabled} onClick={() => send({ v: PROTOCOL_VERSION, type: 'end_game' })}>Kết thúc ván</button>}<button className="action" disabled={disabled} onClick={leaveRoom}>Rời phòng</button></>} /></Root>;

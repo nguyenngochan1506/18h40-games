@@ -4,6 +4,15 @@ import type { MediaEvents, VoiceMedia } from './voice.ts';
 
 setLogLevel('silent');
 
+function memberIds(participants: Iterable<Participant>) {
+  const ids = [];
+  for (const { identity } of participants) {
+    const id = /^m-(\d+)-a-\d+$/.exec(identity)?.[1];
+    if (id) ids.push(id);
+  }
+  return ids;
+}
+
 export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
   // Separate send and receive negotiation to avoid Chromium errors during simultaneous muted joins.
   const room = new Room({ singlePeerConnection: false });
@@ -25,6 +34,9 @@ export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
     micWork = task.catch(() => undefined);
     return task;
   }
+  function syncMicrophones() {
+    if (!closed) events.micOn(memberIds([...room.remoteParticipants.values()].filter(participant => participant.isMicrophoneEnabled)));
+  }
 
   room
     .on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
@@ -37,22 +49,31 @@ export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
     .on(RoomEvent.TrackUnsubscribed, detach)
     .on(RoomEvent.AudioPlaybackStatusChanged, () => { if (!closed) events.playback(room.canPlaybackAudio); })
     .on(RoomEvent.ActiveSpeakersChanged, (participants: Participant[]) => {
-      if (closed) return;
-      events.speakers(participants.flatMap(({ identity }) => {
-        const id = /^m-(\d+)-a-\d+$/.exec(identity)?.[1];
-        return id ? [id] : [];
-      }));
+      if (!closed) events.speakers(memberIds(participants));
     })
+    .on(RoomEvent.ParticipantConnected, syncMicrophones)
+    .on(RoomEvent.ParticipantDisconnected, syncMicrophones)
+    .on(RoomEvent.TrackPublished, syncMicrophones)
+    .on(RoomEvent.TrackUnpublished, syncMicrophones)
+    .on(RoomEvent.TrackMuted, syncMicrophones)
+    .on(RoomEvent.TrackUnmuted, syncMicrophones)
     .on(RoomEvent.SignalReconnecting, () => { if (!closed) events.connection('reconnecting'); })
     .on(RoomEvent.Reconnecting, () => { if (!closed) events.connection('reconnecting'); })
-    .on(RoomEvent.Reconnected, () => { if (!closed) events.connection('connected'); })
+    .on(RoomEvent.Reconnected, () => {
+      if (closed) return;
+      events.connection('connected');
+      syncMicrophones();
+    })
     .on(RoomEvent.Disconnected, () => { if (!closed) events.connection('disconnected'); });
 
   return {
     async connect({ url, token }) {
       await room.connect(url, token, { maxRetries: 0 });
       if (closed) await room.disconnect();
-      else events.playback(room.canPlaybackAudio);
+      else {
+        events.playback(room.canPlaybackAudio);
+        syncMicrophones();
+      }
     },
     close() {
       closed = true;

@@ -1,5 +1,5 @@
 /* The narrow board stays in game.css; this layer is enabled only by the desktop stage. */
-.game-bang .board-scene { display: contents; }
+.game-bang .board-scene, .game-bang .table-side { display: contents; }
 .game-bang .cinematic.bang-board, .game-bang .cinematic.bang-board:has(.decision-overlay:not(.quiet-controls):not(.waiting-controls)) { height: 100svh; min-height: 0; background: #130d09; }
 .game-bang .cinematic > .board-scene { display: block; position: absolute; isolation: isolate; --hand-card-w: clamp(58px, calc(var(--scene-width) * .065), 156px); --choice-card-w: clamp(60px, calc(var(--scene-width) * .05), 100px); --flight-card-w: clamp(60px, calc(var(--scene-width) * .0585), 116px); --hand-height: clamp(140px, calc(var(--scene-height) * .31), 360px); }
 .game-bang .cinematic .scene-backdrop, .game-bang .cinematic .scene-light { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -56,7 +56,20 @@
 .game-bang .cinematic .discard-pile .game-card .game-art { width: 100%; }
 .game-bang .cinematic .pile-row strong { font-size: 14px; }
 .game-bang .cinematic .empty-pile { width: calc(var(--scene-width) * .038); min-height: calc(var(--scene-height) * .11); }
-.game-bang .cinematic .player-hud { top: 8px; left: 8px; width: 18%; min-width: 180px; max-width: 268px; padding: 8px 12px; }
+.game-bang .cinematic .table-side {
+ position: absolute; z-index: 4; top: 8px; left: 8px; bottom: 168px;
+ display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+ width: clamp(180px, 18%, 268px); pointer-events: none;
+}
+.game-bang .cinematic .player-hud { position: static; flex: none; width: 100%; padding: 8px 12px; pointer-events: auto; }
+.game-bang .cinematic .table-members {
+ /* The leftmost desktop seat starts at about 8% of the scene. */
+ width: calc(var(--scene-width) * .08 - 8px);
+ overflow-y: auto; scrollbar-width: thin; padding: 4px 2px 4px 4px; pointer-events: auto;
+ --member-name-max: calc(var(--scene-width) * .15);
+ --member-avatar-size: clamp(20px, calc(var(--scene-width) * .018), 30px);
+}
+.game-bang .cinematic .table-members:focus-visible { outline: 2px solid #e8c46a; outline-offset: 1px; }
 .game-bang .cinematic .hud-gun { gap: 8px; }
 .game-bang .cinematic .hud-gun svg { width: 36px; height: 36px; }
 .game-bang .cinematic .hud-gun span { font: 12px/1.4 system-ui, sans-serif; }

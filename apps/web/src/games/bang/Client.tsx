@@ -38,7 +38,7 @@ function Board(props: GameBoardProps) {
   return <RawBoard game={game} room={room} log={state.log} fxBatch={state.fxBatch} soundBatch={state.soundBatch} viewer={sync.viewer}
     disabled={props.disabled || sync.frames.length > 0} pending={props.pending} requestVersion={boardRequestVersion} actionError={props.actionError}
     fxEnabled={props.fxEnabled} sendAction={payload => props.sendAction({ game: 'bang', payload })} endGame={props.endGame} leaveRoom={props.leaveRoom}
-    roomTools={props.roomTools} roomMenu={<>{props.roomMenu}{room.host === room.you && !over && <button className="action secondary" disabled={props.disabled} onClick={props.hostSkip}>Bỏ qua lượt chờ</button>}</>} />;
+    roomTools={props.roomTools} voice={props.voice} roomMenu={<>{props.roomMenu}{room.host === room.you && !over && <button className="action secondary" disabled={props.disabled} onClick={props.hostSkip}>Bỏ qua lượt chờ</button>}</>} />;
 }
 
 export const client: GameClient = { Board, Settings, Root: GameLifetime };

@@ -14,6 +14,7 @@ export type MediaEvents = {
   connection(state: 'reconnecting' | 'connected' | 'disconnected'): void;
   playback(allowed: boolean): void;
   speakers(ids: string[]): void;
+  micOn(ids: string[]): void;
 };
 export type VoiceMedia = {
   connect(grant: Grant): Promise<void>;
@@ -32,6 +33,7 @@ type VoiceState = {
   mic: 'off' | 'starting' | 'on';
   playbackBlocked: boolean;
   speakers: string[];
+  micOn: string[];
   error: string | null;
 };
 type Membership = { socket: Connection; id: string };
@@ -75,7 +77,7 @@ export function createVoice(
   loadMedia: () => Promise<(events: MediaEvents) => VoiceMedia> = () => import('./livekitVoice.ts').then(module => module.createLiveKitVoice),
   capture = () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false }),
 ) {
-  let state: VoiceState = { available: false, resumeOnReconnect: false, phase: 'offline', mode: 'toggle', shortcut: false, mic: 'off', playbackBlocked: false, speakers: [], error: null };
+  let state: VoiceState = { available: false, resumeOnReconnect: false, phase: 'offline', mode: 'toggle', shortcut: false, mic: 'off', playbackBlocked: false, speakers: [], micOn: [], error: null };
   const listeners = new Set<() => void>();
   let membership: Membership | null = null;
   let intent: { id: string; join: boolean } | null = null;
@@ -118,7 +120,7 @@ export function createVoice(
     run = null;
     clearTimeout(old?.timer);
     old?.media?.close();
-    update({ phase: membership ? 'idle' : 'offline', speakers: [], playbackBlocked: false });
+    update({ phase: membership ? 'idle' : 'offline', speakers: [], micOn: [], playbackBlocked: false });
   }
   function signalLeave(socket: Connection) {
     clearLeave();
@@ -159,7 +161,7 @@ export function createVoice(
             fail(attempt, 'Kết nối thoại đã ngắt. Hãy vào lại thoại.');
           } else if (phase === 'reconnecting') {
             stopMic();
-            update({ phase, speakers: [] });
+            update({ phase, speakers: [], micOn: [] });
           } else if (attempt.connected) update({ phase: 'listening', error: null });
         },
         playback(allowed) {
@@ -167,6 +169,9 @@ export function createVoice(
         },
         speakers(speakers) {
           if (run === attempt && state.phase === 'listening') update({ speakers });
+        },
+        micOn(micOn) {
+          if (run === attempt && state.phase !== 'reconnecting') update({ micOn });
         },
       });
       await media.connect(grant);
