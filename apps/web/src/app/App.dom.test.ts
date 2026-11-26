@@ -133,7 +133,9 @@ test('only a waiting host can request a new game and the room follows the server
   assert.equal(session.type, 'joined');
   await fx.receive(session);
   const picker = '.waiting-game-switch';
-  assert.equal(fx.container.querySelector(picker), null);
+  const initialSelect = fx.container.querySelector<HTMLSelectElement>(`${picker} select`);
+  assert.ok(initialSelect);
+  assert.deepEqual([...initialSelect.options].map(option => option.value), ['', 'werewolf']);
 
   const { registry } = await vite.ssrLoadModule('/src/games/registry.ts');
   registry.uno.enabled = true;
@@ -154,7 +156,7 @@ test('only a waiting host can request a new game and the room follows the server
   const select = fx.container.querySelector<HTMLSelectElement>(`${picker} select`)!;
   const button = fx.container.querySelector<HTMLButtonElement>(`${picker} button`)!;
   assert.equal(button.disabled, true);
-  assert.deepEqual([...select.options].map(option => option.value), ['', 'uno']);
+  assert.deepEqual([...select.options].map(option => option.value), ['', 'uno', 'werewolf']);
   await act(() => { select.value = 'uno'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   assert.equal(button.disabled, false);
   await fx.click(`${picker} button`);
@@ -184,8 +186,9 @@ test('only a waiting host can request a new game and the room follows the server
 
 test('a waiting host can switch back when the new game fails to load', async t => {
   const { registry } = await vite.ssrLoadModule('/src/games/registry.ts');
+  const oldEnabled = registry.werewolf.enabled;
   registry.werewolf.enabled = true;
-  t.after(() => { registry.werewolf.enabled = false; });
+  t.after(() => { registry.werewolf.enabled = oldEnabled; });
   const loader = t.mock.method(registry.werewolf, 'load', async () => { throw new Error('Import failed'); });
   const fx = await mount(t, '/r/ABCDE', saved);
   const session = joined();
@@ -199,7 +202,7 @@ test('a waiting host can switch back when the new game fails to load', async t =
   };
   await changeGame('werewolf');
   await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: {
-    ...session.room, game: 'werewolf', settings: { game: 'werewolf', payload: {} }, max_players: 16,
+    ...session.room, game: 'werewolf', settings: { game: 'werewolf', payload: { reveal_role_on_death: true, roles: { villager: 2, werewolf: 1, alpha_wolf: 0, minion: 0, sorcerer: 0, seer: 1, bodyguard: 1, witch: 0, hunter: 0, cupid: 0, lycan: 0, cursed: 0, diseased: 0, prince: 0, mayor: 0, tanner: 0 } } }, max_players: 16,
   } });
   assert.match(fx.container.querySelector('.waiting-load-error [role="alert"]')!.textContent!, /Không tải được/);
   assert.equal(fx.container.querySelector<HTMLButtonElement>('.waiting-primary button')!.disabled, true);

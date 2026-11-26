@@ -1,4 +1,790 @@
-.game-werewolf { padding: 24px; }
-.game-werewolf .werewolf-message { margin-block: 12px; }
-.game-werewolf button { min-width: 44px; min-height: 44px; padding: 8px 16px; border: 1px solid currentColor; border-radius: 4px; font: inherit; cursor: pointer; }
-.game-werewolf button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.game-werewolf {
+  --ww-bg: #111625;
+  --ww-surface: rgba(22, 29, 48, 0.92);
+  --ww-surface-soft: rgba(31, 41, 66, 0.72);
+  --ww-border: rgba(212, 180, 118, 0.28);
+  --ww-text: #f3efe6;
+  --ww-muted: #b5bfd4;
+  --ww-gold: #e4bd6d;
+  --ww-crimson: #d94c57;
+  --ww-emerald: #4cc28a;
+  --ww-violet: #a77cf5;
+  color: var(--ww-text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.game-werewolf.ww-board {
+  min-height: 100vh;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: radial-gradient(circle at top center, #1f2948 0%, #0d1220 70%);
+  transition: background 0.35s ease;
+}
+
+.game-werewolf.ww-theme-day {
+  --ww-surface: rgba(34, 28, 22, 0.9);
+  --ww-surface-soft: rgba(54, 42, 31, 0.78);
+  --ww-border: rgba(235, 188, 108, 0.42);
+  background: radial-gradient(circle at top center, #5c3d22 0%, #241911 72%);
+}
+
+.game-werewolf.ww-loading {
+  min-height: 60vh;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.game-werewolf .ww-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--ww-surface);
+  border: 1px solid var(--ww-border);
+}
+
+.game-werewolf .ww-phase-pill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.game-werewolf .ww-phase-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 1.35rem;
+  background: rgba(228, 189, 109, 0.16);
+  border: 1px solid var(--ww-gold);
+  color: var(--ww-gold);
+}
+
+.game-werewolf .ww-phase-heading {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--ww-gold);
+}
+
+.game-werewolf .ww-phase-sub {
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+  color: var(--ww-muted);
+}
+
+.game-werewolf .ww-topbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.game-werewolf .ww-btn {
+  min-width: 44px;
+  min-height: 42px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--ww-border);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.game-werewolf .ww-btn:focus-visible,
+.game-werewolf .ww-seat-card:focus-visible,
+.game-werewolf .ww-stepper button:focus-visible {
+  outline: 2px solid var(--ww-gold);
+  outline-offset: 2px;
+}
+
+.game-werewolf .ww-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.game-werewolf .ww-btn-primary {
+  background: linear-gradient(135deg, #c99a44, #9e7023);
+  color: #141008;
+  border-color: #f0cf88;
+}
+
+.game-werewolf .ww-btn-danger {
+  background: linear-gradient(135deg, #c73746, #8f1d2a);
+  color: #fff5f6;
+  border-color: #f08a94;
+}
+
+.game-werewolf .ww-btn-secondary {
+  background: var(--ww-surface-soft);
+  color: var(--ww-text);
+}
+
+.game-werewolf .ww-btn-ghost {
+  background: transparent;
+  color: var(--ww-gold);
+  border-color: rgba(228, 189, 109, 0.35);
+  min-height: 34px;
+  padding: 4px 10px;
+  font-size: 0.82rem;
+}
+
+.game-werewolf .ww-action-bar,
+.game-werewolf .ww-victory-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--ww-surface);
+  border: 1px solid var(--ww-gold);
+}
+
+.game-werewolf .ww-victory-banner {
+  flex-direction: column;
+  align-items: flex-start;
+  background: linear-gradient(135deg, rgba(164, 121, 38, 0.3), rgba(24, 28, 46, 0.95));
+}
+
+.game-werewolf .ww-victory-banner h2 {
+  margin: 0;
+  color: var(--ww-gold);
+}
+
+.game-werewolf .ww-victory-banner p {
+  margin: 0;
+}
+
+.game-werewolf .ww-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.game-werewolf .ww-inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.game-werewolf .ww-error {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(186, 38, 53, 0.25);
+  border: 1px solid var(--ww-crimson);
+  color: #ffd5da;
+}
+
+.game-werewolf .ww-hint {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--ww-muted);
+}
+
+.game-werewolf .ww-layout {
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr) 280px;
+  gap: 14px;
+  align-items: start;
+  flex: 1;
+}
+
+.game-werewolf .ww-my-panel,
+.game-werewolf .ww-log-panel {
+  background: var(--ww-surface);
+  border: 1px solid var(--ww-border);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.game-werewolf .ww-my-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.game-werewolf .ww-my-panel h3,
+.game-werewolf .ww-log-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--ww-gold);
+}
+
+/* Playing Card (Ultimate Werewolf Deluxe style) */
+.game-werewolf .ww-card {
+  position: relative;
+  border-radius: 12px;
+  padding: 8px;
+  background: linear-gradient(160deg, #272d44 0%, #141826 100%);
+  border: 2px solid var(--ww-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.game-werewolf .ww-card.ww-team-werewolves {
+  border-color: rgba(217, 76, 87, 0.78);
+  background: linear-gradient(160deg, #3c1821 0%, #170b10 100%);
+}
+
+.game-werewolf .ww-card.ww-team-village {
+  border-color: rgba(114, 189, 146, 0.65);
+  background: linear-gradient(160deg, #1a322a 0%, #101b18 100%);
+}
+
+.game-werewolf .ww-card.ww-team-tanner {
+  border-color: rgba(219, 165, 74, 0.78);
+  background: linear-gradient(160deg, #3b2d18 0%, #1a140b 100%);
+}
+
+.game-werewolf .ww-card-back {
+  border-color: rgba(164, 178, 214, 0.35);
+  background: linear-gradient(160deg, #1b2238 0%, #0d111d 100%);
+}
+
+.game-werewolf .ww-card-balance {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(10, 12, 20, 0.85);
+  border: 1px solid var(--ww-gold);
+  color: var(--ww-gold);
+  font-size: 0.74rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.game-werewolf .ww-card-art-frame {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  background: radial-gradient(circle at center, #fcf8ee 0%, #ede3cc 100%);
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  overflow: hidden;
+}
+
+.game-werewolf .ww-card-back .ww-card-art-frame {
+  padding: 0;
+  background: #f3ecdc;
+}
+
+.game-werewolf .ww-card-back .ww-card-img {
+  object-fit: cover;
+}
+
+.game-werewolf .ww-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.game-werewolf .ww-card-footer {
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.game-werewolf .ww-card-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--ww-text);
+}
+
+.game-werewolf .ww-card-subtitle {
+  font-size: 0.72rem;
+  color: var(--ww-muted);
+  letter-spacing: 0.03em;
+}
+
+.game-werewolf .ww-card-summary {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: #e4e0d5;
+  text-align: left;
+}
+
+.game-werewolf .ww-card-sm {
+  width: 112px;
+  padding: 6px;
+}
+
+.game-werewolf .ww-card-sm .ww-card-title {
+  font-size: 0.8rem;
+}
+
+.game-werewolf .ww-card-lg {
+  width: 100%;
+  padding: 10px;
+}
+
+.game-werewolf .ww-secrets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.86rem;
+}
+
+.game-werewolf .ww-badge {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.game-werewolf .ww-badge-village {
+  background: rgba(76, 194, 138, 0.2);
+  color: #8bf0bf;
+  border: 1px solid rgba(76, 194, 138, 0.55);
+}
+
+.game-werewolf .ww-badge-werewolves {
+  background: rgba(217, 76, 87, 0.25);
+  color: #ff9ea6;
+  border: 1px solid rgba(217, 76, 87, 0.65);
+}
+
+.game-werewolf .ww-badge-lovers {
+  background: rgba(235, 102, 161, 0.25);
+  color: #ffb0d4;
+  border: 1px solid rgba(235, 102, 161, 0.65);
+}
+
+.game-werewolf .ww-badge-tanner {
+  background: rgba(228, 189, 109, 0.22);
+  color: #f7da99;
+  border: 1px solid rgba(228, 189, 109, 0.65);
+}
+
+.game-werewolf .ww-secret-note {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.game-werewolf .ww-secret-lover {
+  color: #ffb0d4;
+}
+
+.game-werewolf .ww-history ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.game-werewolf .ww-text-wolf {
+  color: #ff8c96;
+}
+
+.game-werewolf .ww-text-safe {
+  color: #8bf0bf;
+}
+
+/* Seats grid */
+.game-werewolf .ww-seats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(154px, 1fr));
+  gap: 12px;
+}
+
+.game-werewolf .ww-seat-card {
+  appearance: none;
+  background: var(--ww-surface);
+  border: 1px solid var(--ww-border);
+  border-radius: 12px;
+  padding: 10px;
+  color: var(--ww-text);
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  cursor: default;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.game-werewolf .ww-seat-card.is-selectable {
+  cursor: pointer;
+  border-color: rgba(228, 189, 109, 0.65);
+}
+
+.game-werewolf .ww-seat-card.is-selectable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(228, 189, 109, 0.18);
+}
+
+.game-werewolf .ww-seat-card.is-selected {
+  border-color: var(--ww-gold);
+  box-shadow: 0 0 0 2px var(--ww-gold), 0 10px 24px rgba(228, 189, 109, 0.28);
+}
+
+.game-werewolf .ww-seat-card.is-dead {
+  opacity: 0.62;
+  filter: grayscale(0.45);
+}
+
+.game-werewolf .ww-seat-card.is-winner {
+  border-color: var(--ww-gold);
+  box-shadow: 0 0 0 2px rgba(228, 189, 109, 0.55);
+}
+
+.game-werewolf .ww-seat-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.game-werewolf .ww-seat-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-werewolf .ww-status-dot {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.game-werewolf .ww-status-dot.alive {
+  background: rgba(76, 194, 138, 0.2);
+  color: #8bf0bf;
+}
+
+.game-werewolf .ww-status-dot.dead {
+  background: rgba(217, 76, 87, 0.25);
+  color: #ff9ea6;
+}
+
+.game-werewolf .ww-seat-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+.game-werewolf .ww-mini-badge {
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.game-werewolf .ww-mini-wolf {
+  background: rgba(217, 76, 87, 0.28);
+  color: #ffb2b8;
+}
+
+.game-werewolf .ww-mini-lover {
+  background: rgba(235, 102, 161, 0.28);
+  color: #ffc2df;
+}
+
+.game-werewolf .ww-mini-royal {
+  background: rgba(228, 189, 109, 0.25);
+  color: #f7da99;
+}
+
+.game-werewolf .ww-mini-dead {
+  background: rgba(140, 42, 52, 0.45);
+  color: #ffd5da;
+}
+
+.game-werewolf .ww-mini-vote {
+  background: rgba(112, 161, 255, 0.24);
+  color: #bcd6ff;
+}
+
+/* Log panel */
+.game-werewolf .ww-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 62vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.game-werewolf .ww-log-item {
+  font-size: 0.84rem;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 3px solid transparent;
+}
+
+.game-werewolf .ww-log-night { border-left-color: #7c98ff; }
+.game-werewolf .ww-log-day { border-left-color: var(--ww-gold); }
+.game-werewolf .ww-log-danger { border-left-color: var(--ww-crimson); background: rgba(217, 76, 87, 0.12); }
+.game-werewolf .ww-log-secret { border-left-color: var(--ww-violet); background: rgba(167, 124, 245, 0.14); }
+.game-werewolf .ww-log-victory { border-left-color: var(--ww-emerald); background: rgba(76, 194, 138, 0.18); font-weight: 700; }
+
+/* Settings */
+.game-werewolf .ww-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #141a2b;
+  border: 1px solid var(--ww-border);
+}
+
+.game-werewolf .ww-settings-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.game-werewolf .ww-settings-header h3 {
+  margin: 0;
+  color: var(--ww-gold);
+}
+
+.game-werewolf .ww-settings-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.86rem;
+  color: var(--ww-muted);
+}
+
+.game-werewolf .ww-settings-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.86rem;
+  text-align: right;
+}
+
+.game-werewolf .ww-stat-ok { color: #8bf0bf; }
+.game-werewolf .ww-stat-warn { color: #ff9ea6; }
+
+.game-werewolf .ww-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.game-werewolf .ww-role-grid {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.game-werewolf .ww-role-grid legend {
+  font-weight: 700;
+  color: var(--ww-gold);
+  margin-bottom: 8px;
+}
+
+.game-werewolf .ww-role-option {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.game-werewolf .ww-role-option.is-active {
+  border-color: var(--ww-gold);
+  background: rgba(228, 189, 109, 0.1);
+}
+
+.game-werewolf .ww-role-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: rgba(245, 240, 228, 0.9);
+  padding: 3px;
+}
+
+.game-werewolf .ww-role-info {
+  min-width: 0;
+}
+
+.game-werewolf .ww-role-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.game-werewolf .ww-role-bal {
+  font-size: 0.75rem;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(228, 189, 109, 0.2);
+  color: var(--ww-gold);
+  font-weight: 700;
+}
+
+.game-werewolf .ww-role-info small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.76rem;
+  line-height: 1.3;
+  color: var(--ww-muted);
+}
+
+.game-werewolf .ww-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.game-werewolf .ww-stepper button {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--ww-border);
+  background: var(--ww-surface-soft);
+  color: var(--ww-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.game-werewolf .ww-stepper button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.game-werewolf .ww-stepper-val {
+  min-width: 20px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.game-werewolf .ww-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Modal */
+.game-werewolf .ww-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 8, 16, 0.78);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.game-werewolf .ww-modal {
+  width: min(820px, 100%);
+  max-height: 85vh;
+  overflow-y: auto;
+  background: #141a2b;
+  border: 1px solid var(--ww-gold);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.game-werewolf .ww-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.game-werewolf .ww-modal-head h3 {
+  margin: 0;
+  color: var(--ww-gold);
+}
+
+.game-werewolf .ww-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.game-werewolf .ww-modal-card-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.game-werewolf .ww-modal-count {
+  margin-top: 4px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ww-gold);
+}
+
+@media (max-width: 1040px) {
+  .game-werewolf .ww-layout {
+    grid-template-columns: 1fr;
+  }
+  .game-werewolf .ww-my-panel {
+    max-width: 360px;
+  }
+  .game-werewolf .ww-log-list {
+    max-height: 260px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-werewolf,
+  .game-werewolf * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

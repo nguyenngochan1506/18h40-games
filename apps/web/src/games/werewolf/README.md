@@ -1,13 +1,17 @@
-# Ma Sói (khung web)
+# Ma Sói (Ultimate Werewolf: Deluxe Edition)
 
-Chưa có luật. Đây là **khung** để người cài đặt điền; làm theo [ADDING_A_GAME.md](../../../../../ADDING_A_GAME.md).
+Bản cài đặt Ma Sói theo luật **Ultimate Werewolf: Deluxe Edition** cho 5–16 người chơi.
 
-| File | Việc cần làm |
-| --- | --- |
-| `info.ts` | Metadata cho lobby; khi xong đổi `enabled: true`, `status: 'available'` (và bật `enabled()` ở `apps/server/src/games/werewolf.rs`) |
-| `client.ts` | Xuất `GameClient { Board, Settings, Root? }` (thường không cần sửa) |
-| `Board.tsx` | Bàn chơi: đọc frame của game từ `sync`, dựng UI, gọi `sendAction` |
-| `Settings.tsx` | Editor cài đặt phòng chờ (gọi `onChange` cùng tag game) |
-| `styles.css` | CSS dưới `.game-werewolf`; keyframe có tiền tố `werewolf-` |
+## Cấu trúc module
+- `info.ts`: metadata cho sảnh và loader lazy.
+- `client.ts`: xuất `GameClient { Board, Settings }`.
+- `roles.ts`: dữ liệu 16 vai trò, điểm cân bằng chính thức và bộ bài chuẩn cho 5–16 người.
+- `RoleCard.tsx`: hiển thị lá bài minh họa từng vai trò (ảnh tại `/werewolf/cards/*.webp`).
+- `Settings.tsx`: tùy chỉnh bộ bài và tùy chọn lật vai khi chết ở phòng chờ.
+- `state.ts`: xử lý frame đồng bộ từ server và nhật ký sự kiện tiếng Việt.
+- `Board.tsx`: giao diện bàn chơi đêm/ngày, thẻ vai trò cá nhân, danh sách người chơi và nhật ký làng.
 
-Engine Rust ở `crates/werewolf`, adapter server ở `apps/server/src/games/werewolf.rs`, art ở `assets/werewolf/`, spec ở `specs/games/werewolf/` (sao chép từ `specs/games/_template/`). Không import từ `games/` của game khác (CI chặn).
+## Tài liệu luật & engine
+- [specs/games/werewolf/rules.md](../../../../../specs/games/werewolf/rules.md)
+- [specs/games/werewolf/engine.md](../../../../../specs/games/werewolf/engine.md)
+- [specs/games/werewolf/assets.md](../../../../../specs/games/werewolf/assets.md)

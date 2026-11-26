@@ -98,13 +98,45 @@ export type UnoView = Record<symbol, never>;
 
 export type UnoEvents = Record<symbol, never>;
 
-export type WerewolfSettings = Record<symbol, never>;
+export type WerewolfPlayerId = number;
 
-export type WerewolfAction = never;
+export type WerewolfRole = "villager" | "werewolf" | "alpha_wolf" | "minion" | "sorcerer" | "seer" | "bodyguard" | "witch" | "hunter" | "cupid" | "lycan" | "cursed" | "diseased" | "prince" | "mayor" | "tanner";
 
-export type WerewolfView = Record<symbol, never>;
+export type WerewolfTeam = "village" | "werewolves" | "lovers" | "tanner";
 
-export type WerewolfEvents = Record<symbol, never>;
+export type WerewolfRoleDeck = { villager: number, werewolf: number, alpha_wolf: number, minion: number, sorcerer: number, seer: number, bodyguard: number, witch: number, hunter: number, cupid: number, lycan: number, cursed: number, diseased: number, prince: number, mayor: number, tanner: number, };
+
+export type WerewolfSettings = { roles: WerewolfRoleDeck, reveal_role_on_death: boolean, };
+
+export type WerewolfAction = { "type": "cupid_link", first: WerewolfPlayerId, second: WerewolfPlayerId, } | { "type": "bodyguard_protect", target: WerewolfPlayerId, } | { "type": "wolf_vote", target: WerewolfPlayerId, infect: boolean, } | { "type": "seer_inspect", target: WerewolfPlayerId, } | { "type": "sorcerer_inspect", target: WerewolfPlayerId, } | { "type": "witch_act", heal: boolean, poison: WerewolfPlayerId | null, } | { "type": "hunter_shoot", target: WerewolfPlayerId, } | { "type": "day_vote", target: WerewolfPlayerId | null, };
+
+export type WerewolfDeathCause = "werewolf_attack" | "witch_poison" | "village_lynch" | "hunter_shot" | "lover_heartbreak";
+
+export type WerewolfWinner = "village" | "werewolves" | "lovers" | "tanner" | "draw";
+
+export type WerewolfNightStep = "cupid" | "bodyguard" | "werewolves" | "seer" | "sorcerer" | "witch";
+
+export type WerewolfPublicPhase = { "kind": "night", night: number, step: WerewolfNightStep, } | { "kind": "day_vote", day: number, } | { "kind": "hunter_shot", hunter: WerewolfPlayerId, } | { "kind": "game_over" };
+
+export type WerewolfSeerInspection = { night: number, target: WerewolfPlayerId, is_wolf: boolean, };
+
+export type WerewolfSorcererInspection = { night: number, target: WerewolfPlayerId, is_seer: boolean, };
+
+export type WerewolfWolfVote = { wolf: WerewolfPlayerId, target: WerewolfPlayerId, infect: boolean, };
+
+export type WerewolfDayVote = { "kind": "target", target: WerewolfPlayerId, } | { "kind": "abstain" };
+
+export type WerewolfPublicPlayer = { id: WerewolfPlayerId, alive: boolean, role: WerewolfRole | null, death_cause: WerewolfDeathCause | null, day_vote: WerewolfDayVote | null, is_revealed_prince: boolean, is_revealed_mayor: boolean, };
+
+export type WerewolfSpectatorView = { players: Array<WerewolfPublicPlayer>, phase: WerewolfPublicPhase, day_number: number, role_counts: WerewolfRoleDeck, reveal_role_on_death: boolean, winner: WerewolfWinner | null, winning_players: Array<WerewolfPlayerId>, awaited_count: number, };
+
+export type WerewolfPlayerView = { you: WerewolfPlayerId, your_role: WerewolfRole, your_team: WerewolfTeam, is_wolf_pack: boolean, known_wolves: Array<WerewolfPlayerId>, lover: WerewolfPlayerId | null, cupid_lovers: [WerewolfPlayerId, WerewolfPlayerId] | null, seer_history: Array<WerewolfSeerInspection>, sorcerer_history: Array<WerewolfSorcererInspection>, wolf_votes: Array<WerewolfWolfVote>, witch_victim: WerewolfPlayerId | null, witch_heal_available: boolean, witch_poison_available: boolean, alpha_infect_available: boolean, bodyguard_last_protected: WerewolfPlayerId | null, can_act: boolean, table: WerewolfSpectatorView, };
+
+export type WerewolfEventKind = { "type": "game_started", player_count: number, } | { "type": "role_assigned", player: WerewolfPlayerId, role: WerewolfRole, } | { "type": "night_started", night: number, } | { "type": "night_step_started", night: number, step: WerewolfNightStep, } | { "type": "lovers_linked", first: WerewolfPlayerId, second: WerewolfPlayerId, } | { "type": "bodyguard_protected", target: WerewolfPlayerId, } | { "type": "wolf_voted", wolf: WerewolfPlayerId, target: WerewolfPlayerId, infect: boolean, } | { "type": "wolves_sick_skipped", night: number, } | { "type": "seer_inspected", target: WerewolfPlayerId, is_wolf: boolean, } | { "type": "sorcerer_inspected", target: WerewolfPlayerId, is_seer: boolean, } | { "type": "witch_used_heal", target: WerewolfPlayerId, } | { "type": "witch_used_poison", target: WerewolfPlayerId, } | { "type": "player_turned_wolf", player: WerewolfPlayerId, } | { "type": "dawn_peaceful", day: number, } | { "type": "player_died", player: WerewolfPlayerId, cause: WerewolfDeathCause, revealed_role: WerewolfRole | null, } | { "type": "day_started", day: number, } | { "type": "day_voted", voter: WerewolfPlayerId, target: WerewolfPlayerId | null, weight: number, } | { "type": "prince_revealed", player: WerewolfPlayerId, } | { "type": "day_no_lynch", day: number, } | { "type": "hunter_triggered", hunter: WerewolfPlayerId, } | { "type": "game_over", winner: WerewolfWinner, winning_players: Array<WerewolfPlayerId>, };
+
+export type WerewolfEvents = Array<WerewolfEventKind>;
+
+export type WerewolfView = { "perspective": "player", "view": WerewolfPlayerView } | { "perspective": "spectator", "view": WerewolfSpectatorView };
 
 export type GameView = { "game": "bang", "payload": BangView } | { "game": "uno", "payload": UnoView } | { "game": "werewolf", "payload": WerewolfView };
 
