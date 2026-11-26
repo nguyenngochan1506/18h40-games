@@ -8,6 +8,8 @@ export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
   // Separate send and receive negotiation to avoid Chromium errors during simultaneous muted joins.
   const room = new Room({ singlePeerConnection: false });
   const audio = new Map<RemoteTrack, HTMLMediaElement>();
+  // A superseded lease can remain in the room after its replacement leaves.
+  const latestAttempts = new Map<string, bigint>();
   let closed = false;
   let activeSpeakers: Participant[] = [];
   let micWork = Promise.resolve();
@@ -27,19 +29,22 @@ export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
     return task;
   }
   function latestParticipantIds() {
-    const latest = new Map<string, { attempt: bigint; participant: Participant }>();
+    const latest = new Map<string, Participant>();
     for (const participant of [room.localParticipant, ...room.remoteParticipants.values()]) {
       const identity = /^m-(\d+)-a-(\d+)$/.exec(participant.identity);
       if (!identity) continue;
       const [, id, sequence] = identity;
       const attempt = BigInt(sequence);
-      const previous = latest.get(id);
-      if (!previous || attempt > previous.attempt) latest.set(id, { attempt, participant });
+      const previous = latestAttempts.get(id);
+      if (previous !== undefined && attempt < previous) continue;
+      latestAttempts.set(id, attempt);
+      latest.set(id, participant);
     }
-    return new Map([...latest].map(([id, { participant }]) => [participant, id]));
+    return new Map([...latest].map(([id, participant]) => [participant, id]));
   }
-  function syncSpeakers(participants = activeSpeakers, current = latestParticipantIds()) {
+  function syncSpeakers(participants = activeSpeakers, current?: ReturnType<typeof latestParticipantIds>) {
     if (closed) return;
+    current ??= latestParticipantIds();
     activeSpeakers = [];
     const ids: string[] = [];
     for (const participant of participants) {
@@ -91,6 +96,8 @@ export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
 
   return {
     async connect({ url, token }) {
+      latestAttempts.clear();
+      activeSpeakers = [];
       await room.connect(url, token, { maxRetries: 0 });
       if (closed) await room.disconnect();
       else {
@@ -100,6 +107,8 @@ export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
     },
     close() {
       closed = true;
+      latestAttempts.clear();
+      activeSpeakers = [];
       for (const track of audio.keys()) detach(track);
       void room.disconnect().catch(() => undefined);
     },

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { RemoteParticipant, RemoteTrackPublication, Room, RoomEvent, Track } from 'livekit-client';
 import { createLiveKitVoice } from './livekitVoice.ts';
 
-test('LiveKit speaker updates only keep current participants with an enabled mic', t => {
+test('LiveKit speaker updates only keep current participants with an enabled mic', async t => {
   const on = t.mock.method(Room.prototype, 'on');
   let speakers: string[] = [];
   let micOn: string[] = [];
@@ -77,4 +77,38 @@ test('LiveKit speaker updates only keep current participants with an enabled mic
   room.emit(RoomEvent.ActiveSpeakersChanged, [rejoined, newest]);
   assert.deepEqual(micOn, ['2']);
   assert.deepEqual(speakers, ['2']);
+
+  const replacement = new RemoteParticipant(room.engine.client, 'PA_replacement', 'm-2-a-11');
+  room.remoteParticipants.set(replacement.identity, replacement);
+  room.emit(RoomEvent.ParticipantConnected, replacement);
+  assert.deepEqual(micOn, []);
+  assert.deepEqual(speakers, []);
+  room.remoteParticipants.delete(replacement.identity);
+  room.emit(RoomEvent.ParticipantDisconnected, replacement);
+  assert.deepEqual(micOn, [], 'A replaced lease cannot regain mic status when its replacement leaves first');
+  room.emit(RoomEvent.ActiveSpeakersChanged, [newest]);
+  assert.deepEqual(speakers, []);
+  room.emit(RoomEvent.Reconnecting);
+  room.emit(RoomEvent.Reconnected);
+  assert.deepEqual(micOn, []);
+  room.remoteParticipants.delete(newest.identity);
+  room.emit(RoomEvent.ParticipantDisconnected, newest);
+  assert.deepEqual(micOn, []);
+  assert.deepEqual(speakers, []);
+
+  const resumed = new RemoteParticipant(room.engine.client, 'PA_resumed', replacement.identity);
+  resumed.trackPublications.set(mic.trackSid, mic);
+  room.remoteParticipants.set(resumed.identity, resumed);
+  room.emit(RoomEvent.ParticipantConnected, resumed);
+  room.emit(RoomEvent.ActiveSpeakersChanged, [resumed]);
+  assert.deepEqual(micOn, ['2'], 'The latest lease remains valid when it reconnects');
+  assert.deepEqual(speakers, ['2']);
+
+  room.remoteParticipants.clear();
+  t.mock.method(room, 'connect', async () => {
+    room.remoteParticipants.set(first.identity, first);
+  });
+  await voice.connect({ status: 'ok', url: 'ws://127.0.0.1', token: 'unused', expires_at: 1 });
+  assert.deepEqual(micOn, ['2'], 'A new room connection resets the lease history');
+  assert.deepEqual(speakers, []);
 });
