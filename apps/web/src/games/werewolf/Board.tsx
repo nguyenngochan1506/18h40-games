@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type {
   WerewolfAction,
   WerewolfNightStep,
@@ -19,6 +20,7 @@ import {
   selectSpectatorView,
   winnerLabel,
 } from './state.ts';
+import { TABLE_BACKDROP, tableActorImage, tableSeatPose } from './tableLayout.ts';
 import './styles.css';
 
 function phaseTitle(
@@ -136,6 +138,7 @@ export default function Board(props: GameBoardProps) {
 
   const [hideMyCard, setHideMyCard] = useState(false);
   const [showDeckModal, setShowDeckModal] = useState(false);
+  const [logExpanded, setLogExpanded] = useState(false);
   const [selectedTargets, setSelectedTargets] = useState<WerewolfPlayerId[]>([]);
   const [alphaInfect, setAlphaInfect] = useState(false);
   const [witchHeal, setWitchHeal] = useState(false);
@@ -184,9 +187,12 @@ export default function Board(props: GameBoardProps) {
   const player = selectPlayerView(game.view);
   const seats = game.seats;
   const isNight = table.phase.kind === 'night';
+  const isHunterShot = table.phase.kind === 'hunter_shot';
   const isOver = table.winner !== null;
   const canAct = Boolean(player?.can_act) && !props.disabled && !props.pending && sync.frames.length === 0;
   const isHost = room.host === room.you;
+  const viewerIndex = player ? table.players.findIndex(p => p.id === player.you) : null;
+  const livingCount = table.players.filter(p => p.alive).length;
 
   function emit(payload: WerewolfAction) {
     props.sendAction({ game: 'werewolf', payload });
@@ -238,7 +244,7 @@ export default function Board(props: GameBoardProps) {
     if (isOver) {
       return (
         <div className="ww-victory-banner" role="status">
-          <h2>{winnerLabel(table.winner!)}</h2>
+          <h3>{winnerLabel(table.winner!)}</h3>
           {table.winning_players.length > 0 && (
             <p>
               Người thắng:{' '}
@@ -288,7 +294,7 @@ export default function Board(props: GameBoardProps) {
         case 'cupid':
           return (
             <div className="ww-action-bar">
-              <span>Chọn 2 người chơi để ghép đôi Tình Nhân ({selectedTargets.length}/2).</span>
+              <span>Chọn 2 người quanh bàn để ghép đôi Tình Nhân ({selectedTargets.length}/2).</span>
               <button
                 type="button"
                 className="ww-btn ww-btn-primary"
@@ -303,7 +309,7 @@ export default function Board(props: GameBoardProps) {
           return (
             <div className="ww-action-bar">
               <span>
-                Chọn 1 người để bảo vệ đêm nay
+                Chọn 1 người quanh bàn để bảo vệ đêm nay
                 {player.bodyguard_last_protected !== null
                   ? ` (không chọn lại ${seatName(seats, player.bodyguard_last_protected)})`
                   : ''}.
@@ -347,7 +353,7 @@ export default function Board(props: GameBoardProps) {
         case 'seer':
           return (
             <div className="ww-action-bar">
-              <span>Chọn 1 người chơi khác để soi xem có phải Ma Sói không.</span>
+              <span>Chọn 1 người chơi khác quanh bàn để soi xem có phải Ma Sói không.</span>
               <button
                 type="button"
                 className="ww-btn ww-btn-primary"
@@ -361,7 +367,7 @@ export default function Board(props: GameBoardProps) {
         case 'sorcerer':
           return (
             <div className="ww-action-bar">
-              <span>Chọn 1 người chơi khác để tìm Tiên Tri.</span>
+              <span>Chọn 1 người chơi khác quanh bàn để tìm Tiên Tri.</span>
               <button
                 type="button"
                 className="ww-btn ww-btn-primary"
@@ -411,7 +417,7 @@ export default function Board(props: GameBoardProps) {
     if (phase.kind === 'hunter_shot') {
       return (
         <div className="ww-action-bar">
-          <span>Bạn đã bị loại! Chọn 1 người chơi còn sống để kéo theo.</span>
+          <span>Bạn đã bị loại! Chọn 1 người chơi còn sống quanh bàn để kéo theo.</span>
           <button
             type="button"
             className="ww-btn ww-btn-danger"
@@ -451,18 +457,20 @@ export default function Board(props: GameBoardProps) {
 
   return (
     <section
-      className={`game-werewolf ww-board ${isNight ? 'ww-theme-night' : 'ww-theme-day'}`}
+      className={[
+        'game-werewolf',
+        'ww-board',
+        isNight ? 'ww-theme-night' : 'ww-theme-day',
+        isHunterShot ? 'ww-theme-hunter' : '',
+        table.players.length > 7 ? 'ww-many-seats' : '',
+      ].filter(Boolean).join(' ')}
       aria-label="Bàn Ma Sói"
     >
+      {/* Floating Top-Right Toolbar */}
       <header className="ww-topbar">
-        <div className="ww-phase-pill">
-          <span className="ww-phase-icon" aria-hidden="true">{isNight ? '☾' : '☀'}</span>
-          <div>
-            <h2 className="ww-phase-heading">{phaseTitle(table.phase, player?.active_night_step ?? null, seats)}</h2>
-            <p className="ww-phase-sub">
-              Phòng {room.code} · {table.players.filter(p => p.alive).length}/{table.players.length} người còn sống
-            </p>
-          </div>
+        <div className="ww-topbar-brand">
+          <span className="ww-room-tag">Ma Sói · Phòng {room.code}</span>
+          <span className="ww-alive-pill">{livingCount}/{table.players.length} còn sống</span>
         </div>
         <div className="ww-topbar-actions">
           <button type="button" className="ww-btn ww-btn-secondary" onClick={() => setShowDeckModal(v => !v)}>
@@ -487,89 +495,36 @@ export default function Board(props: GameBoardProps) {
         </div>
       </header>
 
-      {props.actionError && (
-        <p className="ww-error" role="alert">{props.actionError}</p>
-      )}
+      {/* Full-bleed Round Table Stage */}
+      <main className="ww-village" aria-label="Bàn tròn Ma Sói">
+        <div className="ww-table-stage">
+          <img className="ww-table-backdrop" src={TABLE_BACKDROP} alt="" aria-hidden="true" />
+          <div className="ww-table-atmosphere" aria-hidden="true" />
 
-      {renderActionPanel()}
-
-      <div className="ww-layout">
-        {player && (
-          <aside className="ww-my-panel" aria-label="Vai trò của bạn">
-            <div className="ww-my-panel-head">
-              <h3>Lá bài của bạn</h3>
-              <button
-                type="button"
-                className="ww-btn ww-btn-ghost"
-                onClick={() => setHideMyCard(v => !v)}
-              >
-                {hideMyCard ? 'Hiện bài' : 'Úp bài'}
-              </button>
-            </div>
-            <RoleCard role={player.your_role} faceDown={hideMyCard} size="lg" showSummary />
-            {!hideMyCard && (
-              <div className="ww-secrets">
-                <span className={`ww-badge ww-badge-${player.your_team}`}>{teamLabel(player.your_team)}</span>
-                {player.is_wolf_pack && player.your_role !== 'werewolf' && player.your_role !== 'alpha_wolf' && (
-                  <p className="ww-secret-note">Bạn đã biến thành Ma Sói và gia nhập bầy Sói!</p>
-                )}
-                {player.known_wolves.length > 0 && (
-                  <p className="ww-secret-note">
-                    <strong>Bầy Sói:</strong> {player.known_wolves.map(id => seatName(seats, id)).join(', ')}
-                  </p>
-                )}
-                {player.lover !== null && (
-                  <p className="ww-secret-note ww-secret-lover">
-                    ♥ Tình Nhân của bạn: <strong>{seatName(seats, player.lover)}</strong>
-                  </p>
-                )}
-                {player.cupid_lovers && (
-                  <p className="ww-secret-note">
-                    ♥ Đã ghép đôi: {seatName(seats, player.cupid_lovers[0])} & {seatName(seats, player.cupid_lovers[1])}
-                  </p>
-                )}
-                {player.your_role === 'witch' && !player.is_wolf_pack && (
-                  <p className="ww-secret-note">
-                    Bình Cứu: <strong>{player.witch_heal_available ? 'Còn' : 'Đã dùng'}</strong> · Bình Độc:{' '}
-                    <strong>{player.witch_poison_available ? 'Còn' : 'Đã dùng'}</strong>
-                  </p>
-                )}
-                {player.seer_history.length > 0 && (
-                  <div className="ww-history">
-                    <strong>Sổ Tiên Tri</strong>
-                    <ul>
-                      {player.seer_history.map((item, idx) => (
-                        <li key={idx}>
-                          Đêm {item.night}: {seatName(seats, item.target)} →{' '}
-                          <strong className={item.is_wolf ? 'ww-text-wolf' : 'ww-text-safe'}>
-                            {item.is_wolf ? 'MA SÓI' : 'Không phải Sói'}
-                          </strong>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {player.sorcerer_history.length > 0 && (
-                  <div className="ww-history">
-                    <strong>Sổ Pháp Sư</strong>
-                    <ul>
-                      {player.sorcerer_history.map((item, idx) => (
-                        <li key={idx}>
-                          Đêm {item.night}: {seatName(seats, item.target)} →{' '}
-                          <strong>{item.is_seer ? 'TIÊN TRI' : 'Không phải Tiên Tri'}</strong>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+          {/* Center Table Plaque: Phase + Action Controls */}
+          <div className="ww-table-center">
+            <div className="ww-phase-pill">
+              <span className="ww-phase-icon" aria-hidden="true">
+                {isOver ? '★' : isHunterShot ? '⚔' : isNight ? '☾' : '☀'}
+              </span>
+              <div className="ww-phase-copy">
+                <h2 className="ww-phase-heading">
+                  {phaseTitle(table.phase, player?.active_night_step ?? null, seats)}
+                </h2>
               </div>
-            )}
-          </aside>
-        )}
+            </div>
 
-        <main className="ww-village" aria-label="Danh sách người chơi">
-          <div className="ww-seats-grid">
-            {table.players.map(seat => {
+            {props.actionError && (
+              <p className="ww-error" role="alert">{props.actionError}</p>
+            )}
+
+            {renderActionPanel()}
+          </div>
+
+          {/* Players Seated Around the Round Table */}
+          <div className="ww-seats-arena" aria-label="Danh sách người chơi quanh bàn">
+            {table.players.map((seat, idx) => {
+              const pose = tableSeatPose(idx, table.players.length, viewerIndex);
               const selectable = isTargetSelectable(seat.id);
               const selected = selectedTargets.includes(seat.id);
               const isMe = player?.you === seat.id;
@@ -578,63 +533,190 @@ export default function Board(props: GameBoardProps) {
               const isWinner = table.winning_players.includes(seat.id);
               const wolfVoteFor = player?.wolf_votes.filter(v => v.target === seat.id) ?? [];
               const displayRole = seat.role ?? (isMe && !hideMyCard ? player.your_role : null);
+              const actorSrc = tableActorImage(seat.id, pose.view, seat.alive);
 
               return (
-                <button
+                <div
                   key={seat.id}
-                  type="button"
-                  disabled={!selectable}
-                  onClick={() => toggleTarget(seat.id)}
                   className={[
-                    'ww-seat-card',
-                    !seat.alive ? 'is-dead' : '',
-                    selectable ? 'is-selectable' : '',
-                    selected ? 'is-selected' : '',
-                    isMe ? 'is-me' : '',
-                    isWinner ? 'is-winner' : '',
+                    'ww-seat-slot',
+                    `ww-seat-${pose.view}`,
+                    isMe ? 'is-me-slot' : '',
+                    !seat.alive ? 'is-dead-slot' : '',
                   ].filter(Boolean).join(' ')}
+                  style={{
+                    '--seat-x': `${pose.x}%`,
+                    '--seat-y': `${pose.y}%`,
+                    '--actor-height': `${pose.actorHeight * 100}%`,
+                    '--card-offset-y': `${pose.cardOffsetY}px`,
+                  } as CSSProperties}
                 >
-                  <div className="ww-seat-top">
-                    <span className="ww-seat-name">
-                      {seatName(seats, seat.id)}
-                      {isMe && ' (Bạn)'}
-                    </span>
-                    <span className={`ww-status-dot ${seat.alive ? 'alive' : 'dead'}`}>
-                      {seat.alive ? 'Sống' : 'Đã loại'}
-                    </span>
+                  <div
+                    className={`ww-seat-actor-wrap${!seat.alive ? ' is-ghost' : ''}`}
+                    style={{ transform: pose.flip ? 'scaleX(-1)' : undefined }}
+                    aria-hidden="true"
+                  >
+                    <img className="ww-seat-actor" src={actorSrc} alt="" decoding="async" />
                   </div>
 
-                  <RoleCard role={displayRole} faceDown={!displayRole} size="sm" />
+                  <button
+                    type="button"
+                    disabled={!selectable}
+                    onClick={() => toggleTarget(seat.id)}
+                    className={[
+                      'ww-seat-card',
+                      !seat.alive ? 'is-dead' : '',
+                      selectable ? 'is-selectable' : '',
+                      selected ? 'is-selected' : '',
+                      isMe ? 'is-me' : '',
+                      isWinner ? 'is-winner' : '',
+                    ].filter(Boolean).join(' ')}
+                  >
+                    <div className="ww-seat-card-body">
+                      <RoleCard role={displayRole} faceDown={!displayRole} size="xs" />
+                      <div className="ww-seat-meta">
+                        <span className="ww-seat-name" title={seatName(seats, seat.id)}>
+                          {seatName(seats, seat.id)}
+                          {isMe && ' (Bạn)'}
+                        </span>
+                        <span className={`ww-status-dot ${seat.alive ? 'alive' : 'dead'}`}>
+                          {seat.alive ? 'Sống' : 'Đã loại'}
+                        </span>
+                      </div>
+                    </div>
 
-                  <div className="ww-seat-badges">
-                    {!hideMyCard && isKnownWolf && !isOver && <span className="ww-mini-badge ww-mini-wolf">Bầy Sói</span>}
-                    {!hideMyCard && isLover && <span className="ww-mini-badge ww-mini-lover">♥ Tình Nhân</span>}
-                    {seat.is_revealed_prince && <span className="ww-mini-badge ww-mini-royal">Hoàng Tử</span>}
-                    {seat.is_revealed_mayor && <span className="ww-mini-badge ww-mini-royal">Thị Trưởng ×2</span>}
-                    {seat.death_cause && (
-                      <span className="ww-mini-badge ww-mini-dead">{deathCauseLabel(seat.death_cause)}</span>
-                    )}
-                    {seat.day_vote && (
-                      <span className="ww-mini-badge ww-mini-vote">
-                        {seat.day_vote.kind === 'abstain'
-                          ? 'Phiếu trắng'
-                          : `Bầu: ${seatName(seats, seat.day_vote.target)}`}
-                      </span>
-                    )}
-                    {!hideMyCard && wolfVoteFor.length > 0 && (
-                      <span className="ww-mini-badge ww-mini-wolf">
-                        Sói chọn ({wolfVoteFor.length})
-                      </span>
-                    )}
-                  </div>
-                </button>
+                    <div className="ww-seat-badges">
+                      {!hideMyCard && isKnownWolf && !isOver && (
+                        <span className="ww-mini-badge ww-mini-wolf">Bầy Sói</span>
+                      )}
+                      {!hideMyCard && isLover && (
+                        <span className="ww-mini-badge ww-mini-lover">♥ Tình Nhân</span>
+                      )}
+                      {seat.is_revealed_prince && (
+                        <span className="ww-mini-badge ww-mini-royal">Hoàng Tử</span>
+                      )}
+                      {seat.is_revealed_mayor && (
+                        <span className="ww-mini-badge ww-mini-royal">Thị Trưởng ×2</span>
+                      )}
+                      {seat.death_cause && (
+                        <span className="ww-mini-badge ww-mini-dead">{deathCauseLabel(seat.death_cause)}</span>
+                      )}
+                      {seat.day_vote && (
+                        <span className="ww-mini-badge ww-mini-vote">
+                          {seat.day_vote.kind === 'abstain'
+                            ? 'Phiếu trắng'
+                            : `Bầu: ${seatName(seats, seat.day_vote.target)}`}
+                        </span>
+                      )}
+                      {!hideMyCard && wolfVoteFor.length > 0 && (
+                        <span className="ww-mini-badge ww-mini-wolf">
+                          Sói chọn ({wolfVoteFor.length})
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                </div>
               );
             })}
           </div>
-        </main>
+        </div>
+      </main>
 
-        <aside className="ww-log-panel" aria-label="Nhật ký làng">
-          <h3>Nhật ký làng</h3>
+      {/* Dedicated Bottom HUD Dock (never occludes table seats) */}
+      <div className="ww-bottom-hud">
+        {player && (
+          <aside className="ww-my-panel" aria-label="Vai trò của bạn">
+            <div className="ww-my-card-col">
+              <RoleCard role={player.your_role} faceDown={hideMyCard} size="sm" />
+            </div>
+            <div className="ww-my-info-col">
+              <div className="ww-my-panel-head">
+                <h3>{hideMyCard ? 'Lá bài đang úp' : ROLES[player.your_role].name}</h3>
+                <button
+                  type="button"
+                  className="ww-btn ww-btn-ghost"
+                  onClick={() => setHideMyCard(v => !v)}
+                >
+                  {hideMyCard ? 'Hiện bài' : 'Úp bài'}
+                </button>
+              </div>
+              {!hideMyCard && (
+                <div className="ww-secrets">
+                  <div className="ww-secret-top-row">
+                    <span className={`ww-badge ww-badge-${player.your_team}`}>{teamLabel(player.your_team)}</span>
+                    <span className="ww-role-en">{ROLES[player.your_role].englishName}</span>
+                  </div>
+                  <p className="ww-secret-summary">{ROLES[player.your_role].summary}</p>
+                  {player.is_wolf_pack && player.your_role !== 'werewolf' && player.your_role !== 'alpha_wolf' && (
+                    <p className="ww-secret-note">Bạn đã biến thành Ma Sói và gia nhập bầy Sói!</p>
+                  )}
+                  {player.known_wolves.length > 0 && (
+                    <p className="ww-secret-note">
+                      <strong>Bầy Sói:</strong> {player.known_wolves.map(id => seatName(seats, id)).join(', ')}
+                    </p>
+                  )}
+                  {player.lover !== null && (
+                    <p className="ww-secret-note ww-secret-lover">
+                      ♥ Tình Nhân: <strong>{seatName(seats, player.lover)}</strong>
+                    </p>
+                  )}
+                  {player.cupid_lovers && (
+                    <p className="ww-secret-note">
+                      ♥ Đã ghép đôi: {seatName(seats, player.cupid_lovers[0])} & {seatName(seats, player.cupid_lovers[1])}
+                    </p>
+                  )}
+                  {player.your_role === 'witch' && !player.is_wolf_pack && (
+                    <p className="ww-secret-note">
+                      Cứu: <strong>{player.witch_heal_available ? 'Còn' : 'Hết'}</strong> · Độc:{' '}
+                      <strong>{player.witch_poison_available ? 'Còn' : 'Hết'}</strong>
+                    </p>
+                  )}
+                  {player.seer_history.length > 0 && (
+                    <div className="ww-history">
+                      <strong>Sổ Tiên Tri</strong>
+                      <ul>
+                        {player.seer_history.map((item, idx) => (
+                          <li key={idx}>
+                            Đêm {item.night}: {seatName(seats, item.target)} →{' '}
+                            <strong className={item.is_wolf ? 'ww-text-wolf' : 'ww-text-safe'}>
+                              {item.is_wolf ? 'MA SÓI' : 'Không phải Sói'}
+                            </strong>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {player.sorcerer_history.length > 0 && (
+                    <div className="ww-history">
+                      <strong>Sổ Pháp Sư</strong>
+                      <ul>
+                        {player.sorcerer_history.map((item, idx) => (
+                          <li key={idx}>
+                            Đêm {item.night}: {seatName(seats, item.target)} →{' '}
+                            <strong>{item.is_seer ? 'TIÊN TRI' : 'Không phải Tiên Tri'}</strong>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+
+        <aside className={`ww-log-panel${logExpanded ? ' is-expanded' : ''}`} aria-label="Nhật ký làng">
+          <div className="ww-log-head">
+            <h3>Nhật ký làng</h3>
+            <button
+              type="button"
+              className="ww-btn ww-btn-ghost"
+              aria-expanded={logExpanded}
+              onClick={() => setLogExpanded(v => !v)}
+            >
+              {logExpanded ? 'Thu gọn' : 'Mở rộng'}
+            </button>
+          </div>
           <ol className="ww-log-list">
             {state.log.length === 0 ? (
               <li className="ww-log-item ww-log-neutral">Chưa có sự kiện nào.</li>

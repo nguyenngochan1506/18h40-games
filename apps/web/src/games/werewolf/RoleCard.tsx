@@ -4,7 +4,7 @@ import { CARD_BACK_IMAGE, ROLES } from './roles.ts';
 type RoleCardProps = {
   role: WerewolfRole | null;
   faceDown?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   showSummary?: boolean;
   className?: string;
 };
