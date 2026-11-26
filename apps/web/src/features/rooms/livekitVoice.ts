@@ -4,15 +4,6 @@ import type { MediaEvents, VoiceMedia } from './voice.ts';
 
 setLogLevel('silent');
 
-function memberIds(participants: Iterable<Participant>) {
-  const ids = [];
-  for (const { identity } of participants) {
-    const id = /^m-(\d+)-a-\d+$/.exec(identity)?.[1];
-    if (id) ids.push(id);
-  }
-  return ids;
-}
-
 export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
   // Separate send and receive negotiation to avoid Chromium errors during simultaneous muted joins.
   const room = new Room({ singlePeerConnection: false });
@@ -35,16 +26,35 @@ export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
     micWork = task.catch(() => undefined);
     return task;
   }
-  function syncSpeakers(participants = activeSpeakers) {
+  function latestParticipantIds() {
+    const latest = new Map<string, { attempt: bigint; participant: Participant }>();
+    for (const participant of [room.localParticipant, ...room.remoteParticipants.values()]) {
+      const identity = /^m-(\d+)-a-(\d+)$/.exec(participant.identity);
+      if (!identity) continue;
+      const [, id, sequence] = identity;
+      const attempt = BigInt(sequence);
+      const previous = latest.get(id);
+      if (!previous || attempt > previous.attempt) latest.set(id, { attempt, participant });
+    }
+    return new Map([...latest].map(([id, { participant }]) => [participant, id]));
+  }
+  function syncSpeakers(participants = activeSpeakers, current = latestParticipantIds()) {
     if (closed) return;
-    activeSpeakers = participants.filter(participant => participant.isMicrophoneEnabled &&
-      (participant === room.localParticipant || room.remoteParticipants.get(participant.identity) === participant));
-    events.speakers(memberIds(activeSpeakers));
+    activeSpeakers = [];
+    const ids: string[] = [];
+    for (const participant of participants) {
+      const id = current.get(participant);
+      if (id === undefined || !participant.isMicrophoneEnabled) continue;
+      activeSpeakers.push(participant);
+      ids.push(id);
+    }
+    events.speakers(ids);
   }
   function syncMicrophones() {
     if (closed) return;
-    events.micOn(memberIds([...room.remoteParticipants.values()].filter(participant => participant.isMicrophoneEnabled)));
-    syncSpeakers();
+    const current = latestParticipantIds();
+    events.micOn([...current].flatMap(([participant, id]) => participant !== room.localParticipant && participant.isMicrophoneEnabled ? [id] : []));
+    syncSpeakers(activeSpeakers, current);
   }
   function reconnecting() {
     if (closed) return;

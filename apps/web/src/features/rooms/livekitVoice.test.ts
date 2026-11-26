@@ -35,7 +35,7 @@ test('LiveKit speaker updates only keep current participants with an enabled mic
   assert.deepEqual(micOn, []);
   assert.deepEqual(speakers, [], 'Leaving clears the speaking indicator immediately');
 
-  const rejoined = new RemoteParticipant(room.engine.client, 'PA_new', 'm-2-a-2');
+  const rejoined = new RemoteParticipant(room.engine.client, 'PA_new', 'm-2-a-9');
   room.remoteParticipants.set(rejoined.identity, rejoined);
   room.emit(RoomEvent.ParticipantConnected, rejoined);
   room.emit(RoomEvent.ActiveSpeakersChanged, [first]);
@@ -57,4 +57,24 @@ test('LiveKit speaker updates only keep current participants with an enabled mic
   room.emit(RoomEvent.TrackUnmuted, mic, rejoined);
   assert.deepEqual(micOn, ['2']);
   assert.deepEqual(speakers, [], 'Unmuting does not restore the pruned speaker');
+
+  room.emit(RoomEvent.ActiveSpeakersChanged, [rejoined]);
+  assert.deepEqual(speakers, ['2']);
+  const newest = new RemoteParticipant(room.engine.client, 'PA_latest', 'm-2-a-10');
+  room.remoteParticipants.set(newest.identity, newest);
+  room.emit(RoomEvent.ParticipantConnected, newest);
+  assert.deepEqual(micOn, [], 'The latest lease is muted while the old lease still has a mic');
+  assert.deepEqual(speakers, []);
+  room.emit(RoomEvent.ActiveSpeakersChanged, [rejoined]);
+  assert.deepEqual(speakers, [], 'The superseded lease cannot restore the speaking indicator');
+  room.remoteParticipants.delete(rejoined.identity);
+  room.emit(RoomEvent.ParticipantDisconnected, rejoined);
+  assert.deepEqual(micOn, []);
+  assert.deepEqual(speakers, []);
+
+  newest.trackPublications.set(mic.trackSid, mic);
+  room.emit(RoomEvent.TrackPublished, mic, newest);
+  room.emit(RoomEvent.ActiveSpeakersChanged, [rejoined, newest]);
+  assert.deepEqual(micOn, ['2']);
+  assert.deepEqual(speakers, ['2']);
 });
