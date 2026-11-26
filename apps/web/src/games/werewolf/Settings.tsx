@@ -36,7 +36,7 @@ function SettingsEditor({
 
   return (
     <form
-      className="ww-settings"
+      className="ww-settings saloon-poster"
       aria-label="Cài đặt Ma Sói"
       noValidate
       onSubmit={event => {
@@ -50,14 +50,7 @@ function SettingsEditor({
       }}
     >
       <header className="ww-settings-header">
-        <div>
-          <h3>Bộ bài Ultimate Werewolf: Deluxe Edition</h3>
-          <p className="ww-settings-subtitle">
-            {players < 5
-              ? 'Chờ đủ 5 người chơi; hiện đang dùng bộ chuẩn cho 5 người.'
-              : 'Chỉnh số lượng từng vai theo ý muốn hoặc dùng bộ chuẩn cân bằng.'}
-          </p>
-        </div>
+        <h3>Bộ bài Ma Sói</h3>
         <div className="ww-settings-stats" role="status">
           <span className={total === effectivePlayers ? 'ww-stat-ok' : 'ww-stat-warn'}>
             Tổng bài: <strong>{total}/{effectivePlayers}</strong>
@@ -82,44 +75,52 @@ function SettingsEditor({
       </label>
 
       <fieldset className="ww-role-grid" disabled={!editable || players < 5}>
-        <legend>Chọn lá bài vai trò</legend>
-        {ROLE_ORDER.map(roleId => {
-          const meta = ROLES[roleId];
-          const count = draft.roles[roleId];
-          const max = meta.unique ? 1 : effectivePlayers;
-          return (
-            <div key={roleId} className={`ww-role-option ww-team-${meta.team} ${count > 0 ? 'is-active' : ''}`}>
-              <img src={meta.image} alt={meta.name} className="ww-role-thumb" loading="lazy" />
-              <div className="ww-role-info">
-                <div className="ww-role-heading">
-                  <strong>{meta.name}</strong>
-                  <span className="ww-role-bal">{meta.balance > 0 ? `+${meta.balance}` : meta.balance}</span>
+        <legend>Chọn lá bài vai trò (16 vai)</legend>
+        <div className="ww-role-list">
+          {ROLE_ORDER.map(roleId => {
+            const meta = ROLES[roleId];
+            const count = draft.roles[roleId];
+            const max = meta.unique ? 1 : effectivePlayers;
+            return (
+              <div key={roleId} className={`ww-role-option ww-team-${meta.team} ${count > 0 ? 'is-active' : ''}`}>
+                <img src={meta.image} alt={meta.name} className="ww-role-thumb" loading="lazy" />
+                <div className="ww-role-info">
+                  <div className="ww-role-heading">
+                    <strong>{meta.name}</strong>
+                    <span className="ww-role-bal">{meta.balance > 0 ? `+${meta.balance}` : meta.balance}</span>
+                  </div>
+                  <small>{meta.summary}</small>
                 </div>
-                <small>{meta.summary}</small>
+                <div className="ww-stepper">
+                  <button
+                    type="button"
+                    aria-label={`Giảm ${meta.name}`}
+                    disabled={count <= 0}
+                    onClick={() => setRoleCount(roleId, count - 1)}
+                  >
+                    −
+                  </button>
+                  <span className="ww-stepper-val" aria-live="polite">{count}</span>
+                  <button
+                    type="button"
+                    aria-label={`Tăng ${meta.name}`}
+                    disabled={count >= max}
+                    onClick={() => setRoleCount(roleId, count + 1)}
+                  >
+                    +
+                  </button>
+                </div>
               </div>
-              <div className="ww-stepper">
-                <button
-                  type="button"
-                  aria-label={`Giảm ${meta.name}`}
-                  disabled={count <= 0}
-                  onClick={() => setRoleCount(roleId, count - 1)}
-                >
-                  −
-                </button>
-                <span className="ww-stepper-val" aria-live="polite">{count}</span>
-                <button
-                  type="button"
-                  aria-label={`Tăng ${meta.name}`}
-                  disabled={count >= max}
-                  onClick={() => setRoleCount(roleId, count + 1)}
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </fieldset>
+
+      <p className="ww-settings-subtitle">
+        {players < 5
+          ? 'Chờ đủ 5 người chơi; hiện đang dùng bộ chuẩn cho 5 người.'
+          : 'Số người chơi đổi sẽ tự đưa về bộ chuẩn cân bằng.'}
+      </p>
 
       {error && <p className="ww-error" role="alert">{error}</p>}
       {editable && JSON.stringify(draft) !== JSON.stringify(settings) && (
@@ -131,7 +132,7 @@ function SettingsEditor({
           <>
             <button
               type="button"
-              className="ww-btn ww-btn-secondary"
+              className="ww-settings-reset"
               onClick={() => {
                 setError(null);
                 setDraft(current => ({ ...current, roles: standardRoleDeck(effectivePlayers) }));
@@ -139,7 +140,7 @@ function SettingsEditor({
             >
               Về bộ chuẩn ({effectivePlayers} người)
             </button>
-            <button type="submit" className="ww-btn ww-btn-primary">
+            <button type="submit" className="western-button">
               Áp dụng cài đặt
             </button>
           </>
