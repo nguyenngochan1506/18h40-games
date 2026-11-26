@@ -18,6 +18,7 @@ export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
   const room = new Room({ singlePeerConnection: false });
   const audio = new Map<RemoteTrack, HTMLMediaElement>();
   let closed = false;
+  let activeSpeakers: Participant[] = [];
   let micWork = Promise.resolve();
   let published: { raw: MediaStreamTrack; track: LocalAudioTrack } | undefined;
 
@@ -34,8 +35,21 @@ export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
     micWork = task.catch(() => undefined);
     return task;
   }
+  function syncSpeakers(participants = activeSpeakers) {
+    if (closed) return;
+    activeSpeakers = participants.filter(participant => participant.isMicrophoneEnabled &&
+      (participant === room.localParticipant || room.remoteParticipants.get(participant.identity) === participant));
+    events.speakers(memberIds(activeSpeakers));
+  }
   function syncMicrophones() {
-    if (!closed) events.micOn(memberIds([...room.remoteParticipants.values()].filter(participant => participant.isMicrophoneEnabled)));
+    if (closed) return;
+    events.micOn(memberIds([...room.remoteParticipants.values()].filter(participant => participant.isMicrophoneEnabled)));
+    syncSpeakers();
+  }
+  function reconnecting() {
+    if (closed) return;
+    activeSpeakers = [];
+    events.connection('reconnecting');
   }
 
   room
@@ -48,17 +62,16 @@ export function createLiveKitVoice(events: MediaEvents): VoiceMedia {
     })
     .on(RoomEvent.TrackUnsubscribed, detach)
     .on(RoomEvent.AudioPlaybackStatusChanged, () => { if (!closed) events.playback(room.canPlaybackAudio); })
-    .on(RoomEvent.ActiveSpeakersChanged, (participants: Participant[]) => {
-      if (!closed) events.speakers(memberIds(participants));
-    })
+    .on(RoomEvent.ActiveSpeakersChanged, syncSpeakers)
     .on(RoomEvent.ParticipantConnected, syncMicrophones)
     .on(RoomEvent.ParticipantDisconnected, syncMicrophones)
     .on(RoomEvent.TrackPublished, syncMicrophones)
     .on(RoomEvent.TrackUnpublished, syncMicrophones)
+    .on(RoomEvent.LocalTrackUnpublished, () => syncSpeakers())
     .on(RoomEvent.TrackMuted, syncMicrophones)
     .on(RoomEvent.TrackUnmuted, syncMicrophones)
-    .on(RoomEvent.SignalReconnecting, () => { if (!closed) events.connection('reconnecting'); })
-    .on(RoomEvent.Reconnecting, () => { if (!closed) events.connection('reconnecting'); })
+    .on(RoomEvent.SignalReconnecting, reconnecting)
+    .on(RoomEvent.Reconnecting, reconnecting)
     .on(RoomEvent.Reconnected, () => {
       if (closed) return;
       events.connection('connected');

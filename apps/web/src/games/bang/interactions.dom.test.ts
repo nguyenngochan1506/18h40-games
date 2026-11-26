@@ -474,3 +474,37 @@ for (const success of [true, false]) test(`real Client drag ${success ? 'waits f
   }
   assert.equal(sample.locked, false, 'Neither path adds an extra timer to unlock input');
 });
+
+test('BANG member list rotates from the viewer seat, keeping offline members and removing departed ones', async t => {
+  const width = Object.getOwnPropertyDescriptor(window, 'innerWidth'), height = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });
+  t.after(() => { if (width) Object.defineProperty(window, 'innerWidth', width); else Reflect.deleteProperty(window, 'innerWidth'); if (height) Object.defineProperty(window, 'innerHeight', height); else Reflect.deleteProperty(window, 'innerHeight'); });
+  const { container, root, settle } = await host(t);
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Player fixture required');
+  const table = game.view.view.table;
+  game.view.view.you = 2;
+  const spectator = { id: '6', nickname: 'Mai', role: 'spectator' as const, online: true };
+  const room = { ...demoRoom, you: '3', members: [spectator, ...[...demoRoom.members].reverse()] };
+  const render = async () => {
+    await act(async () => root.render(createElement(GameBoard, { game, room, fxEnabled: false })));
+    await settle();
+  };
+  const playerRows = () => [...container.querySelectorAll('ul[aria-label="Người chơi"] > li')];
+  const names = () => playerRows().map(row => row.querySelector('.member-name')?.textContent);
+
+  await render();
+  assert.deepEqual(names(), ['Linh', 'Nam', 'An', 'Hân', 'Minh']);
+  assert.equal(container.querySelector('ul[aria-label="Khán giả"] .member-name')?.textContent, 'Mai');
+
+  room.members = room.members.filter(member => member.id !== '2');
+  await render();
+  assert.match(playerRows().find(row => row.querySelector('.member-name')?.textContent === 'An')!.textContent!, /Mất kết nối/);
+  assert.deepEqual(names(), ['Linh', 'Nam', 'An', 'Hân']);
+
+  room.you = spectator.id;
+  game.view = { perspective: 'spectator', view: table };
+  await render();
+  assert.deepEqual(names(), ['Hân', 'Linh', 'Nam', 'An']);
+});

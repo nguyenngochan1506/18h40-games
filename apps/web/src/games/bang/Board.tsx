@@ -249,13 +249,14 @@ function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch
   const positions = seatLayout(table.players.length, viewerIndex < 0 ? null : viewerIndex);
   const paintedSeats = stage ? sceneSeatLayout(table.players.length, viewerIndex < 0 ? null : viewerIndex) : null;
   const firstSeat = Math.max(0, game.seats.findIndex(seat => seat.player_id === viewer));
-  const seatedMembers = stage ? [...game.seats.slice(firstSeat), ...game.seats.slice(0, firstSeat)].map(seat => {
+  const seatedMembers = stage ? [...game.seats.slice(firstSeat), ...game.seats.slice(0, firstSeat)].flatMap(seat => {
     const member = room.members.find(member => member.id === seat.member_id);
+    if (!member) return [];
     const player = table.players.find(player => player.id === seat.player_id);
-    return {
-      id: seat.member_id, nickname: member?.nickname ?? seat.nickname, online: member?.online ?? false,
+    return [{
+      id: member.id, nickname: member.nickname, online: member.online,
       avatar: player && seatActorFile(player.id, 'front', false), eliminated: player?.alive === false,
-    };
+    }];
   }) : [];
   const turnMember = table.winner ? undefined : game.seats.find(seat => seat.player_id === table.turn.player)?.member_id;
   const inspectPlayer = (player: PublicPlayer, origin: HTMLButtonElement) => { setSelected(null); setSelectedPlayer(player.id); inspectedOrigin.current = origin; };
