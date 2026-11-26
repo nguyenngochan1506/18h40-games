@@ -102,7 +102,7 @@ test('standardRoleDeck is valid for every player count from 5 to 16', () => {
   }
   assert.equal(ROLE_ORDER.length, 16);
   for (const id of ROLE_ORDER) {
-    assert.match(ROLES[id].image, /^\/werewolf\/cards\/[a-z_]+\.svg$/);
+    assert.match(ROLES[id].image, /^\/werewolf\/cards\/[a-z_]+\.webp$/);
   }
 });
 
@@ -195,7 +195,7 @@ test('Board consumes setup frame, displays role card image, selects target and e
   assert.ok(consumed.length >= 1, 'Board must consume frames');
   const myCardImg = container.querySelector<HTMLImageElement>('.ww-my-panel .ww-card-img');
   assert.ok(myCardImg);
-  assert.equal(myCardImg.getAttribute('src'), '/werewolf/cards/seer.svg');
+  assert.equal(myCardImg.getAttribute('src'), '/werewolf/cards/seer.webp');
 
   // Select seat 1 (Bình) and submit seer_inspect.
   const seatButtons = container.querySelectorAll<HTMLButtonElement>('.ww-seat-card');
