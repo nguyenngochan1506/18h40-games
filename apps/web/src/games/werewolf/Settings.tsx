@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { WerewolfRole, WerewolfSettings } from '../../generated/protocol.ts';
 import type { GameSettingsProps } from '../types.ts';
 import { balanceLabel, deckBalance, deckError, deckTotal, ROLE_ORDER, ROLES, standardRoleDeck } from './roles.ts';
@@ -17,11 +17,6 @@ function SettingsEditor({
 }) {
   const [draft, setDraft] = useState<WerewolfSettings>(settings);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDraft(settings);
-    setError(null);
-  }, [settings]);
 
   const effectivePlayers = Math.max(5, players);
   const total = deckTotal(draft.roles);

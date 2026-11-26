@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 440" width="320" height="440" role="img" aria-label="Tiên Tri">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#081a38"/>
+      <stop offset="55%" stop-color="#133262"/>
+      <stop offset="100%" stop-color="#071022"/>
+    </linearGradient>
+    <radialGradient id="aura" cx="50%" cy="42%" r="48%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.55"/>
+      <stop offset="55%" stop-color="#38bdf8" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#071022" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="50%" cy="50%" r="72%">
+      <stop offset="60%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#04050a" stop-opacity="0.72"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f6e0a5"/>
+      <stop offset="50%" stop-color="#7dd3fc"/>
+      <stop offset="100%" stop-color="#8b6528"/>
+    </linearGradient>
+    <clipPath id="innerClip">
+      <rect x="14" y="14" width="292" height="412" rx="14"/>
+    </clipPath>
+  </defs>
+
+  <rect width="320" height="440" rx="18" fill="#090b12"/>
+  <g clip-path="url(#innerClip)">
+    <rect x="14" y="14" width="292" height="412" fill="url(#bg)"/>
+    <rect x="14" y="14" width="292" height="412" fill="url(#aura)"/>
+    
+  <g fill="#f5e7c4" opacity="0.7">
+    <circle cx="54" cy="58" r="1.5"/><circle cx="92" cy="44" r="1"/>
+    <circle cx="246" cy="52" r="1.6"/><circle cx="268" cy="84" r="1.1"/>
+    <circle cx="64" cy="112" r="1"/><circle cx="232" cy="118" r="1.2"/>
+    <circle cx="132" cy="48" r="1.1"/><circle cx="198" cy="42" r="1.4"/>
+  </g>
+
+        <!-- Constellation ring -->
+        <circle cx="160" cy="170" r="98" fill="none" stroke="#7dd3fc" stroke-width="1.4" stroke-dasharray="3 7" opacity="0.65"/>
+        <path d="M62 110 L96 86 L132 104 M258 110 L224 86 L188 104" fill="none" stroke="#bae6fd" stroke-width="1" opacity="0.5"/>
+    
+        <!-- Starlit veil & shoulders -->
+        <path d="M74 416 C86 322 114 282 160 282 C206 282 234 322 246 416 Z" fill="#0f2547" stroke="#7dd3fc" stroke-width="2"/>
+        <path d="M112 268 C110 184 128 142 160 138 C192 142 210 184 208 268 Z" fill="#173866" stroke="#bae6fd" stroke-width="2"/>
+        <circle cx="160" cy="202" r="28" fill="#e2c7a8"/>
+        <!-- Circlet with third-eye gem -->
+        <path d="M132 194 Q160 182 188 194" fill="none" stroke="#f6d58e" stroke-width="3"/>
+        <polygon points="160,180 166,190 160,200 154,190" fill="#38bdf8"/>
+        <!-- Luminous Crystal Ball with All-Seeing Eye -->
+        <circle cx="160" cy="318" r="46" fill="#0ea5e9" opacity="0.25"/>
+        <circle cx="160" cy="318" r="38" fill="#082f49" stroke="#7dd3fc" stroke-width="2.5"/>
+        <path d="M132 318 Q160 296 188 318 Q160 340 132 318 Z" fill="#e0f2fe"/>
+        <circle cx="160" cy="318" r="11" fill="#0284c7"/>
+        <circle cx="160" cy="318" r="5" fill="#082f49"/>
+        <circle cx="164" cy="314" r="2.2" fill="#ffffff"/>
+        
+    <rect x="14" y="14" width="292" height="412" fill="url(#vignette)"/>
+  </g>
+
+  <!-- Ornate gothic border -->
+  <rect x="10" y="10" width="300" height="420" rx="16" fill="none" stroke="url(#gold)" stroke-width="2.5"/>
+  <rect x="18" y="18" width="284" height="404" rx="11" fill="none" stroke="#7dd3fc" stroke-width="1" stroke-opacity="0.55"/>
+  <!-- Corner filigree diamonds -->
+  <g fill="url(#gold)" opacity="0.9">
+    <polygon points="26,26 32,20 38,26 32,32"/>
+    <polygon points="282,26 288,20 294,26 288,32"/>
+    <polygon points="26,414 32,408 38,414 32,420"/>
+    <polygon points="282,414 288,408 294,414 288,420"/>
+  </g>
+</svg>

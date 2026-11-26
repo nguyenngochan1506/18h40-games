@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { WerewolfAction, WerewolfPlayerId, WerewolfPublicPhase } from '../../generated/protocol.ts';
+import type {
+  WerewolfAction,
+  WerewolfNightStep,
+  WerewolfPlayerId,
+  WerewolfPublicPhase,
+  WerewolfRoleDeck,
+} from '../../generated/protocol.ts';
 import type { GameBoardProps } from '../types.ts';
 import RoleCard from './RoleCard.tsx';
 import { ROLE_ORDER, ROLES, teamLabel } from './roles.ts';
@@ -15,10 +21,16 @@ import {
 } from './state.ts';
 import './styles.css';
 
-function phaseTitle(phase: WerewolfPublicPhase, seats: { nickname: string }[]): string {
+function phaseTitle(
+  phase: WerewolfPublicPhase,
+  activeNightStep: WerewolfNightStep | null,
+  seats: { nickname: string }[],
+): string {
   switch (phase.kind) {
     case 'night':
-      return `Đêm ${phase.night} — ${nightStepLabel(phase.step)}`;
+      return activeNightStep
+        ? `Đêm ${phase.night} — ${nightStepLabel(activeNightStep)}`
+        : `Đêm ${phase.night} — Cả làng đang ngủ`;
     case 'day_vote':
       return `Ngày ${phase.day} — Thảo luận & Bỏ phiếu treo cổ`;
     case 'hunter_shot':
@@ -26,6 +38,93 @@ function phaseTitle(phase: WerewolfPublicPhase, seats: { nickname: string }[]): 
     case 'game_over':
       return 'Ván đấu kết thúc';
   }
+}
+
+function DeckDialog({
+  playerCount,
+  roleCounts,
+  onClose,
+}: {
+  playerCount: number;
+  roleCounts: WerewolfRoleDeck;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const node = dialog.current!;
+    node.showModal();
+    closeButton.current?.focus();
+    return () => {
+      if (node.open) node.close();
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
+  }, []);
+
+  return (
+    <dialog
+      ref={dialog}
+      tabIndex={-1}
+      className="ww-modal"
+      aria-labelledby="ww-deck-dialog-title"
+      onCancel={event => {
+        event.preventDefault();
+        onClose();
+      }}
+      onClick={event => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      onKeyDown={event => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          onClose();
+          return;
+        }
+        if (event.key !== 'Tab') return;
+        const focusable = [
+          ...event.currentTarget.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+          ),
+        ];
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (!first) {
+          event.preventDefault();
+          event.currentTarget.focus();
+        } else if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }}
+    >
+      <div className="ww-modal-inner">
+        <div className="ww-modal-head">
+          <h3 id="ww-deck-dialog-title">Bộ bài trong ván ({playerCount} lá)</h3>
+          <button
+            ref={closeButton}
+            type="button"
+            className="ww-btn ww-btn-secondary"
+            onClick={onClose}
+          >
+            Đóng
+          </button>
+        </div>
+        <div className="ww-modal-grid">
+          {ROLE_ORDER.filter(id => roleCounts[id] > 0).map(id => (
+            <div key={id} className="ww-modal-card-item">
+              <RoleCard role={id} size="sm" showSummary />
+              <span className="ww-modal-count">×{roleCounts[id]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </dialog>
+  );
 }
 
 export default function Board(props: GameBoardProps) {
@@ -56,12 +155,19 @@ export default function Board(props: GameBoardProps) {
   }, [frame, consume, sync.desynced]);
 
   const game = state.game;
-  const phaseKey = game ? JSON.stringify(selectSpectatorView(game.view).phase) : '';
+  const resetKey = game
+    ? JSON.stringify([
+        state.epoch,
+        selectSpectatorView(game.view).phase,
+        selectPlayerView(game.view)?.active_night_step ?? null,
+        Boolean(selectPlayerView(game.view)?.can_act),
+      ])
+    : '';
   useEffect(() => {
     setSelectedTargets([]);
     setAlphaInfect(false);
     setWitchHeal(false);
-  }, [phaseKey, game?.seq]);
+  }, [resetKey]);
 
   if (!game) {
     return (
@@ -93,7 +199,7 @@ export default function Board(props: GameBoardProps) {
 
     const phase = table.phase;
     if (phase.kind === 'night') {
-      switch (phase.step) {
+      switch (player.active_night_step) {
         case 'cupid':
           return true;
         case 'bodyguard':
@@ -105,6 +211,8 @@ export default function Board(props: GameBoardProps) {
           return targetId !== player.you;
         case 'witch':
           return player.witch_poison_available && targetId !== player.you;
+        default:
+          return false;
       }
     }
     if (phase.kind === 'day_vote' || phase.kind === 'hunter_shot') {
@@ -115,7 +223,7 @@ export default function Board(props: GameBoardProps) {
 
   function toggleTarget(targetId: WerewolfPlayerId) {
     if (!isTargetSelectable(targetId)) return;
-    if (table.phase.kind === 'night' && table.phase.step === 'cupid') {
+    if (table.phase.kind === 'night' && player?.active_night_step === 'cupid') {
       setSelectedTargets(prev => {
         if (prev.includes(targetId)) return prev.filter(id => id !== targetId);
         if (prev.length >= 2) return [prev[1], targetId];
@@ -153,7 +261,11 @@ export default function Board(props: GameBoardProps) {
     if (!player) {
       return (
         <div className="ww-action-bar" role="status">
-          <span>Bạn đang ở chế độ khán giả. Đang chờ {table.awaited_count} người hành động…</span>
+          <span>
+            {isNight
+              ? 'Bạn đang ở chế độ khán giả. Màn đêm đang diễn ra…'
+              : `Bạn đang ở chế độ khán giả. Đang chờ ${table.awaited_count} người hành động…`}
+          </span>
         </div>
       );
     }
@@ -172,7 +284,7 @@ export default function Board(props: GameBoardProps) {
 
     const phase = table.phase;
     if (phase.kind === 'night') {
-      switch (phase.step) {
+      switch (player.active_night_step) {
         case 'cupid':
           return (
             <div className="ww-action-bar">
@@ -291,6 +403,8 @@ export default function Board(props: GameBoardProps) {
               </div>
             </div>
           );
+        default:
+          return null;
       }
     }
 
@@ -344,7 +458,7 @@ export default function Board(props: GameBoardProps) {
         <div className="ww-phase-pill">
           <span className="ww-phase-icon" aria-hidden="true">{isNight ? '☾' : '☀'}</span>
           <div>
-            <h2 className="ww-phase-heading">{phaseTitle(table.phase, seats)}</h2>
+            <h2 className="ww-phase-heading">{phaseTitle(table.phase, player?.active_night_step ?? null, seats)}</h2>
             <p className="ww-phase-sub">
               Phòng {room.code} · {table.players.filter(p => p.alive).length}/{table.players.length} người còn sống
             </p>
@@ -360,10 +474,16 @@ export default function Board(props: GameBoardProps) {
             </button>
           )}
           {props.roomTools}
-          {props.roomMenu}
-          <button type="button" className="ww-btn ww-btn-secondary" onClick={props.leaveRoom}>
-            Rời phòng
-          </button>
+          {props.roomMenu ? (
+            <details className="ww-room-menu">
+              <summary className="ww-btn ww-btn-secondary">Phòng</summary>
+              <div className="ww-room-menu-panel">{props.roomMenu}</div>
+            </details>
+          ) : (
+            <button type="button" className="ww-btn ww-btn-secondary" onClick={props.leaveRoom}>
+              Rời phòng
+            </button>
+          )}
         </div>
       </header>
 
@@ -530,24 +650,11 @@ export default function Board(props: GameBoardProps) {
       </div>
 
       {showDeckModal && (
-        <div className="ww-modal-backdrop" role="dialog" aria-modal="true" aria-label="Bộ bài trong ván">
-          <div className="ww-modal">
-            <div className="ww-modal-head">
-              <h3>Bộ bài trong ván ({table.players.length} lá)</h3>
-              <button type="button" className="ww-btn ww-btn-secondary" onClick={() => setShowDeckModal(false)}>
-                Đóng
-              </button>
-            </div>
-            <div className="ww-modal-grid">
-              {ROLE_ORDER.filter(id => table.role_counts[id] > 0).map(id => (
-                <div key={id} className="ww-modal-card-item">
-                  <RoleCard role={id} size="sm" showSummary />
-                  <span className="ww-modal-count">×{table.role_counts[id]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <DeckDialog
+          playerCount={table.players.length}
+          roleCounts={table.role_counts}
+          onClose={() => setShowDeckModal(false)}
+        />
       )}
     </section>
   );

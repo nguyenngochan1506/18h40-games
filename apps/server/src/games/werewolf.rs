@@ -101,9 +101,15 @@ impl Session {
             .map(PlayerId)
     }
 
+    fn is_awaited(&self, player: PlayerId) -> bool {
+        self.decision
+            .as_ref()
+            .is_some_and(|decision| decision.awaited.contains(&player))
+    }
+
     fn recipient(&self, member: &str) -> Option<PlayerId> {
         self.player(member)
-            .filter(|id| self.state.players[id.0].alive)
+            .filter(|id| self.state.players[id.0].alive || self.is_awaited(*id))
     }
 
     fn werewolf_view(&self, member: &str) -> WerewolfView {
@@ -198,6 +204,6 @@ impl GameSession for Session {
             .players
             .iter()
             .enumerate()
-            .any(|(i, player)| player.alive && present(i))
+            .any(|(i, player)| (player.alive || self.is_awaited(PlayerId(i))) && present(i))
     }
 }

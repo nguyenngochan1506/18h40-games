@@ -87,6 +87,97 @@
   align-items: center;
 }
 
+.game-werewolf .ww-room-menu {
+  position: relative;
+}
+
+.game-werewolf .ww-room-menu > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game-werewolf .ww-room-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.game-werewolf .ww-room-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+  width: min(300px, calc(100vw - 32px));
+  padding: 14px;
+  border-radius: 12px;
+  background: #141a2b;
+  border: 1px solid var(--ww-gold);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.game-werewolf .ww-room-menu-panel h2 {
+  margin: 0;
+  font-size: 0.98rem;
+  color: var(--ww-gold);
+}
+
+.game-werewolf .ww-room-menu-panel p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ww-muted);
+}
+
+.game-werewolf .ww-room-menu-panel .room-presence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.game-werewolf .ww-room-menu-panel .room-presence li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.85rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.game-werewolf .ww-room-menu-panel .room-presence li span:last-child {
+  color: var(--ww-muted);
+  font-size: 0.78rem;
+}
+
+.game-werewolf .ww-room-menu-panel .action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(240, 138, 148, 0.6);
+  background: linear-gradient(135deg, #c73746, #8f1d2a);
+  color: #fff5f6;
+  text-decoration: none;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.game-werewolf .ww-room-menu-panel .action.secondary {
+  border-color: var(--ww-border);
+  background: var(--ww-surface-soft);
+  color: var(--ww-text);
+}
+
 .game-werewolf .ww-btn {
   min-width: 44px;
   min-height: 42px;
@@ -713,24 +804,28 @@
   align-items: center;
 }
 
-/* Modal */
-.game-werewolf .ww-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(5, 8, 16, 0.78);
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  z-index: 50;
-}
-
+/* Modal (<dialog>.showModal) */
 .game-werewolf .ww-modal {
-  width: min(820px, 100%);
+  width: min(820px, calc(100vw - 32px));
   max-height: 85vh;
-  overflow-y: auto;
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
   background: #141a2b;
+  color: var(--ww-text);
   border: 1px solid var(--ww-gold);
   border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65);
+}
+
+.game-werewolf .ww-modal::backdrop {
+  background: rgba(5, 8, 16, 0.78);
+  backdrop-filter: blur(2px);
+}
+
+.game-werewolf .ww-modal-inner {
+  max-height: 85vh;
+  overflow-y: auto;
   padding: 16px;
   display: flex;
   flex-direction: column;

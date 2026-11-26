@@ -39,12 +39,12 @@
   - `Witch`: không dùng thuốc (`heal: false, poison: None`).
   - `Hunter`: bắn người sống đầu tiên.
   - `DayVote`: bỏ phiếu trắng (`target: None`).
-- Người bị loại nhận `SpectatorView` và chỉ nhận event công khai.
-- `may_continue_abandoned`: chỉ tự động tiếp tục nếu vẫn còn ít nhất 1 người chơi sống hiện diện trong phòng (tránh ván bỏ hoang quay vòng vô hạn).
+- Người bị loại nhận `SpectatorView` và chỉ nhận event công khai, **ngoại lệ duy nhất**: Thợ Săn vừa chết trong pha `HunterShot` vẫn giữ `PlayerView` (`can_act = true`) cho đến khi bắn xong mục tiêu kéo theo, sau đó chuyển ngay về `SpectatorView`.
+- `may_continue_abandoned`: chỉ tự động tiếp tục nếu vẫn còn ít nhất 1 người chơi sống (hoặc đang được chờ hành động như Thợ Săn trong `HunterShot`) hiện diện trong phòng (tránh ván bỏ hoang quay vòng vô hạn).
 
 ## 4. View và lọc thông tin ẩn
-- `SpectatorView` không bao giờ chứa vai ẩn của người còn sống, danh sách Sói, tình nhân, lịch sử soi, bình thuốc hay nạn nhân đêm của Sói. Khi `winner.is_some()`, vai thật của mọi người chơi mới được công khai.
-- `PlayerView` chỉ mở thêm thông tin đúng vai của `you`:
+- `SpectatorView` không bao giờ chứa vai ẩn của người còn sống, danh sách Sói, tình nhân, lịch sử soi, bình thuốc, nạn nhân đêm của Sói hay bước đêm chi tiết (`PublicPhase::Night { night }` không lộ `NightStep`, `awaited_count = 0` trong pha Đêm, và `NightStepStarted` chỉ gửi riêng cho người cần hành động) — nhờ đó tắt lộ vai khi chết không để lộ vai trò qua lịch bước đêm. Khi `winner.is_some()`, vai thật của mọi người chơi mới được công khai.
+- `PlayerView` chỉ mở thêm thông tin đúng vai của `you` (kèm `active_night_step` chỉ có giá trị khi `can_act = true` trong pha Đêm):
   - Sói & Tay Sai thấy `known_wolves` (Tay Sai không nằm trong `known_wolves`).
   - Tình Nhân thấy `lover`; Thần Tình Yêu thấy `cupid_lovers`.
   - Tiên Tri thấy `seer_history`; Pháp Sư Hắc Ám thấy `sorcerer_history`.

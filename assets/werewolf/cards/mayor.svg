@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 440" width="320" height="440" role="img" aria-label="Thị Trưởng">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1f1c12"/>
+      <stop offset="55%" stop-color="#3b321d"/>
+      <stop offset="100%" stop-color="#12100a"/>
+    </linearGradient>
+    <radialGradient id="aura" cx="50%" cy="42%" r="48%">
+      <stop offset="0%" stop-color="#eab308" stop-opacity="0.55"/>
+      <stop offset="55%" stop-color="#eab308" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#12100a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="50%" cy="50%" r="72%">
+      <stop offset="60%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#04050a" stop-opacity="0.72"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f6e0a5"/>
+      <stop offset="50%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#8b6528"/>
+    </linearGradient>
+    <clipPath id="innerClip">
+      <rect x="14" y="14" width="292" height="412" rx="14"/>
+    </clipPath>
+  </defs>
+
+  <rect width="320" height="440" rx="18" fill="#090b12"/>
+  <g clip-path="url(#innerClip)">
+    <rect x="14" y="14" width="292" height="412" fill="url(#bg)"/>
+    <rect x="14" y="14" width="292" height="412" fill="url(#aura)"/>
+    
+  <g fill="#f5e7c4" opacity="0.7">
+    <circle cx="54" cy="58" r="1.5"/><circle cx="92" cy="44" r="1"/>
+    <circle cx="246" cy="52" r="1.6"/><circle cx="268" cy="84" r="1.1"/>
+    <circle cx="64" cy="112" r="1"/><circle cx="232" cy="118" r="1.2"/>
+    <circle cx="132" cy="48" r="1.1"/><circle cx="198" cy="42" r="1.4"/>
+  </g>
+
+        <circle cx="160" cy="204" r="96" fill="none" stroke="#facc15" stroke-width="1.5" stroke-dasharray="5 5" opacity="0.45"/>
+    
+        <!-- Ceremonial Sash & Ribbon Seal -->
+        <polygon points="134,274 114,394 148,370 160,396 172,370 206,394 186,274" fill="#991b1b" stroke="#facc15" stroke-width="2"/>
+        <!-- Golden Medallion -->
+        <circle cx="160" cy="214" r="76" fill="#78350f" stroke="url(#gold)" stroke-width="6"/>
+        <circle cx="160" cy="214" r="62" fill="#451a03" stroke="#fde047" stroke-width="2"/>
+        <!-- Balance Scale inside medallion -->
+        <line x1="160" y1="168" x2="160" y2="254" stroke="#fde047" stroke-width="4" stroke-linecap="round"/>
+        <line x1="118" y1="190" x2="202" y2="190" stroke="#fde047" stroke-width="4" stroke-linecap="round"/>
+        <path d="M118 190 L106 220 L130 220 Z" fill="none" stroke="#f6e0a5" stroke-width="2"/>
+        <path d="M104 220 Q118 232 132 220 Z" fill="#facc15"/>
+        <path d="M202 190 L190 220 L214 220 Z" fill="none" stroke="#f6e0a5" stroke-width="2"/>
+        <path d="M188 220 Q202 232 216 220 Z" fill="#facc15"/>
+        <!-- ×2 Badge -->
+        <circle cx="160" cy="310" r="24" fill="#facc15" stroke="#78350f" stroke-width="3"/>
+        <text x="160" y="318" text-anchor="middle" font-family="Georgia, serif" font-size="22" font-weight="bold" fill="#451a03">×2</text>
+        
+    <rect x="14" y="14" width="292" height="412" fill="url(#vignette)"/>
+  </g>
+
+  <!-- Ornate gothic border -->
+  <rect x="10" y="10" width="300" height="420" rx="16" fill="none" stroke="url(#gold)" stroke-width="2.5"/>
+  <rect x="18" y="18" width="284" height="404" rx="11" fill="none" stroke="#facc15" stroke-width="1" stroke-opacity="0.55"/>
+  <!-- Corner filigree diamonds -->
+  <g fill="url(#gold)" opacity="0.9">
+    <polygon points="26,26 32,20 38,26 32,32"/>
+    <polygon points="282,26 288,20 294,26 288,32"/>
+    <polygon points="26,414 32,408 38,414 32,420"/>
+    <polygon points="282,414 288,408 294,414 288,420"/>
+  </g>
+</svg>

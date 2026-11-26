@@ -717,7 +717,7 @@ fn random_valid_action(state: &GameState, rng: &mut ChaCha8Rng) -> (PlayerId, Ac
     let pview = view(state, actor).unwrap();
 
     let action = match dec.phase {
-        PublicPhase::Night { step, .. } => match step {
+        PublicPhase::Night { .. } => match dec.night_step.expect("night decision must have step") {
             NightStep::Cupid => {
                 let first = living[rng.random_range(0..living.len())];
                 let others: Vec<_> = living.iter().copied().filter(|&id| id != first).collect();
@@ -815,6 +815,7 @@ fn fuzz_200_games_across_all_player_counts_terminate_and_are_deterministic() {
                     assert!(!matches!(
                         ev,
                         EventKind::RoleAssigned { .. }
+                            | EventKind::NightStepStarted { .. }
                             | EventKind::LoversLinked { .. }
                             | EventKind::BodyguardProtected { .. }
                             | EventKind::WolfVoted { .. }
@@ -837,4 +838,193 @@ fn fuzz_200_games_across_all_player_counts_terminate_and_are_deterministic() {
         let second = run();
         assert_eq!(first, second, "seed {seed} was not deterministic");
     }
+}
+
+#[test]
+fn hidden_death_roles_do_not_leak_seer_step_on_subsequent_nights() {
+    let mut rng = ChaCha8Rng::seed_from_u64(101);
+    let settings = Settings {
+        roles: RoleDeck::standard(5),
+        reveal_role_on_death: false,
+    };
+    let (mut state, setup_events) = setup(5, settings, &mut rng).unwrap();
+    let wolf = find_role(&state, Role::Werewolf);
+    let seer = find_role(&state, Role::Seer);
+    let bg = find_role(&state, Role::Bodyguard);
+    let villagers = find_roles(&state, Role::Villager);
+
+    // Spectators and non-acting players must never receive NightStepStarted.
+    assert!(
+        !filter_events(&setup_events, None)
+            .iter()
+            .any(|e| matches!(e, EventKind::NightStepStarted { .. }))
+    );
+    assert!(
+        !filter_events(&setup_events, Some(villagers[0]))
+            .iter()
+            .any(|e| matches!(e, EventKind::NightStepStarted { .. }))
+    );
+    assert!(
+        filter_events(&setup_events, Some(bg))
+            .iter()
+            .any(|e| matches!(
+                e,
+                EventKind::NightStepStarted {
+                    night: 1,
+                    step: NightStep::Bodyguard
+                }
+            ))
+    );
+    assert_eq!(
+        view(&state, bg).unwrap().active_night_step,
+        Some(NightStep::Bodyguard)
+    );
+    assert_eq!(view(&state, villagers[0]).unwrap().active_night_step, None);
+    assert_eq!(spectator_view(&state).awaited_count, 0);
+
+    // Night 1: BG protects villager[0], Wolf kills Seer, Seer inspects wolf -> Seer dies at dawn.
+    apply(
+        &mut state,
+        bg,
+        Action::BodyguardProtect {
+            target: villagers[0],
+        },
+        &mut rng,
+    )
+    .unwrap();
+    apply(
+        &mut state,
+        wolf,
+        Action::WolfVote {
+            target: seer,
+            infect: false,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    apply(
+        &mut state,
+        seer,
+        Action::SeerInspect { target: wolf },
+        &mut rng,
+    )
+    .unwrap();
+    assert!(!state.players[seer.0].alive);
+    assert_eq!(spectator_view(&state).players[seer.0].role, None);
+
+    // Day 1: everyone abstains -> Night 2 starts.
+    let living: Vec<_> = state
+        .players
+        .iter()
+        .filter(|p| p.alive)
+        .map(|p| p.id)
+        .collect();
+    let mut night2_events = Vec::new();
+    for id in living {
+        night2_events = apply(&mut state, id, Action::DayVote { target: None }, &mut rng).unwrap();
+    }
+    assert_eq!(
+        spectator_view(&state).phase,
+        PublicPhase::Night { night: 2 }
+    );
+    assert_eq!(spectator_view(&state).awaited_count, 0);
+    assert!(
+        !filter_events(&night2_events, None)
+            .iter()
+            .any(|e| matches!(e, EventKind::NightStepStarted { .. }))
+    );
+
+    // Night 2: BG acts -> Werewolves act -> Dawn (Seer skipped silently without leaking to spectator).
+    let ev_bg = apply(
+        &mut state,
+        bg,
+        Action::BodyguardProtect {
+            target: villagers[1],
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert!(
+        !filter_events(&ev_bg, None)
+            .iter()
+            .any(|e| matches!(e, EventKind::NightStepStarted { .. }))
+    );
+    assert_eq!(
+        view(&state, wolf).unwrap().active_night_step,
+        Some(NightStep::Werewolves)
+    );
+    assert_eq!(view(&state, villagers[0]).unwrap().active_night_step, None);
+}
+
+#[test]
+fn villager_linked_with_minion_is_not_mixed_lovers_and_wins_with_village() {
+    let mut rng = ChaCha8Rng::seed_from_u64(202);
+    let mut deck = RoleDeck::empty();
+    deck.werewolf = 1;
+    deck.minion = 1;
+    deck.cupid = 1;
+    deck.villager = 2;
+    let settings = Settings {
+        roles: deck,
+        reveal_role_on_death: true,
+    };
+    let (mut state, _) = setup(5, settings, &mut rng).unwrap();
+    let wolf = find_role(&state, Role::Werewolf);
+    let minion = find_role(&state, Role::Minion);
+    let cupid = find_role(&state, Role::Cupid);
+    let villagers = find_roles(&state, Role::Villager);
+    let linked_villager = villagers[0];
+    let other_villager = villagers[1];
+
+    // Cupid links Villager + Minion (neither is in wolf pack -> NOT mixed lovers).
+    apply(
+        &mut state,
+        cupid,
+        Action::CupidLink {
+            first: linked_villager,
+            second: minion,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert_eq!(
+        view(&state, linked_villager).unwrap().your_team,
+        Team::Village
+    );
+    assert_eq!(view(&state, minion).unwrap().your_team, Team::Werewolves);
+
+    // Wolf kills other_villager on Night 1.
+    apply(
+        &mut state,
+        wolf,
+        Action::WolfVote {
+            target: other_villager,
+            infect: false,
+        },
+        &mut rng,
+    )
+    .unwrap();
+
+    // Day 1: everyone lynches the Werewolf -> Village wins, and linked_villager MUST be in winning_players.
+    let living: Vec<_> = state
+        .players
+        .iter()
+        .filter(|p| p.alive)
+        .map(|p| p.id)
+        .collect();
+    for id in living {
+        apply(
+            &mut state,
+            id,
+            Action::DayVote { target: Some(wolf) },
+            &mut rng,
+        )
+        .unwrap();
+    }
+    assert_eq!(state.winner, Some(Winner::Village));
+    assert!(
+        state.winning_players.contains(&linked_villager),
+        "Villager paired with Minion must still win with Village"
+    );
+    assert!(!state.winning_players.contains(&minion));
 }

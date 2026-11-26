@@ -452,7 +452,7 @@ pub enum NightStep {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PublicPhase {
-    Night { night: u32, step: NightStep },
+    Night { night: u32 },
     DayVote { day: u32 },
     HunterShot { hunter: PlayerId },
     GameOver,
@@ -461,6 +461,7 @@ pub enum PublicPhase {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Decision {
     pub phase: PublicPhase,
+    pub night_step: Option<NightStep>,
     pub awaited: Vec<PlayerId>,
 }
 
@@ -546,6 +547,7 @@ pub struct PlayerView {
     pub witch_poison_available: bool,
     pub alpha_infect_available: bool,
     pub bodyguard_last_protected: Option<PlayerId>,
+    pub active_night_step: Option<NightStep>,
     pub can_act: bool,
     pub table: SpectatorView,
 }

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 440" width="320" height="440" role="img" aria-label="Sói Trùm">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#24070d"/>
+      <stop offset="55%" stop-color="#450d1b"/>
+      <stop offset="100%" stop-color="#0e050a"/>
+    </linearGradient>
+    <radialGradient id="aura" cx="50%" cy="42%" r="48%">
+      <stop offset="0%" stop-color="#e11d48" stop-opacity="0.55"/>
+      <stop offset="55%" stop-color="#e11d48" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#0e050a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="50%" cy="50%" r="72%">
+      <stop offset="60%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#04050a" stop-opacity="0.72"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f6e0a5"/>
+      <stop offset="50%" stop-color="#f5b841"/>
+      <stop offset="100%" stop-color="#8b6528"/>
+    </linearGradient>
+    <clipPath id="innerClip">
+      <rect x="14" y="14" width="292" height="412" rx="14"/>
+    </clipPath>
+  </defs>
+
+  <rect width="320" height="440" rx="18" fill="#090b12"/>
+  <g clip-path="url(#innerClip)">
+    <rect x="14" y="14" width="292" height="412" fill="url(#bg)"/>
+    <rect x="14" y="14" width="292" height="412" fill="url(#aura)"/>
+    
+  <g fill="#f5e7c4" opacity="0.7">
+    <circle cx="54" cy="58" r="1.5"/><circle cx="92" cy="44" r="1"/>
+    <circle cx="246" cy="52" r="1.6"/><circle cx="268" cy="84" r="1.1"/>
+    <circle cx="64" cy="112" r="1"/><circle cx="232" cy="118" r="1.2"/>
+    <circle cx="132" cy="48" r="1.1"/><circle cx="198" cy="42" r="1.4"/>
+  </g>
+
+        <!-- Eclipsed blood moon -->
+        <circle cx="160" cy="146" r="88" fill="#f59e0b" opacity="0.82"/>
+        <circle cx="160" cy="146" r="78" fill="#1f070d"/>
+        <circle cx="160" cy="146" r="78" fill="none" stroke="#ef4444" stroke-width="5" opacity="0.85"/>
+        
+  <g fill="#080c14" opacity="0.92">
+    <polygon points="14,426 42,315 70,426"/>
+    <polygon points="48,426 80,335 112,426"/>
+    <polygon points="212,426 244,330 276,426"/>
+    <polygon points="252,426 284,308 310,426"/>
+    <rect x="14" y="388" width="292" height="40"/>
+  </g>
+
+    
+        <!-- Regal Alpha Wolf bust -->
+        <path d="M62 414 C72 326 98 282 122 266 L98 198 L134 218 L160 180 L186 218 L222 198 L198 266 C222 282 248 326 258 414 Z" fill="#160a10" stroke="#f5b841" stroke-width="2.4"/>
+        <!-- Silver mane tufts -->
+        <path d="M94 294 L126 322 L116 346 L160 326 L204 346 L194 322 L226 294" fill="none" stroke="#cbd5e1" stroke-width="3" opacity="0.55"/>
+        <polygon points="104,200 116,138 146,188" fill="#1d0d15" stroke="#f5b841" stroke-width="1.8"/>
+        <polygon points="216,200 204,138 174,188" fill="#1d0d15" stroke="#f5b841" stroke-width="1.8"/>
+        <!-- Jagged Golden Crown -->
+        <path d="M122 162 L130 120 L146 144 L160 108 L174 144 L190 120 L198 162 Z" fill="url(#gold)" stroke="#78350f" stroke-width="2"/>
+        <circle cx="160" cy="142" r="5" fill="#ef4444"/>
+        <!-- Crimson glowing eyes + battle scar -->
+        <polygon points="122,226 146,234 130,244" fill="#ff2e4c"/>
+        <polygon points="198,226 174,234 190,244" fill="#ff2e4c"/>
+        <path d="M178 206 L194 252" stroke="#fda4af" stroke-width="3" stroke-linecap="round"/>
+        <!-- Fangs -->
+        <polygon points="140,276 147,298 154,276" fill="#fff"/>
+        <polygon points="166,276 173,298 180,276" fill="#fff"/>
+        
+    <rect x="14" y="14" width="292" height="412" fill="url(#vignette)"/>
+  </g>
+
+  <!-- Ornate gothic border -->
+  <rect x="10" y="10" width="300" height="420" rx="16" fill="none" stroke="url(#gold)" stroke-width="2.5"/>
+  <rect x="18" y="18" width="284" height="404" rx="11" fill="none" stroke="#f5b841" stroke-width="1" stroke-opacity="0.55"/>
+  <!-- Corner filigree diamonds -->
+  <g fill="url(#gold)" opacity="0.9">
+    <polygon points="26,26 32,20 38,26 32,32"/>
+    <polygon points="282,26 288,20 294,26 288,32"/>
+    <polygon points="26,414 32,408 38,414 32,420"/>
+    <polygon points="282,414 288,408 294,414 288,420"/>
+  </g>
+</svg>

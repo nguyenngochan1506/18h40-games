@@ -112,16 +112,12 @@ impl GameState {
         let Some((a, b)) = self.lovers else {
             return false;
         };
-        let a_wolf = self.players[a.0].is_wolf_pack
-            || matches!(self.players[a.0].role, Role::Minion | Role::Sorcerer);
-        let b_wolf = self.players[b.0].is_wolf_pack
-            || matches!(self.players[b.0].role, Role::Minion | Role::Sorcerer);
-        a_wolf != b_wolf
+        self.players[a.0].is_wolf_pack != self.players[b.0].is_wolf_pack
     }
 
     fn public_phase(&self) -> PublicPhase {
         match self.phase {
-            Phase::Night { night, step } => PublicPhase::Night { night, step },
+            Phase::Night { night, .. } => PublicPhase::Night { night },
             Phase::DayVote { day } => PublicPhase::DayVote { day },
             Phase::HunterShot { hunter, .. } => PublicPhase::HunterShot { hunter },
             Phase::GameOver => PublicPhase::GameOver,
@@ -156,8 +152,13 @@ impl GameState {
         if awaited.is_empty() {
             None
         } else {
+            let night_step = match self.phase {
+                Phase::Night { step, .. } => Some(step),
+                _ => None,
+            };
             Some(Decision {
                 phase: self.public_phase(),
+                night_step,
                 awaited,
             })
         }
@@ -285,24 +286,24 @@ fn advance_night_from(
             NightStep::Cupid => {
                 if night == 1
                     && state.lovers.is_none()
-                    && state.living_role(Role::Cupid).is_some()
+                    && let Some(cupid) = state.living_role(Role::Cupid)
                     && state.living_ids().len() >= 2
                 {
                     state.phase = Phase::Night { night, step };
                     events.push(Event {
-                        visibility: Visibility::Public,
+                        visibility: Visibility::Player(cupid),
                         kind: EventKind::NightStepStarted { night, step },
                     });
                     return;
                 }
             }
             NightStep::Bodyguard => {
-                if state.living_role(Role::Bodyguard).is_some()
+                if let Some(bodyguard) = state.living_role(Role::Bodyguard)
                     && !valid_bodyguard_targets(state).is_empty()
                 {
                     state.phase = Phase::Night { night, step };
                     events.push(Event {
-                        visibility: Visibility::Public,
+                        visibility: Visibility::Player(bodyguard),
                         kind: EventKind::NightStepStarted { night, step },
                     });
                     return;
@@ -321,7 +322,7 @@ fn advance_night_from(
                     } else {
                         state.phase = Phase::Night { night, step };
                         events.push(Event {
-                            visibility: Visibility::Public,
+                            visibility: Visibility::Players(wolves),
                             kind: EventKind::NightStepStarted { night, step },
                         });
                         return;
@@ -334,7 +335,7 @@ fn advance_night_from(
                 {
                     state.phase = Phase::Night { night, step };
                     events.push(Event {
-                        visibility: Visibility::Public,
+                        visibility: Visibility::Player(seer),
                         kind: EventKind::NightStepStarted { night, step },
                     });
                     return;
@@ -346,19 +347,19 @@ fn advance_night_from(
                 {
                     state.phase = Phase::Night { night, step };
                     events.push(Event {
-                        visibility: Visibility::Public,
+                        visibility: Visibility::Player(sorcerer),
                         kind: EventKind::NightStepStarted { night, step },
                     });
                     return;
                 }
             }
             NightStep::Witch => {
-                if state.living_role(Role::Witch).is_some()
+                if let Some(witch) = state.living_role(Role::Witch)
                     && (state.witch_heal_available || state.witch_poison_available)
                 {
                     state.phase = Phase::Night { night, step };
                     events.push(Event {
-                        visibility: Visibility::Public,
+                        visibility: Visibility::Player(witch),
                         kind: EventKind::NightStepStarted { night, step },
                     });
                     return;
@@ -1145,7 +1146,11 @@ pub fn spectator_view(state: &GameState) -> SpectatorView {
         reveal_role_on_death: state.settings.reveal_role_on_death,
         winner: state.winner,
         winning_players: state.winning_players.clone(),
-        awaited_count: state.decision().map_or(0, |d| d.awaited.len()),
+        awaited_count: if matches!(state.phase, Phase::Night { .. }) {
+            0
+        } else {
+            state.decision().map_or(0, |d| d.awaited.len())
+        },
     }
 }
 
@@ -1215,6 +1220,14 @@ pub fn view(state: &GameState, player: PlayerId) -> Option<PlayerView> {
     let can_act = state
         .decision()
         .is_some_and(|d| d.awaited.contains(&player));
+    let active_night_step = if can_act {
+        match state.phase {
+            Phase::Night { step, .. } => Some(step),
+            _ => None,
+        }
+    } else {
+        None
+    };
 
     Some(PlayerView {
         you: player,
@@ -1236,6 +1249,7 @@ pub fn view(state: &GameState, player: PlayerId) -> Option<PlayerView> {
         } else {
             None
         },
+        active_night_step,
         can_act,
         table: spectator_view(state),
     })

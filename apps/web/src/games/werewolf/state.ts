@@ -27,12 +27,14 @@ export type WerewolfClientState = {
   game: WerewolfGameSnapshot | null;
   log: WerewolfLogEntry[];
   nextLogId: number;
+  epoch: number;
 };
 
 export const initialWerewolfState: WerewolfClientState = {
   game: null,
   log: [],
   nextLogId: 1,
+  epoch: 0,
 };
 
 export function selectSpectatorView(view: WerewolfView): WerewolfSpectatorView {
@@ -158,5 +160,5 @@ export function receiveFrame(current: WerewolfClientState, frame: GameFrame): We
   if (log.length > 120) {
     log = log.slice(log.length - 120);
   }
-  return { game, log, nextLogId };
+  return { game, log, nextLogId, epoch: frame.reset ? current.epoch + 1 : current.epoch };
 }
