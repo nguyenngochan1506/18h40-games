@@ -63,9 +63,10 @@
 }
 .game-bang .cinematic .player-hud { position: static; flex: none; width: 100%; padding: 8px 12px; pointer-events: auto; }
 .game-bang .cinematic .table-members {
- /* The leftmost desktop seat starts at about 8% of the scene. */
- width: calc(var(--scene-width) * .08 - 8px);
- overflow-y: auto; scrollbar-width: thin; padding: 4px 2px 4px 4px; pointer-events: auto;
+ /* The leftmost desktop actor starts just past 7.88% of the scene. */
+ width: calc(var(--scene-width) * .0788); margin-inline-start: -8px;
+ overflow-y: auto; scrollbar-width: thin; padding: 4px 0 4px 12px; pointer-events: auto;
+ --member-host-outset: 8px;
  --member-name-max: calc(var(--scene-width) * .15);
  --member-avatar-size: clamp(20px, calc(var(--scene-width) * .018), 30px);
 }
