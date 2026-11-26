@@ -397,3 +397,66 @@ test('Board lets eliminated Hunter shoot during hunter_shot and uses modal <dial
   await act(() => shootBtn.click());
   assert.deepEqual(actions, [{ game: 'werewolf', payload: { type: 'hunter_shoot', target: 1 } }]);
 });
+
+test('Board hides secret wolf and lover badges when Úp bài is toggled on', async t => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => { await act(() => root.unmount()); container.remove(); });
+
+  const wolfView = makePlayerView({
+    you: 0,
+    your_role: 'alpha_wolf',
+    your_team: 'werewolves',
+    is_wolf_pack: true,
+    known_wolves: [0, 1],
+    lover: 2,
+    alpha_infect_available: true,
+    active_night_step: 'werewolves',
+    wolf_votes: [{ wolf: 1, target: 3, infect: false }],
+    can_act: true,
+  });
+
+  let sync = receiveGameState(initialGameState, {
+    v: PROTOCOL_VERSION,
+    type: 'game_started',
+    seq: 0,
+    seats: SEATS,
+    view: { game: 'werewolf', payload: { perspective: 'player', view: wolfView } },
+  });
+
+  const renderBoard = async () => {
+    await act(async () => {
+      root.render(createElement(client.Board, {
+        room: BASE_ROOM,
+        sync,
+        disabled: false,
+        pending: false,
+        requestVersion: 0,
+        actionError: null,
+        actionErrorCode: null,
+        fxEnabled: false,
+        roomMenu: null,
+        consume: (id: number) => {
+          sync = { ...sync, frames: sync.frames.filter(f => f.id > id) };
+        },
+        sendAction() {},
+        endGame() {},
+        hostSkip() {},
+        leaveRoom() {},
+      }));
+    });
+  };
+
+  await renderBoard();
+  await renderBoard();
+  assert.ok(container.textContent!.includes('Bầy Sói'));
+  assert.ok(container.textContent!.includes('Tình Nhân'));
+  assert.ok(container.textContent!.includes('Sói chọn (1)'));
+
+  const hideBtn = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(b => b.textContent === 'Úp bài')!;
+  await act(() => hideBtn.click());
+  assert.equal(container.querySelectorAll('.ww-mini-wolf').length, 0, 'Wolf badges must hide when Úp bài is active');
+  assert.equal(container.querySelectorAll('.ww-mini-lover').length, 0, 'Lover badge must hide when Úp bài is active');
+  assert.equal(container.querySelector('.ww-secrets'), null, 'Secrets panel must hide when Úp bài is active');
+});

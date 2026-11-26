@@ -992,7 +992,9 @@ pub fn apply(
                             kind: EventKind::PrinceRevealed { player: lynched },
                         });
                         start_night(state, day + 1, &mut events);
-                    } else if state.players[lynched.0].role == Role::Tanner {
+                    } else if state.players[lynched.0].role == Role::Tanner
+                        && !state.players[lynched.0].is_wolf_pack
+                    {
                         let mut ignored = None;
                         kill_player(
                             state,

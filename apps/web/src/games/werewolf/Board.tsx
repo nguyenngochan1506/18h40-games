@@ -528,7 +528,7 @@ export default function Board(props: GameBoardProps) {
                     ♥ Đã ghép đôi: {seatName(seats, player.cupid_lovers[0])} & {seatName(seats, player.cupid_lovers[1])}
                   </p>
                 )}
-                {player.your_role === 'witch' && (
+                {player.your_role === 'witch' && !player.is_wolf_pack && (
                   <p className="ww-secret-note">
                     Bình Cứu: <strong>{player.witch_heal_available ? 'Còn' : 'Đã dùng'}</strong> · Bình Độc:{' '}
                     <strong>{player.witch_poison_available ? 'Còn' : 'Đã dùng'}</strong>
@@ -607,8 +607,8 @@ export default function Board(props: GameBoardProps) {
                   <RoleCard role={displayRole} faceDown={!displayRole} size="sm" />
 
                   <div className="ww-seat-badges">
-                    {isKnownWolf && !isOver && <span className="ww-mini-badge ww-mini-wolf">Bầy Sói</span>}
-                    {isLover && <span className="ww-mini-badge ww-mini-lover">♥ Tình Nhân</span>}
+                    {!hideMyCard && isKnownWolf && !isOver && <span className="ww-mini-badge ww-mini-wolf">Bầy Sói</span>}
+                    {!hideMyCard && isLover && <span className="ww-mini-badge ww-mini-lover">♥ Tình Nhân</span>}
                     {seat.is_revealed_prince && <span className="ww-mini-badge ww-mini-royal">Hoàng Tử</span>}
                     {seat.is_revealed_mayor && <span className="ww-mini-badge ww-mini-royal">Thị Trưởng ×2</span>}
                     {seat.death_cause && (
@@ -621,7 +621,7 @@ export default function Board(props: GameBoardProps) {
                           : `Bầu: ${seatName(seats, seat.day_vote.target)}`}
                       </span>
                     )}
-                    {wolfVoteFor.length > 0 && (
+                    {!hideMyCard && wolfVoteFor.length > 0 && (
                       <span className="ww-mini-badge ww-mini-wolf">
                         Sói chọn ({wolfVoteFor.length})
                       </span>

@@ -1028,3 +1028,59 @@ fn villager_linked_with_minion_is_not_mixed_lovers_and_wins_with_village() {
     );
     assert!(!state.winning_players.contains(&minion));
 }
+
+#[test]
+fn infected_tanner_loses_solo_lynch_win_after_joining_wolf_pack() {
+    let mut rng = ChaCha8Rng::seed_from_u64(3030);
+    let mut deck = RoleDeck::empty();
+    deck.alpha_wolf = 1;
+    deck.tanner = 1;
+    deck.villager = 4;
+    let settings = Settings {
+        roles: deck,
+        reveal_role_on_death: true,
+    };
+    let (mut state, _) = setup(6, settings, &mut rng).unwrap();
+    let alpha = find_role(&state, Role::AlphaWolf);
+    let tanner = find_role(&state, Role::Tanner);
+
+    // Night 1: Alpha Wolf infects Tanner -> Tanner joins Werewolves team!
+    apply(
+        &mut state,
+        alpha,
+        Action::WolfVote {
+            target: tanner,
+            infect: true,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert!(state.players[tanner.0].alive);
+    assert!(state.players[tanner.0].is_wolf_pack);
+    assert_eq!(view(&state, tanner).unwrap().your_team, Team::Werewolves);
+
+    // Day 1: Village lynches the infected Tanner -> must NOT trigger solo Tanner victory!
+    let living: Vec<_> = state
+        .players
+        .iter()
+        .filter(|p| p.alive)
+        .map(|p| p.id)
+        .collect();
+    for id in living {
+        apply(
+            &mut state,
+            id,
+            Action::DayVote {
+                target: Some(tanner),
+            },
+            &mut rng,
+        )
+        .unwrap();
+    }
+    assert!(!state.players[tanner.0].alive);
+    assert_ne!(state.winner, Some(Winner::Tanner));
+    assert_eq!(
+        state.winner, None,
+        "Game must continue with Alpha Wolf still alive"
+    );
+}
