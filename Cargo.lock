@@ -132,6 +132,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "776dfebd015e2d8732c684a2c71003674ccb49457b539b9e82151ba38e96dd7c"
 
 [[package]]
+name = "cats"
+version = "0.1.0"
+dependencies = [
+ "rand 0.9.5",
+ "rand_chacha",
+ "serde",
+ "serde_json",
+ "ts-rs",
+]
+
+[[package]]
 name = "cc"
 version = "1.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -742,6 +753,7 @@ name = "protocol"
 version = "0.1.0"
 dependencies = [
  "bang",
+ "cats",
  "serde",
  "serde_json",
  "ts-rs",
@@ -1075,6 +1087,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "bang",
+ "cats",
  "futures-util",
  "getrandom 0.4.3",
  "jsonwebtoken",

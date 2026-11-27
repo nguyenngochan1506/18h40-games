@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { roleTotal, settingsError, standardRoles } from './settings.ts';
+import { roleTotal, settingsError, standardRoles } from './bangSettings.ts';
 
 test('standard room roles follow each supported player count', () => {
   for (const [players, deputy, outlaw] of [[4, 0, 2], [5, 1, 2], [6, 1, 3], [7, 2, 3]]) {

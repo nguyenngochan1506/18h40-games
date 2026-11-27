@@ -7,6 +7,7 @@ edition.workspace = true
 bang = { path = "../bang", features = ["ts"] }
 uno = { path = "../uno", features = ["ts"] }
 werewolf = { path = "../werewolf", features = ["ts"] }
+cats = { path = "../cats", features = ["ts"] }
 serde.workspace = true
 ts-rs = "12.0.1"
 

@@ -1,4 +1,5 @@
 mod bang;
+mod cats;
 mod uno;
 mod werewolf;
 
@@ -50,6 +51,7 @@ pub(crate) trait GameSession: Send {
 pub(crate) fn module(kind: GameKind) -> &'static dyn GameModule {
     match kind {
         GameKind::Bang => &bang::Module,
+        GameKind::Cats => &cats::Module,
         GameKind::Uno => &uno::Module,
         GameKind::Werewolf => &werewolf::Module,
     }

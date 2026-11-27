@@ -2,7 +2,7 @@ import GameScope from './GameScope';
 import type { GameSettingsProps } from '../types';
 import { useState } from 'react';
 import type { GameConfig, RoleCounts } from '../../generated/protocol';
-import { roleTotal, settingsError, standardRoles } from './settings';
+import { roleTotal, settingsError, standardRoles } from './bangSettings';
 import './settings.css';
 
 const modes = [

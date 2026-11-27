@@ -179,7 +179,9 @@ impl GameSession for Session {
         }
         let action = match action {
             GameAction::Bang(action) => action,
-            GameAction::Uno(_) | GameAction::Werewolf(_) => return Err(ErrorCode::IllegalAction),
+            GameAction::Cats(_) | GameAction::Uno(_) | GameAction::Werewolf(_) => {
+                return Err(ErrorCode::IllegalAction);
+            }
         };
         let player = self.player(member).ok_or(ErrorCode::IllegalAction)?;
         self.step(player, action, now)

@@ -70,7 +70,51 @@ export type WerewolfView = Record<symbol, never>;
 
 export type WerewolfEvents = Record<symbol, never>;
 
-export type GameView = { "game": "bang", "payload": BangView } | { "game": "uno", "payload": UnoView } | { "game": "werewolf", "payload": WerewolfView };
+export type CatsSettings = { imploding: boolean, streaking: boolean, barking: boolean, };
+
+export type CatsPlayerId = number;
+
+export type CatsCardId = number;
+
+export type CatsCardKind = "exploding" | "defuse" | "nope" | "attack" | "skip" | "shuffle" | "see_future" | "favour" | "cat_taco" | "cat_rainbow" | "cat_beard" | "cat_potato" | "cat_cattermelon" | "imploding" | "reverse" | "draw_bottom" | "feral_cat" | "alter_future" | "targeted_attack" | "streaking" | "super_skip" | "see_future5" | "swap_top_bottom" | "garbage_collection" | "catomic_bomb" | "alter_future5" | "personal_attack" | "share_future" | "bury" | "potluck";
+
+export type CatsCardView = { id: CatsCardId, kind: CatsCardKind, };
+
+export type CatsAction = { "type": "draw" } | { "type": "play_card", card: CatsCardId, } | { "type": "play_pair", cards: Array<CatsCardId>, } | { "type": "play_triple", cards: Array<CatsCardId>, } | { "type": "play_five", cards: Array<CatsCardId>, } | { "type": "nope", pending_id: CatsPendingId, } | { "type": "defuse", pending_id: CatsPendingId, position: number, } | { "type": "insert_imploding", pending_id: CatsPendingId, position: number, } | { "type": "bury_card", pending_id: CatsPendingId, position: number, } | { "type": "attack_target", pending_id: CatsPendingId, target: CatsPlayerId, } | { "type": "favour_target", pending_id: CatsPendingId, target: CatsPlayerId, } | { "type": "favour_card", pending_id: CatsPendingId, card: CatsCardId, } | { "type": "random_target", pending_id: CatsPendingId, target: CatsPlayerId, } | { "type": "steal_target", pending_id: CatsPendingId, target: CatsPlayerId, } | { "type": "steal_kind", pending_id: CatsPendingId, kind: CatsCardKind, } | { "type": "take_discard", pending_id: CatsPendingId, card: CatsCardId | null, } | { "type": "reorder_future", pending_id: CatsPendingId,
+/**
+ * Top-first order (`order[0]` is drawn next).
+ */
+order: Array<CatsCardId>, } | { "type": "put_card_in_deck", pending_id: CatsPendingId, card: CatsCardId, };
+
+export type CatsTurnState = { player: CatsPlayerId, turns_left: number,
+/**
+ * `1` = clockwise, `-1` = counter-clockwise.
+ */
+direction: number, };
+
+export type CatsPendingId = number;
+
+export type CatsDecisionKind = { "type": "turn" } | { "type": "defuse", max_position: number, } | { "type": "insert_imploding", max_position: number, } | { "type": "bury_card", max_position: number, } | { "type": "attack_target" } | { "type": "favour_target" } | { "type": "favour_card", actor: CatsPlayerId, } | { "type": "random_target" } | { "type": "steal_target" } | { "type": "steal_kind", target: CatsPlayerId, } | { "type": "take_discard" } | { "type": "alter_future", count: number, share_with_next: boolean, } | { "type": "give_to_deck", shuffle_after: boolean, };
+
+export type CatsDecision = { player: CatsPlayerId, pending_id: CatsPendingId | null, kind: CatsDecisionKind, };
+
+export type CatsPublicPlayer = { id: CatsPlayerId, hand_count: number, eliminated: boolean, };
+
+export type CatsSpectatorView = { settings: CatsSettings, players: Array<CatsPublicPlayer>, turn: CatsTurnState, deck_count: number, top_known: CatsCardKind | null, imploding_face_up: boolean, discard: Array<CatsCardView>, decision: CatsDecision | null, last_action: CatsPublicAction | null, winner: CatsPlayerId | null, };
+
+export type CatsPlayerView = { you: CatsPlayerId, hand: Array<CatsCardView>,
+/**
+ * Private cards visible only to the decision owner (e.g. Alter/Share Future or Bury).
+ */
+preview_cards: Array<CatsCardView>, table: CatsSpectatorView, };
+
+export type CatsPlayedAction = { "type": "card", kind: CatsCardKind, } | { "type": "combo", kind: CatsCardKind, count: number, } | { "type": "five" } | { "type": "nope" };
+
+export type CatsPublicAction = { id: CatsPendingId, actor: CatsPlayerId, played: CatsPlayedAction, nopeable: boolean, };
+
+export type CatsEventKind = { "type": "game_started", starting_player: CatsPlayerId, } | { "type": "turn_started", player: CatsPlayerId, turns_left: number, } | { "type": "direction_reversed", direction: number, } | { "type": "card_played", player: CatsPlayerId, kind: CatsCardKind, } | { "type": "combo_played", player: CatsPlayerId, kind: CatsCardKind, count: number, } | { "type": "five_played", player: CatsPlayerId, } | { "type": "target_chosen", actor: CatsPlayerId, target: CatsPlayerId, } | { "type": "cards_drawn", player: CatsPlayerId, count: number, } | { "type": "card_drawn", player: CatsPlayerId, card: CatsCardView, } | { "type": "deck_shuffled", count: number, } | { "type": "deck_reshuffled", count: number, } | { "type": "deck_swapped" } | { "type": "deck_empty" } | { "type": "future_seen", player: CatsPlayerId, cards: Array<CatsCardView>, } | { "type": "future_altered", player: CatsPlayerId, count: number, } | { "type": "future_shared", actor: CatsPlayerId, target: CatsPlayerId, count: number, } | { "type": "card_buried", player: CatsPlayerId, position: number, } | { "type": "card_put_in_deck", player: CatsPlayerId, shuffled: boolean, } | { "type": "catomic_bomb_triggered", player: CatsPlayerId, exploding_count: number, } | { "type": "exploding_drawn", player: CatsPlayerId, } | { "type": "imploding_drawn", player: CatsPlayerId, face_up: boolean, } | { "type": "imploding_placed", player: CatsPlayerId, position: number, } | { "type": "defused", player: CatsPlayerId, position: number, } | { "type": "player_eliminated", player: CatsPlayerId, } | { "type": "favour_asked", actor: CatsPlayerId, target: CatsPlayerId, } | { "type": "favour_skipped", actor: CatsPlayerId, target: CatsPlayerId, } | { "type": "favour_completed", actor: CatsPlayerId, target: CatsPlayerId, } | { "type": "card_received", player: CatsPlayerId, from: CatsPlayerId, card: CatsCardView, } | { "type": "card_given", player: CatsPlayerId, to: CatsPlayerId, card: CatsCardView, } | { "type": "random_steal", actor: CatsPlayerId, target: CatsPlayerId, found: boolean, } | { "type": "named_steal", actor: CatsPlayerId, target: CatsPlayerId, kind: CatsCardKind, found: boolean, } | { "type": "five_taken", player: CatsPlayerId, card: CatsCardView, } | { "type": "nope_played", player: CatsPlayerId, action_id: CatsPendingId, } | { "type": "action_undone", action_id: CatsPendingId, actor: CatsPlayerId, } | { "type": "decision_changed", decision: CatsDecision | null, } | { "type": "winner", player: CatsPlayerId, };
+
+export type GameView = { "game": "bang", "payload": BangView } | { "game": "uno", "payload": UnoView } | { "game": "werewolf", "payload": WerewolfView } | { "game": "cats", "payload": CatsView };
 
 export type GameSeat = { player_id: number, member_id: string, nickname: string, };
 
@@ -80,11 +124,15 @@ export type BangEvents = Array<EventKind>;
 
 export type BangView = { "perspective": "player", "view": PlayerView } | { "perspective": "spectator", "view": SpectatorView };
 
-export type GameSettings = { "game": "bang", "payload": GameConfig } | { "game": "uno", "payload": UnoSettings } | { "game": "werewolf", "payload": WerewolfSettings };
+export type CatsEvents = Array<CatsEventKind>;
 
-export type GameAction = { "game": "bang", "payload": Action } | { "game": "uno", "payload": UnoAction } | { "game": "werewolf", "payload": WerewolfAction };
+export type CatsView = { "perspective": "player", "view": CatsPlayerView } | { "perspective": "spectator", "view": CatsSpectatorView };
 
-export type GameDelta = { "game": "bang", events: BangEvents, view: BangView, } | { "game": "uno", events: UnoEvents, view: UnoView, } | { "game": "werewolf", events: WerewolfEvents, view: WerewolfView, };
+export type GameSettings = { "game": "bang", "payload": GameConfig } | { "game": "uno", "payload": UnoSettings } | { "game": "werewolf", "payload": WerewolfSettings } | { "game": "cats", "payload": CatsSettings };
+
+export type GameAction = { "game": "bang", "payload": Action } | { "game": "uno", "payload": UnoAction } | { "game": "werewolf", "payload": WerewolfAction } | { "game": "cats", "payload": CatsAction };
+
+export type GameDelta = { "game": "bang", events: BangEvents, view: BangView, } | { "game": "uno", events: UnoEvents, view: UnoView, } | { "game": "werewolf", events: WerewolfEvents, view: WerewolfView, } | { "game": "cats", events: CatsEvents, view: CatsView, };
 
 export type ErrorCode = "unsupported_version" | "invalid_message" | "room_not_found" | "nickname_taken" | "invalid_nickname" | "invalid_token" | "already_in_room" | "not_in_room" | "not_host" | "wrong_phase" | "not_enough_players" | "no_free_seat" | "server_busy" | "illegal_action" | "invalid_settings" | "game_unavailable";
 
@@ -94,7 +142,7 @@ export type Role = "player" | "spectator";
 
 export type Member = { id: string, nickname: string, role: Role, online: boolean, };
 
-export type GameKind = "bang" | "uno" | "werewolf";
+export type GameKind = "bang" | "uno" | "werewolf" | "cats";
 
 export type RoomView = { game: GameKind, settings: GameSettings, code: string, phase: Phase, host: string, you: string, min_players: number, max_players: number, members: Array<Member>, };
 
