@@ -319,7 +319,7 @@ test('manual invalid codes show inline feedback without sending and clear on cor
   await fx.fill('#room-code', 'abcde'); assert.equal(fx.container.querySelector('#room-code')!.getAttribute('aria-invalid'), null);
 });
 
-for (const code of ['invalid_token', 'nickname_taken', 'wrong_phase'] as const) test(`entry error ${code} returns to the lobby without an automatic retry`, async t => {
+for (const code of ['invalid_token', 'nickname_taken', 'wrong_phase', 'unsupported_version'] as const) test(`entry error ${code} returns to the lobby without an automatic retry`, async t => {
   const fx = await mount(t, '/r/ABCDE', code === 'invalid_token' ? saved : undefined);
   if (code !== 'invalid_token') { await fx.fill('#join-nickname', 'Mai'); await fx.click('.join-poster button[type="submit"]'); }
   await fx.receive({ v: PROTOCOL_VERSION, type: 'error', code, message: 'Rejected' });

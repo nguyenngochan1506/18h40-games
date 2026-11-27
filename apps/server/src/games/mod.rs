@@ -9,7 +9,8 @@ use tokio::time::Instant;
 
 pub(crate) trait GameModule: Sync {
     fn enabled(&self) -> bool;
-    fn limits(&self) -> (u32, u32);
+    /// Seat limits for the room's current settings (an expansion can raise the maximum).
+    fn limits(&self, settings: &GameSettings) -> (u32, u32);
     fn default_settings(&self) -> GameSettings;
     fn validate_settings(&self, settings: &GameSettings, players: usize) -> Result<(), ErrorCode>;
     fn adjust_settings(&self, settings: &mut GameSettings, players: usize);

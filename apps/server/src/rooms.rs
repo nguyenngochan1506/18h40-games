@@ -358,7 +358,7 @@ impl Room {
     }
 
     fn view(&self, you: &str) -> RoomView {
-        let (min_players, max_players) = module(self.game_kind).limits();
+        let (min_players, max_players) = module(self.game_kind).limits(&self.settings);
         RoomView {
             game: self.game_kind,
             settings: self.settings.clone(),
@@ -463,7 +463,7 @@ impl Room {
                 let mut token = [0; 16];
                 getrandom::fill(&mut token).map_err(|_| ErrorCode::ServerBusy)?;
                 let role = if self.phase == Phase::Waiting
-                    && self.players() < module(self.game_kind).limits().1 as usize
+                    && self.players() < module(self.game_kind).limits(&self.settings).1 as usize
                 {
                     Role::Player
                 } else {
@@ -545,7 +545,9 @@ impl Room {
                         if self.members[index].view.role == Role::Player {
                             return Ok(true);
                         }
-                        if self.players() >= module(self.game_kind).limits().1 as usize {
+                        if self.players()
+                            >= module(self.game_kind).limits(&self.settings).1 as usize
+                        {
                             return Err(ErrorCode::NoFreeSeat);
                         }
                         self.members[index].view.role = Role::Player;
@@ -589,7 +591,9 @@ impl Room {
                             if self.phase != Phase::Waiting {
                                 return Err(ErrorCode::WrongPhase);
                             }
-                            if self.players() < module(self.game_kind).limits().0 as usize {
+                            if self.players()
+                                < module(self.game_kind).limits(&self.settings).0 as usize
+                            {
                                 return Err(ErrorCode::NotEnoughPlayers);
                             }
                             let seats = self

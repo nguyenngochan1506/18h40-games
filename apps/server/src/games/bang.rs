@@ -16,8 +16,11 @@ impl GameModule for Module {
         true
     }
 
-    fn limits(&self) -> (u32, u32) {
-        (4, 7)
+    fn limits(&self, settings: &GameSettings) -> (u32, u32) {
+        match settings {
+            GameSettings::Bang(config) => (4, config.max_players() as u32),
+            _ => (4, 7),
+        }
     }
 
     fn default_settings(&self) -> GameSettings {
@@ -28,9 +31,11 @@ impl GameModule for Module {
         let GameSettings::Bang(settings) = settings else {
             return Err(ErrorCode::InvalidSettings);
         };
-        // Expansions exist in the engine only; the room/web stages that expose them come later.
-        if !settings.expansions.is_empty()
-            || !settings.roles.valid_for(players.max(4))
+        // Capacity follows the enabled packs; seated players above it reject the change.
+        let max = settings.max_players();
+        if !settings.expansions_valid()
+            || players > max
+            || !settings.roles.valid_within(players.max(4), max)
             || (players < 4 && settings.roles != RoleCounts::standard(4))
         {
             return Err(ErrorCode::InvalidSettings);

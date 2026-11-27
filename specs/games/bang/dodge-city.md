@@ -140,3 +140,12 @@ Nguồn: `bang_dodge_city_faq_eng.pdf` của dV Giochi (Q13–Q16 thuộc High N
 - Q10: Apache Kid chỉ miễn nhiễm bài người khác chơi: không chặn Missed ♦ của người khác đáp BANG! của mình; General Store, Hideout, vũ khí... vẫn hoạt động.
 - Q11: Conestoga và Rag Time lấy một lá từ tay hoặc trước mặt bất kỳ người nào, không giới hạn khoảng cách.
 - Q12: Doc Holyday bắn xa bao nhiêu tùy tầm với tới được (tầm vũ khí).
+
+## Ghi chú D2 (server/protocol)
+
+- `GameModule::limits(settings)` phụ thuộc settings: tối đa = `GameConfig::max_players()` (7 gốc, 8 với Dodge City); `RoomView.max_players` phản ánh giá trị này, client không hard-code.
+- `update_settings` validate bằng engine: `expansions_valid`, `RoleCounts::valid_within(người, max)`; từ chối (`invalid_settings`) nếu số người đang ngồi vượt sức chứa mới (tắt Dodge City khi đã có 8 người ngồi). Số vai tự đặt lại preset chuẩn khi số người ngồi đổi.
+- Người thứ 8 vào phòng gốc thành khán giả; khi bật Dodge City thì `take_seat` được.
+- `expansions` thiếu trong JSON = rỗng. `PROTOCOL_VERSION` = 10.
+- Ngoại lệ `end_game`: kết thúc ván tám người đưa phòng về chờ, không còn ghế có người, và giữ số vai 2/3/2 của ván trước. Khi đó tắt Dodge City cần gửi kèm preset bốn người hợp lệ; chỉ đổi `expansions` trong snapshot cũ bị `invalid_settings`. Sau lần `take_seat` đầu tiên, server tự tính lại số vai.
+- `unsupported_version`: khung lỗi mang `v` của client đã gửi (client v9 đã deploy không bác khung này); lệnh vào phòng/chơi v9 vẫn bị từ chối.

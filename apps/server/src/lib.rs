@@ -114,8 +114,12 @@ struct Version {
 }
 
 fn error(code: ErrorCode) -> ServerMessage {
+    error_v(code, PROTOCOL_VERSION)
+}
+
+fn error_v(code: ErrorCode, v: u32) -> ServerMessage {
     ServerMessage::Error {
-        v: PROTOCOL_VERSION,
+        v,
         code,
         message: match code {
             ErrorCode::UnsupportedVersion => "Unsupported protocol version",
@@ -139,12 +143,15 @@ fn error(code: ErrorCode) -> ServerMessage {
     }
 }
 
-fn parse_message(text: &str) -> Result<ClientMessage, ErrorCode> {
-    let version = serde_json::from_str::<Version>(text).map_err(|_| ErrorCode::InvalidMessage)?;
+/// The error frame echoes the client's own `v` for `unsupported_version`: an older client rejects
+/// any frame whose `v` differs from its constant, so only an echo lets it read the code and stop.
+fn parse_message(text: &str) -> Result<ClientMessage, (ErrorCode, u32)> {
+    let version = serde_json::from_str::<Version>(text)
+        .map_err(|_| (ErrorCode::InvalidMessage, PROTOCOL_VERSION))?;
     if version.v != PROTOCOL_VERSION {
-        return Err(ErrorCode::UnsupportedVersion);
+        return Err((ErrorCode::UnsupportedVersion, version.v));
     }
-    serde_json::from_str(text).map_err(|_| ErrorCode::InvalidMessage)
+    serde_json::from_str(text).map_err(|_| (ErrorCode::InvalidMessage, PROTOCOL_VERSION))
 }
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
@@ -189,7 +196,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                 let message = match frame {
                     Some(Ok(Message::Text(text))) => match parse_message(&text) {
                         Ok(message) => message,
-                        Err(code) => { peer.send(error(code)); continue; }
+                        Err((code, v)) => { peer.send(error_v(code, v)); continue; }
                     },
                     Some(Ok(Message::Binary(_))) => { peer.send(error(ErrorCode::InvalidMessage)); continue; }
                     Some(Ok(Message::Pong(bytes))) => {

@@ -8,7 +8,7 @@ impl GameModule for Module {
     fn enabled(&self) -> bool {
         false
     }
-    fn limits(&self) -> (u32, u32) {
+    fn limits(&self, _settings: &GameSettings) -> (u32, u32) {
         ::werewolf::PLAYER_LIMITS
     }
     fn default_settings(&self) -> GameSettings {
