@@ -77,13 +77,13 @@ export function tableSeatPose(index: number, count: number, viewerIndex: number 
   };
 }
 
-export const CAMPFIRE_NIGHT_BACKDROP = '/werewolf/scene/campfire-night.jpg';
-export const CAMPFIRE_DAY_BACKDROP = '/werewolf/scene/campfire-day.jpg';
+export const CAMPFIRE_NIGHT_BACKDROP = '/werewolf/scene/campfire-night.webp';
+export const CAMPFIRE_DAY_BACKDROP = '/werewolf/scene/campfire-day.webp';
 
 export function campfireBackdrop(isNight: boolean): string {
   return isNight ? CAMPFIRE_NIGHT_BACKDROP : CAMPFIRE_DAY_BACKDROP;
 }
 
 export function tableActorImage(_playerId: number, view: TableSeatView, alive: boolean): string {
-  return alive ? `/werewolf/scene/villager-${view}.png` : `/werewolf/scene/villager-ghost-${view}.png`;
+  return alive ? `/werewolf/scene/villager-${view}.webp` : `/werewolf/scene/villager-ghost-${view}.webp`;
 }

@@ -514,15 +514,15 @@ test('Board switches campfire backdrop between lit night and extinguished day an
   assert.ok(boardNight.classList.contains('ww-theme-night'));
   assert.equal(
     container.querySelector<HTMLImageElement>('.ww-table-backdrop')?.getAttribute('src'),
-    '/werewolf/scene/campfire-night.jpg',
+    '/werewolf/scene/campfire-night.webp',
   );
 
   const actorImgs = Array.from(container.querySelectorAll<HTMLImageElement>('.ww-seat-actor'));
   assert.equal(actorImgs.length, 5);
   for (let i = 0; i < 4; i++) {
-    assert.match(actorImgs[i].getAttribute('src')!, /^\/werewolf\/scene\/villager-(q3front|side)\.png$/);
+    assert.match(actorImgs[i].getAttribute('src')!, /^\/werewolf\/scene\/villager-(q3front|side)\.webp$/);
   }
-  assert.match(actorImgs[4].getAttribute('src')!, /^\/werewolf\/scene\/villager-ghost-(q3front|side)\.png$/);
+  assert.match(actorImgs[4].getAttribute('src')!, /^\/werewolf\/scene\/villager-ghost-(q3front|side)\.webp$/);
 
   // Transition to day phase: campfire switches to extinguished day backdrop and bright day theme.
   const dayView = makePlayerView({
@@ -550,7 +550,7 @@ test('Board switches campfire backdrop between lit night and extinguished day an
   assert.ok(container.querySelector('.ww-board')!.classList.contains('ww-theme-day'));
   assert.equal(
     container.querySelector<HTMLImageElement>('.ww-table-backdrop')?.getAttribute('src'),
-    '/werewolf/scene/campfire-day.jpg',
+    '/werewolf/scene/campfire-day.webp',
   );
 });
 
@@ -587,7 +587,7 @@ test('Settings allows host to adjust roles before 5 players join and exposes cam
   assert.equal(submitted[0].payload.roles.villager, 1);
 
   assert.ok(client.waitingScene);
-  assert.equal(client.waitingScene.backdrop, '/werewolf/scene/campfire-night.jpg');
+  assert.equal(client.waitingScene.backdrop, '/werewolf/scene/campfire-night.webp');
   const seat0 = client.waitingScene.seat(0, 16, 1);
-  assert.match(client.waitingScene.actor(0, seat0.view), /^\/werewolf\/scene\/villager-(q3front|side)\.png$/);
+  assert.match(client.waitingScene.actor(0, seat0.view), /^\/werewolf\/scene\/villager-(q3front|side)\.webp$/);
 });
