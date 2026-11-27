@@ -8,7 +8,7 @@
 - Bối cảnh bãi lửa trại và nhân vật ngồi dưới đất: `assets/werewolf/scene/*.webp`, phục vụ tại `/werewolf/scene/<file>.webp`:
   - `campfire-night.webp`: bãi đất rừng ban đêm với đống lửa trại rực sáng ở giữa.
   - `campfire-day.webp`: bãi đất rừng ban ngày trời sáng cùng hố lửa đá đã tắt (than nguội và củi cháy đen).
-  - `villager-q3front.webp`, `villager-side.webp`: nhân vật Dân Làng (đồng bộ trang phục từ `villager.webp`) ngồi xếp bằng dưới đất quanh đống lửa.
-  - `villager-ghost-q3front.webp`, `villager-ghost-side.webp`: phiên bản hồn ma trong suốt của Dân Làng khi người chơi bị loại.
+  - `villager-q3back.webp`, `villager-q3front.webp`, `villager-side.webp`: nhân vật Dân Làng (đồng bộ trang phục từ `villager.webp`) ngồi xếp bằng dưới đất quay vào đống lửa theo 3 góc nhìn (lưng 3/4, ngang, mặt 3/4).
+  - `villager-ghost-q3back.webp`, `villager-ghost-q3front.webp`, `villager-ghost-side.webp`: phiên bản hồn ma trong suốt của Dân Làng khi người chơi bị loại.
 - Khung lá bài: dựng bằng CSS theo phong cách *Ultimate Werewolf: Deluxe Edition* (viền theo phe, huy hiệu điểm cân bằng góc trên, tên tiếng Việt + tên gốc tiếng Anh).
 - Phông chữ: dùng font hệ thống hỗ trợ đầy đủ dấu tiếng Việt.

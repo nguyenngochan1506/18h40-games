@@ -519,10 +519,11 @@ test('Board switches campfire backdrop between lit night and extinguished day an
 
   const actorImgs = Array.from(container.querySelectorAll<HTMLImageElement>('.ww-seat-actor'));
   assert.equal(actorImgs.length, 5);
+  assert.equal(actorImgs[0].getAttribute('src'), '/werewolf/scene/villager-q3back.webp');
   for (let i = 0; i < 4; i++) {
-    assert.match(actorImgs[i].getAttribute('src')!, /^\/werewolf\/scene\/villager-(q3front|side)\.webp$/);
+    assert.match(actorImgs[i].getAttribute('src')!, /^\/werewolf\/scene\/villager-(q3back|q3front|side)\.webp$/);
   }
-  assert.match(actorImgs[4].getAttribute('src')!, /^\/werewolf\/scene\/villager-ghost-(q3front|side)\.webp$/);
+  assert.match(actorImgs[4].getAttribute('src')!, /^\/werewolf\/scene\/villager-ghost-(q3back|q3front|side)\.webp$/);
 
   // Transition to day phase: campfire switches to extinguished day backdrop and bright day theme.
   const dayView = makePlayerView({
@@ -589,5 +590,6 @@ test('Settings allows host to adjust roles before 5 players join and exposes cam
   assert.ok(client.waitingScene);
   assert.equal(client.waitingScene.backdrop, '/werewolf/scene/campfire-night.webp');
   const seat0 = client.waitingScene.seat(0, 16, 1);
-  assert.match(client.waitingScene.actor(0, seat0.view), /^\/werewolf\/scene\/villager-(q3front|side)\.webp$/);
+  assert.equal(seat0.view, 'q3back');
+  assert.equal(client.waitingScene.actor(0, seat0.view), '/werewolf/scene/villager-q3back.webp');
 });
