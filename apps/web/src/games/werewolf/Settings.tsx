@@ -74,7 +74,7 @@ function SettingsEditor({
         <span>Lật vai trò khi người chơi bị loại</span>
       </label>
 
-      <fieldset className="ww-role-grid" disabled={!editable || players < 5}>
+      <fieldset className="ww-role-grid" disabled={!editable}>
         <legend>Chọn lá bài vai trò (16 vai)</legend>
         <div className="ww-role-list">
           {ROLE_ORDER.map(roleId => {
@@ -118,14 +118,19 @@ function SettingsEditor({
 
       <p className="ww-settings-subtitle">
         {players < 5
-          ? 'Chờ đủ 5 người chơi; hiện đang dùng bộ chuẩn cho 5 người.'
-          : 'Số người chơi đổi sẽ tự đưa về bộ chuẩn cân bằng.'}
+          ? 'Đang chỉnh bộ bài cho 5 người (tối thiểu); nếu phòng vượt 5 người sẽ tự chuyển sang bộ chuẩn mới.'
+          : 'Khi số người chơi đổi, bộ bài sẽ tự đưa về bộ chuẩn cân bằng.'}
       </p>
 
-      {error && <p className="ww-error" role="alert">{error}</p>}
-      {editable && JSON.stringify(draft) !== JSON.stringify(settings) && (
-        <p className="ww-hint" role="status">Thay đổi chưa được áp dụng.</p>
-      )}
+      <div className="ww-settings-status">
+        {error ? (
+          <p className="ww-error" role="alert">{error}</p>
+        ) : editable && JSON.stringify(draft) !== JSON.stringify(settings) ? (
+          <p className="ww-hint" role="status">Thay đổi chưa được áp dụng.</p>
+        ) : (
+          <p className="ww-hint ww-hint-placeholder" aria-hidden="true">&nbsp;</p>
+        )}
+      </div>
 
       <div className="ww-settings-actions">
         {editable ? (

@@ -1,4 +1,4 @@
-export type TableSeatView = 'q3back' | 'side' | 'q3front';
+export type TableSeatView = 'q3front' | 'side';
 
 export type TableSeatPose = {
   slot: number;
@@ -10,38 +10,39 @@ export type TableSeatPose = {
   cardOffsetY: number;
 };
 
-// Coordinates aligned with the 7 painted wooden chairs in /platform/waiting-table.webp.
-// Slot 0 is always at bottom center (6 o'clock) for the local player.
-const PAINTED_CHAIRS: Record<number, readonly [number, number, number, TableSeatView][]> = {
+// Ground seating coordinates around the central campfire clearing (50%, 62%).
+// Foreground and side seats flank the campfire using the side-profile pose warming hands inward,
+// while far-side seats behind the fire face forward/inward so every villager always faces the fire.
+const CAMPFIRE_RING_SEATS: Record<number, readonly [number, number, number, TableSeatView][]> = {
   5: [
-    [50, 88, 0.27, 'q3back'],
-    [12, 54, 0.27, 'side'],
-    [26, 29, 0.23, 'q3front'],
-    [74, 29, 0.23, 'q3front'],
-    [88, 54, 0.27, 'side'],
+    [34, 86, 0.25, 'side'],
+    [17, 64, 0.23, 'side'],
+    [31, 46, 0.21, 'q3front'],
+    [71, 47, 0.21, 'q3front'],
+    [72, 82, 0.25, 'side'],
   ],
   6: [
-    [50, 88, 0.27, 'q3back'],
-    [17, 78, 0.26, 'q3back'],
-    [13, 46, 0.25, 'side'],
-    [50, 25, 0.22, 'q3front'],
-    [87, 46, 0.25, 'side'],
-    [83, 78, 0.26, 'q3back'],
+    [34, 86, 0.25, 'side'],
+    [16, 66, 0.23, 'side'],
+    [28, 46, 0.20, 'q3front'],
+    [72, 46, 0.20, 'q3front'],
+    [84, 66, 0.23, 'side'],
+    [66, 86, 0.25, 'side'],
   ],
   7: [
-    [50, 88, 0.27, 'q3back'],
-    [17, 79, 0.26, 'q3back'],
-    [12, 49, 0.25, 'side'],
-    [27, 29, 0.23, 'q3front'],
-    [73, 29, 0.23, 'q3front'],
-    [88, 49, 0.25, 'side'],
-    [83, 79, 0.26, 'q3back'],
+    [33, 86, 0.25, 'side'],
+    [15, 70, 0.23, 'side'],
+    [21, 50, 0.21, 'side'],
+    [50, 42, 0.19, 'q3front'],
+    [79, 50, 0.21, 'side'],
+    [85, 70, 0.23, 'side'],
+    [67, 86, 0.25, 'side'],
   ],
 };
 
 export function tableSeatPose(index: number, count: number, viewerIndex: number | null): TableSeatPose {
   const slot = viewerIndex === null || viewerIndex < 0 ? index : (index - viewerIndex + count) % count;
-  const preset = PAINTED_CHAIRS[count];
+  const preset = CAMPFIRE_RING_SEATS[count];
   if (preset && preset[slot]) {
     const [x, y, actorHeight, view] = preset[slot];
     return {
@@ -51,18 +52,20 @@ export function tableSeatPose(index: number, count: number, viewerIndex: number 
       actorHeight,
       view,
       flip: x > 50,
-      cardOffsetY: view === 'q3front' ? 0 : view === 'side' ? 4 : -10,
+      cardOffsetY: y < 50 ? 2 : y > 80 ? -6 : 0,
     };
   }
 
-  // Smooth ellipse around the wooden table for 8–16 players.
-  const angle = Math.PI / 2 + (slot * Math.PI * 2) / Math.max(1, count);
-  const rx = count >= 12 ? 42 : 40;
-  const ry = count >= 12 ? 35 : 33;
+  // Smooth ground ring around the campfire for 8–16 players.
+  // Half-step offset keeps foreground seats flanking left/right so everyone faces inward toward the fire.
+  const step = (Math.PI * 2) / Math.max(1, count);
+  const angle = Math.PI / 2 + step / 2 + slot * step;
+  const rx = count >= 12 ? 41 : 38;
+  const ry = count >= 12 ? 23 : 22;
   const x = 50 + rx * Math.cos(angle);
-  const y = 52 + ry * Math.sin(angle);
-  const view: TableSeatView = y > 68 ? 'q3back' : y < 40 ? 'q3front' : 'side';
-  const actorHeight = count >= 12 ? 0.17 : 0.21;
+  const y = 66 + ry * Math.sin(angle);
+  const view: TableSeatView = y < 54 && Math.abs(x - 50) <= 26 ? 'q3front' : 'side';
+  const actorHeight = count >= 12 ? 0.17 : 0.20;
   return {
     slot,
     x,
@@ -70,14 +73,17 @@ export function tableSeatPose(index: number, count: number, viewerIndex: number 
     actorHeight,
     view,
     flip: x > 50,
-    cardOffsetY: view === 'q3front' ? 8 : view === 'side' ? 6 : -6,
+    cardOffsetY: y < 50 ? 4 : y > 80 ? -6 : 2,
   };
 }
 
-export const TABLE_BACKDROP = '/platform/waiting-table.webp';
+export const CAMPFIRE_NIGHT_BACKDROP = '/werewolf/scene/campfire-night.jpg';
+export const CAMPFIRE_DAY_BACKDROP = '/werewolf/scene/campfire-day.jpg';
 
-export function tableActorImage(playerId: number, view: TableSeatView, alive: boolean): string {
-  if (!alive) return `/platform/seat/ghost-${view}.webp`;
-  const variant = 'abcdef'[playerId % 6];
-  return `/platform/seat/cowboy-${variant}-${view}.webp`;
+export function campfireBackdrop(isNight: boolean): string {
+  return isNight ? CAMPFIRE_NIGHT_BACKDROP : CAMPFIRE_DAY_BACKDROP;
+}
+
+export function tableActorImage(_playerId: number, view: TableSeatView, alive: boolean): string {
+  return alive ? `/werewolf/scene/villager-${view}.png` : `/werewolf/scene/villager-ghost-${view}.png`;
 }

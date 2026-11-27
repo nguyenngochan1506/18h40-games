@@ -20,7 +20,7 @@ import {
   selectSpectatorView,
   winnerLabel,
 } from './state.ts';
-import { TABLE_BACKDROP, tableActorImage, tableSeatPose } from './tableLayout.ts';
+import { campfireBackdrop, tableActorImage, tableSeatPose } from './tableLayout.ts';
 import './styles.css';
 
 function phaseTitle(
@@ -294,7 +294,7 @@ export default function Board(props: GameBoardProps) {
         case 'cupid':
           return (
             <div className="ww-action-bar">
-              <span>Chọn 2 người quanh bàn để ghép đôi Tình Nhân ({selectedTargets.length}/2).</span>
+              <span>Chọn 2 người quanh đống lửa để ghép đôi Tình Nhân ({selectedTargets.length}/2).</span>
               <button
                 type="button"
                 className="ww-btn ww-btn-primary"
@@ -309,7 +309,7 @@ export default function Board(props: GameBoardProps) {
           return (
             <div className="ww-action-bar">
               <span>
-                Chọn 1 người quanh bàn để bảo vệ đêm nay
+                Chọn 1 người quanh đống lửa để bảo vệ đêm nay
                 {player.bodyguard_last_protected !== null
                   ? ` (không chọn lại ${seatName(seats, player.bodyguard_last_protected)})`
                   : ''}.
@@ -353,7 +353,7 @@ export default function Board(props: GameBoardProps) {
         case 'seer':
           return (
             <div className="ww-action-bar">
-              <span>Chọn 1 người chơi khác quanh bàn để soi xem có phải Ma Sói không.</span>
+              <span>Chọn 1 người chơi khác quanh đống lửa để soi xem có phải Ma Sói không.</span>
               <button
                 type="button"
                 className="ww-btn ww-btn-primary"
@@ -367,7 +367,7 @@ export default function Board(props: GameBoardProps) {
         case 'sorcerer':
           return (
             <div className="ww-action-bar">
-              <span>Chọn 1 người chơi khác quanh bàn để tìm Tiên Tri.</span>
+              <span>Chọn 1 người chơi khác quanh đống lửa để tìm Tiên Tri.</span>
               <button
                 type="button"
                 className="ww-btn ww-btn-primary"
@@ -385,7 +385,7 @@ export default function Board(props: GameBoardProps) {
                 {player.witch_victim !== null
                   ? `Đêm nay bầy Sói cắn ${seatName(seats, player.witch_victim)}.`
                   : 'Đêm nay không có nạn nhân bị Sói cắn (hoặc đã được Bảo Vệ che chắn).'}
-                {player.witch_poison_available ? ' Bạn có thể chọn 1 người trên bàn để đầu độc.' : ''}
+                {player.witch_poison_available ? ' Bạn có thể chọn 1 người quanh đống lửa để đầu độc.' : ''}
               </span>
               <div className="ww-action-row">
                 {player.witch_heal_available && player.witch_victim !== null && (
@@ -417,7 +417,7 @@ export default function Board(props: GameBoardProps) {
     if (phase.kind === 'hunter_shot') {
       return (
         <div className="ww-action-bar">
-          <span>Bạn đã bị loại! Chọn 1 người chơi còn sống quanh bàn để kéo theo.</span>
+          <span>Bạn đã bị loại! Chọn 1 người chơi còn sống quanh đống lửa để kéo theo.</span>
           <button
             type="button"
             className="ww-btn ww-btn-danger"
@@ -432,7 +432,7 @@ export default function Board(props: GameBoardProps) {
 
     return (
       <div className="ww-action-bar">
-        <span>Chọn 1 người trên bàn để bỏ phiếu treo cổ, hoặc bỏ phiếu trắng.</span>
+        <span>Chọn 1 người quanh đống lửa để bỏ phiếu treo cổ, hoặc bỏ phiếu trắng.</span>
         <div className="ww-action-row">
           <button
             type="button"
@@ -495,13 +495,14 @@ export default function Board(props: GameBoardProps) {
         </div>
       </header>
 
-      {/* Full-bleed Round Table Stage */}
-      <main className="ww-village" aria-label="Bàn tròn Ma Sói">
+      {/* Full-bleed Campfire Clearing Stage */}
+      <main className="ww-village" aria-label="Bãi lửa trại Ma Sói">
         <div className="ww-table-stage">
-          <img className="ww-table-backdrop" src={TABLE_BACKDROP} alt="" aria-hidden="true" />
+          <img className="ww-table-backdrop" src={campfireBackdrop(isNight)} alt="" aria-hidden="true" />
           <div className="ww-table-atmosphere" aria-hidden="true" />
+          <div className="ww-campfire-glow" aria-hidden="true" />
 
-          {/* Center Table Plaque: Phase + Action Controls */}
+          {/* Upper-Center Phase + Action Controls (keeps central campfire visible) */}
           <div className="ww-table-center">
             <div className="ww-phase-pill">
               <span className="ww-phase-icon" aria-hidden="true">
@@ -521,8 +522,8 @@ export default function Board(props: GameBoardProps) {
             {renderActionPanel()}
           </div>
 
-          {/* Players Seated Around the Round Table */}
-          <div className="ww-seats-arena" aria-label="Danh sách người chơi quanh bàn">
+          {/* Villagers Seated on the Ground Around the Campfire */}
+          <div className="ww-seats-arena" aria-label="Danh sách người chơi quanh đống lửa">
             {table.players.map((seat, idx) => {
               const pose = tableSeatPose(idx, table.players.length, viewerIndex);
               const selectable = isTargetSelectable(seat.id);
@@ -534,6 +535,7 @@ export default function Board(props: GameBoardProps) {
               const wolfVoteFor = player?.wolf_votes.filter(v => v.target === seat.id) ?? [];
               const displayRole = seat.role ?? (isMe && !hideMyCard ? player.your_role : null);
               const actorSrc = tableActorImage(seat.id, pose.view, seat.alive);
+              const depthBand = pose.y < 52 ? 'ww-seat-far' : pose.y > 78 ? 'ww-seat-near' : 'ww-seat-mid';
 
               return (
                 <div
@@ -541,6 +543,7 @@ export default function Board(props: GameBoardProps) {
                   className={[
                     'ww-seat-slot',
                     `ww-seat-${pose.view}`,
+                    depthBand,
                     isMe ? 'is-me-slot' : '',
                     !seat.alive ? 'is-dead-slot' : '',
                   ].filter(Boolean).join(' ')}

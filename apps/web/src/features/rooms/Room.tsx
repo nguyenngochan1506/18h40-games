@@ -27,7 +27,7 @@ export default function Room({ room, roomTools, voice, sync, fxEnabled, disabled
   if (!info?.enabled || (!waiting && loadFailed)) return <section className="saloon-restoring"><div className="saloon-poster"><h2>{info?.name ?? 'Trò chơi không hỗ trợ'}</h2><p role="alert">{info?.enabled ? 'Không tải được trò chơi. Hãy thử lại hoặc rời phòng.' : 'Trò chơi chưa được hỗ trợ. Bạn vẫn có thể rời phòng.'}</p>{info?.enabled && <button className="western-button" onClick={retryLoad}>Thử tải lại</button>}<button className="western-button" disabled={disabled} onClick={leaveRoom}>Rời phòng</button>{roomTools}</div></section>;
   const client = loaded?.kind === room.game ? loaded.client : null;
   const Root = client?.Root ?? Fragment;
-  if (waiting) return <Root><WaitingRoom room={room} roomTools={roomTools} disabled={disabled} send={send} Settings={client?.Settings} retryLoad={loadFailed ? retryLoad : undefined} /></Root>;
+  if (waiting) return <Root><WaitingRoom room={room} roomTools={roomTools} disabled={disabled} send={send} Settings={client?.Settings} waitingScene={client?.waitingScene} retryLoad={loadFailed ? retryLoad : undefined} /></Root>;
   if (!sync.game || !client) return <section className="saloon-restoring"><div className="saloon-poster"><h2>Phòng {room.code}</h2><p role="status">Đang tải trò chơi…</p><button className="western-button" disabled={disabled} onClick={leaveRoom}>Rời phòng</button>{roomTools}</div></section>;
   const Board = client.Board;
   const host = room.host === room.you;

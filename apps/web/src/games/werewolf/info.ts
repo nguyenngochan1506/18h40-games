@@ -8,5 +8,6 @@ export const info: GameInfo = {
   enabled: true,
   limits: [5, 16],
   icon: '☾',
+  lobbyBackdrop: '/werewolf/scene/campfire-night.jpg',
   load: () => import('./client.ts').then(module => module.client),
 };

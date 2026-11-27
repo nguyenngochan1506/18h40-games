@@ -30,16 +30,16 @@ impl GameModule for Module {
         let GameSettings::Werewolf(settings) = settings else {
             return Err(ErrorCode::InvalidSettings);
         };
-        if !settings.roles.valid_for(players.max(5))
-            || (players < 5 && settings.roles != RoleDeck::standard(5))
-        {
+        if !settings.roles.valid_for(players.max(5)) {
             return Err(ErrorCode::InvalidSettings);
         }
         Ok(())
     }
 
     fn adjust_settings(&self, settings: &mut GameSettings, players: usize) {
-        if let GameSettings::Werewolf(settings) = settings {
+        if let GameSettings::Werewolf(settings) = settings
+            && !settings.roles.valid_for(players.max(5))
+        {
             settings.roles = RoleDeck::standard(players);
         }
     }

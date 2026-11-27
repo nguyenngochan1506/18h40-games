@@ -461,3 +461,133 @@ test('Board hides secret wolf and lover badges when Úp bài is toggled on', asy
   assert.equal(container.querySelectorAll('.ww-mini-lover').length, 0, 'Lover badge must hide when Úp bài is active');
   assert.equal(container.querySelector('.ww-secrets'), null, 'Secrets panel must hide when Úp bài is active');
 });
+
+test('Board switches campfire backdrop between lit night and extinguished day and uses seated villager sprites', async t => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => { await act(() => root.unmount()); container.remove(); });
+
+  const nightView = makePlayerView({
+    table: {
+      ...makePlayerView().table,
+      phase: { kind: 'night', night: 1 },
+      players: makePlayerView().table.players.map(p => (p.id === 4 ? { ...p, alive: false, death_cause: 'werewolf_attack' } : p)),
+    },
+  });
+
+  let sync = receiveGameState(initialGameState, {
+    v: PROTOCOL_VERSION,
+    type: 'game_started',
+    seq: 0,
+    seats: SEATS,
+    view: { game: 'werewolf', payload: { perspective: 'player', view: nightView } },
+  });
+
+  const renderBoard = async () => {
+    await act(async () => {
+      root.render(createElement(client.Board, {
+        room: BASE_ROOM,
+        sync,
+        disabled: false,
+        pending: false,
+        requestVersion: 0,
+        actionError: null,
+        actionErrorCode: null,
+        fxEnabled: false,
+        roomMenu: null,
+        consume: (id: number) => {
+          sync = { ...sync, frames: sync.frames.filter(f => f.id > id) };
+        },
+        sendAction() {},
+        endGame() {},
+        hostSkip() {},
+        leaveRoom() {},
+      }));
+    });
+  };
+
+  await renderBoard();
+  await renderBoard();
+
+  const boardNight = container.querySelector('.ww-board')!;
+  assert.ok(boardNight.classList.contains('ww-theme-night'));
+  assert.equal(
+    container.querySelector<HTMLImageElement>('.ww-table-backdrop')?.getAttribute('src'),
+    '/werewolf/scene/campfire-night.jpg',
+  );
+
+  const actorImgs = Array.from(container.querySelectorAll<HTMLImageElement>('.ww-seat-actor'));
+  assert.equal(actorImgs.length, 5);
+  for (let i = 0; i < 4; i++) {
+    assert.match(actorImgs[i].getAttribute('src')!, /^\/werewolf\/scene\/villager-(q3front|side)\.png$/);
+  }
+  assert.match(actorImgs[4].getAttribute('src')!, /^\/werewolf\/scene\/villager-ghost-(q3front|side)\.png$/);
+
+  // Transition to day phase: campfire switches to extinguished day backdrop and bright day theme.
+  const dayView = makePlayerView({
+    active_night_step: null,
+    table: {
+      ...nightView.table,
+      phase: { kind: 'day_vote', day: 1 },
+    },
+  });
+  sync = receiveGameState(sync, {
+    v: PROTOCOL_VERSION,
+    type: 'game_update',
+    seq: 1,
+    update: {
+      game: 'werewolf',
+      events: [{ type: 'day_started', day: 1 }],
+      view: { perspective: 'player', view: dayView },
+    },
+  });
+
+  await renderBoard();
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+  await renderBoard();
+
+  assert.ok(container.querySelector('.ww-board')!.classList.contains('ww-theme-day'));
+  assert.equal(
+    container.querySelector<HTMLImageElement>('.ww-table-backdrop')?.getAttribute('src'),
+    '/werewolf/scene/campfire-day.jpg',
+  );
+});
+
+test('Settings allows host to adjust roles before 5 players join and exposes campfire waitingScene', async t => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => { await act(() => root.unmount()); container.remove(); });
+
+  const submitted: GameSettings[] = [];
+  await act(async () => {
+    root.render(createElement(client.Settings, {
+      settings: { game: 'werewolf', payload: { roles: standardRoleDeck(5), reveal_role_on_death: true } },
+      players: 1,
+      maxPlayers: 16,
+      editable: true,
+      onChange: (next: GameSettings) => submitted.push(next),
+    }));
+  });
+
+  const fieldset = container.querySelector<HTMLFieldSetElement>('fieldset.ww-role-grid')!;
+  assert.equal(fieldset.disabled, false, 'Host must be able to adjust roles even with < 5 players waiting');
+
+  // Swap 1 Villager for 1 Witch while only 1 player is in the room.
+  const decVillager = container.querySelector<HTMLButtonElement>('button[aria-label="Giảm Dân Làng"]')!;
+  const incWitch = container.querySelector<HTMLButtonElement>('button[aria-label="Tăng Phù Thủy"]')!;
+  await act(() => decVillager.click());
+  await act(() => incWitch.click());
+  const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+  await act(() => submit.click());
+  assert.equal(submitted.length, 1);
+  assert.equal(submitted[0].game, 'werewolf');
+  assert.equal(submitted[0].payload.roles.witch, 1);
+  assert.equal(submitted[0].payload.roles.villager, 1);
+
+  assert.ok(client.waitingScene);
+  assert.equal(client.waitingScene.backdrop, '/werewolf/scene/campfire-night.jpg');
+  const seat0 = client.waitingScene.seat(0, 16, 1);
+  assert.match(client.waitingScene.actor(0, seat0.view), /^\/werewolf\/scene\/villager-(q3front|side)\.png$/);
+});

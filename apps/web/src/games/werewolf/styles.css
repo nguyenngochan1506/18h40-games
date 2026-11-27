@@ -15,6 +15,11 @@
   clip-path: inset(50%);
 }
 
+.game-werewolf.game-app:has(.ww-theme-day) {
+  background: #dfe9dc;
+  color: #241c13;
+}
+
 .game-werewolf.game-app > .connection-status {
   position: fixed;
   z-index: 35;
@@ -27,6 +32,12 @@
   pointer-events: none;
 }
 
+.game-werewolf.game-app:has(.ww-theme-day) > .connection-status {
+  color: #362918;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.75);
+}
+
 .game-werewolf.game-app > .connection-status::before {
   content: '';
   display: inline-block;
@@ -36,6 +47,11 @@
   border-radius: 50%;
   background: #e4bd6d;
   box-shadow: 0 0 8px rgba(228, 189, 109, 0.7);
+}
+
+.game-werewolf.game-app:has(.ww-theme-day) > .connection-status::before {
+  background: #2e8b57;
+  box-shadow: 0 0 6px rgba(46, 139, 87, 0.55);
 }
 
 .game-werewolf.game-app > .connection-alert {
@@ -69,7 +85,7 @@
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* Fullscreen Round Tabletop Board: 3-band layout (topbar / centered 16:9 round table / bottom HUD dock) */
+/* Fullscreen Campfire Board: 3-band layout (topbar / centered 16:9 campfire clearing / bottom HUD dock) */
 .game-werewolf.ww-board {
   position: relative;
   isolation: isolate;
@@ -79,15 +95,23 @@
   overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  background: radial-gradient(circle at 50% 42%, #131a2d 0%, #090c14 75%);
-  transition: background 0.4s ease;
+  background: radial-gradient(circle at 50% 45%, #161d31 0%, #080b14 78%);
+  transition: background 0.45s ease, color 0.35s ease;
 }
 
 .game-werewolf.ww-theme-day {
-  --ww-surface: rgba(33, 24, 16, 0.9);
-  --ww-surface-soft: rgba(54, 39, 25, 0.86);
-  --ww-border: rgba(235, 190, 112, 0.46);
-  background: radial-gradient(circle at 50% 42%, #291c12 0%, #120c08 75%);
+  --ww-bg: #e7efe4;
+  --ww-surface: rgba(255, 251, 243, 0.92);
+  --ww-surface-soft: rgba(244, 236, 220, 0.94);
+  --ww-border: rgba(145, 108, 56, 0.42);
+  --ww-text: #241b12;
+  --ww-muted: #5f4f3c;
+  --ww-gold: #9a5b11;
+  --ww-crimson: #c6313e;
+  --ww-emerald: #1f7d4e;
+  --ww-violet: #6d45c2;
+  color: var(--ww-text);
+  background: radial-gradient(circle at 50% 24%, #f4f8ee 0%, #dce9d9 52%, #c7dbc8 100%);
 }
 
 .game-werewolf.ww-loading {
@@ -128,6 +152,12 @@
   font-weight: 600;
   color: var(--ww-gold);
   backdrop-filter: blur(6px);
+}
+
+.game-werewolf.ww-theme-day .ww-room-tag,
+.game-werewolf.ww-theme-day .ww-alive-pill {
+  background: rgba(255, 251, 243, 0.9);
+  box-shadow: 0 2px 8px rgba(45, 58, 38, 0.12);
 }
 
 .game-werewolf .ww-alive-pill {
@@ -188,6 +218,15 @@
   font-size: 0.78rem;
 }
 
+.game-werewolf.ww-theme-day .ww-btn-ghost {
+  background: rgba(154, 91, 17, 0.08);
+  border-color: rgba(154, 91, 17, 0.38);
+}
+
+.game-werewolf.ww-theme-day .ww-btn-secondary {
+  box-shadow: 0 2px 6px rgba(45, 58, 38, 0.1);
+}
+
 /* Room Menu Dropdown */
 .game-werewolf .ww-room-menu {
   position: relative;
@@ -218,6 +257,11 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.game-werewolf.ww-theme-day .ww-room-menu-panel {
+  background: #fffcf5;
+  box-shadow: 0 16px 36px rgba(34, 46, 30, 0.24);
 }
 
 .game-werewolf .ww-room-menu-panel h2 {
@@ -254,6 +298,10 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
+.game-werewolf.ww-theme-day .ww-room-menu-panel .room-presence li {
+  background: rgba(138, 102, 56, 0.1);
+}
+
 .game-werewolf .ww-room-menu-panel .room-presence li span:last-child {
   color: var(--ww-muted);
   font-size: 0.76rem;
@@ -282,7 +330,7 @@
   color: var(--ww-text);
 }
 
-/* Round Table Stage (16:9 canvas fitted cleanly into the middle row without clipping or overlapping HUDs) */
+/* Campfire Clearing Stage (16:9 canvas fitted cleanly into the middle row without clipping or overlapping HUDs) */
 .game-werewolf .ww-village {
   width: 100%;
   height: 100%;
@@ -307,57 +355,103 @@
   container-type: inline-size;
 }
 
+.game-werewolf.ww-theme-day .ww-table-stage {
+  box-shadow: 0 12px 34px rgba(34, 52, 34, 0.22), 0 0 0 1px rgba(145, 108, 56, 0.34);
+}
+
 .game-werewolf .ww-table-backdrop {
   position: absolute;
   inset: 0;
-  z-index: -2;
+  z-index: -3;
   width: 100%;
   height: 100%;
-  object-fit: fill;
+  object-fit: cover;
   pointer-events: none;
   transition: filter 0.5s ease;
 }
 
 .game-werewolf.ww-theme-night .ww-table-backdrop {
-  filter: brightness(0.56) saturate(0.72) contrast(1.08) hue-rotate(-14deg);
+  filter: brightness(0.94) contrast(1.04) saturate(1.06);
 }
 
 .game-werewolf.ww-theme-day .ww-table-backdrop {
-  filter: brightness(0.92) saturate(1.06);
+  filter: brightness(1.04) saturate(1.04);
 }
 
 .game-werewolf .ww-table-atmosphere {
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: -2;
   pointer-events: none;
   transition: background 0.5s ease;
 }
 
 .game-werewolf.ww-theme-night .ww-table-atmosphere {
   background:
-    radial-gradient(ellipse at 50% 48%, rgba(74, 114, 198, 0.22) 0%, rgba(11, 16, 34, 0.36) 54%, rgba(5, 7, 16, 0.82) 100%);
+    radial-gradient(ellipse at 50% 60%, rgba(255, 146, 52, 0.22) 0%, rgba(16, 22, 44, 0.24) 50%, rgba(4, 6, 14, 0.62) 100%);
 }
 
 .game-werewolf.ww-theme-day .ww-table-atmosphere {
   background:
-    radial-gradient(ellipse at 50% 48%, rgba(255, 206, 118, 0.16) 0%, rgba(34, 21, 11, 0.22) 60%, rgba(12, 7, 4, 0.68) 100%);
+    radial-gradient(ellipse at 50% 24%, rgba(255, 250, 228, 0.14) 0%, rgba(255, 255, 255, 0) 56%, rgba(40, 56, 36, 0.14) 100%);
 }
 
 .game-werewolf.ww-theme-hunter .ww-table-atmosphere {
   background:
-    radial-gradient(ellipse at 50% 48%, rgba(224, 68, 84, 0.24) 0%, rgba(28, 10, 14, 0.44) 58%, rgba(8, 4, 6, 0.84) 100%);
+    radial-gradient(ellipse at 50% 56%, rgba(224, 68, 84, 0.26) 0%, rgba(28, 10, 14, 0.36) 58%, rgba(8, 4, 6, 0.72) 100%);
 }
 
-/* Center of the Wooden Round Table: Phase & Action Controls */
+/* Warm flickering campfire aura at night (completely extinguished during day) */
+@keyframes ww-firelight-pulse {
+  0%, 100% {
+    opacity: 0.78;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  40% {
+    opacity: 0.98;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+  70% {
+    opacity: 0.84;
+    transform: translate(-50%, -50%) scale(0.97);
+  }
+}
+
+.game-werewolf .ww-campfire-glow {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  z-index: -1;
+  width: 48%;
+  height: 44%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 186, 74, 0.42) 0%,
+    rgba(255, 118, 36, 0.22) 38%,
+    rgba(255, 88, 24, 0) 74%
+  );
+  mix-blend-mode: screen;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.45s ease;
+}
+
+.game-werewolf.ww-theme-night .ww-campfire-glow {
+  opacity: 0.88;
+  animation: ww-firelight-pulse 2.6s ease-in-out infinite;
+}
+
+/* Upper-Center Phase & Action Controls (positioned cleanly above the central campfire) */
 .game-werewolf .ww-table-center {
   position: absolute;
-  z-index: 12;
+  z-index: 14;
   left: 50%;
-  top: 56%;
+  top: 15%;
   transform: translate(-50%, -50%);
-  width: clamp(236px, 28cqi, 360px);
-  padding: 10px 14px;
+  width: clamp(256px, 34cqi, 420px);
+  padding: 9px 14px;
   border-radius: 14px;
   background: rgba(13, 18, 31, 0.88);
   border: 1.5px solid rgba(232, 195, 116, 0.52);
@@ -365,13 +459,14 @@
   backdrop-filter: blur(8px);
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
   text-align: center;
 }
 
 .game-werewolf.ww-theme-day .ww-table-center {
-  background: rgba(34, 23, 14, 0.9);
-  border-color: rgba(240, 197, 118, 0.62);
+  background: rgba(255, 251, 242, 0.93);
+  border-color: rgba(154, 108, 48, 0.54);
+  box-shadow: 0 10px 28px rgba(38, 52, 34, 0.2), inset 0 0 18px rgba(255, 232, 182, 0.35);
 }
 
 .game-werewolf .ww-phase-pill {
@@ -429,6 +524,10 @@
   color: #f8e4ba;
 }
 
+.game-werewolf.ww-theme-day .ww-inline-check {
+  color: #4f3110;
+}
+
 .game-werewolf .ww-error {
   margin: 0;
   padding: 6px 10px;
@@ -437,6 +536,11 @@
   border: 1px solid var(--ww-crimson);
   color: #ffd7db;
   font-size: 0.82rem;
+}
+
+.game-werewolf.ww-theme-day .ww-error {
+  background: rgba(198, 49, 62, 0.12);
+  color: #8f1d27;
 }
 
 .game-werewolf .ww-hint {
@@ -465,7 +569,7 @@
   font-size: 0.86rem;
 }
 
-/* Players Seated Around the Round Table */
+/* Villagers Seated on the Ground Around the Campfire */
 .game-werewolf .ww-seats-arena {
   position: absolute;
   inset: 0;
@@ -485,15 +589,20 @@
   z-index: 6;
 }
 
-.game-werewolf .ww-seat-slot.ww-seat-q3front {
+.game-werewolf .ww-seat-slot.ww-seat-far {
   z-index: 4;
 }
 
-.game-werewolf .ww-seat-slot.ww-seat-q3back {
+.game-werewolf .ww-seat-slot.ww-seat-mid {
+  z-index: 6;
+}
+
+.game-werewolf .ww-seat-slot.ww-seat-near {
   z-index: 8;
 }
 
 .game-werewolf .ww-seat-actor-wrap {
+  position: relative;
   height: 100%;
   aspect-ratio: 3 / 4;
   display: flex;
@@ -502,29 +611,55 @@
   pointer-events: none;
 }
 
+/* Soft grounded contact shadow under seated villager on earth/grass */
+.game-werewolf .ww-seat-actor-wrap::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 1%;
+  width: 78%;
+  height: 14%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(10, 8, 6, 0.56) 0%, rgba(10, 8, 6, 0) 72%);
+  z-index: -1;
+}
+
+.game-werewolf.ww-theme-day .ww-seat-actor-wrap::after {
+  background: radial-gradient(ellipse at center, rgba(34, 28, 18, 0.36) 0%, rgba(34, 28, 18, 0) 72%);
+}
+
+.game-werewolf .ww-seat-actor-wrap.is-ghost::after {
+  opacity: 0.25;
+}
+
 .game-werewolf .ww-seat-actor {
   height: 100%;
   width: auto;
   max-width: none;
   object-fit: contain;
-  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.72));
-  transition: opacity 0.3s ease, filter 0.3s ease;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.52));
+  transition: opacity 0.3s ease, filter 0.35s ease;
 }
 
 .game-werewolf.ww-theme-night .ww-seat-actor {
-  filter: brightness(0.84) saturate(0.85) drop-shadow(0 8px 14px rgba(0, 0, 0, 0.82));
+  filter: brightness(0.86) saturate(0.95) sepia(0.14) drop-shadow(0 6px 12px rgba(0, 0, 0, 0.78)) drop-shadow(0 0 8px rgba(255, 148, 56, 0.24));
+}
+
+.game-werewolf.ww-theme-day .ww-seat-actor {
+  filter: brightness(1.02) saturate(1.02) drop-shadow(0 5px 8px rgba(32, 26, 18, 0.34));
 }
 
 .game-werewolf .ww-seat-actor-wrap.is-ghost .ww-seat-actor {
-  opacity: 0.76;
-  filter: drop-shadow(0 0 10px rgba(145, 224, 232, 0.5));
+  opacity: 0.78;
+  filter: drop-shadow(0 0 10px rgba(145, 224, 232, 0.55));
 }
 
 /* Seat Interactive Plaque & Mini Role Card */
 .game-werewolf .ww-seat-card {
   pointer-events: auto;
   position: relative;
-  margin-top: calc(-26px + var(--card-offset-y));
+  margin-top: calc(-14px + var(--card-offset-y));
   min-width: 132px;
   max-width: 172px;
   padding: 5px 8px;
@@ -539,11 +674,13 @@
   gap: 4px;
   text-align: left;
   cursor: default;
-  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, background 0.3s ease;
 }
 
 .game-werewolf.ww-theme-day .ww-seat-card {
-  background: rgba(33, 23, 15, 0.92);
+  background: rgba(255, 251, 243, 0.94);
+  border-color: rgba(145, 108, 56, 0.48);
+  box-shadow: 0 6px 16px rgba(34, 46, 30, 0.22);
 }
 
 .game-werewolf.ww-many-seats .ww-seat-card {
@@ -558,10 +695,20 @@
   box-shadow: 0 0 0 1px rgba(232, 195, 116, 0.4), 0 6px 18px rgba(0, 0, 0, 0.65);
 }
 
+.game-werewolf.ww-theme-day .ww-seat-card.is-selectable {
+  border-color: #c77d19;
+  box-shadow: 0 0 0 2px rgba(209, 134, 30, 0.34), 0 6px 16px rgba(34, 46, 30, 0.22);
+}
+
 .game-werewolf .ww-seat-card.is-selectable:hover {
   transform: translateY(-3px) scale(1.03);
   border-color: #ffe39a;
   box-shadow: 0 0 0 2px rgba(255, 227, 154, 0.55), 0 10px 22px rgba(0, 0, 0, 0.72);
+}
+
+.game-werewolf.ww-theme-day .ww-seat-card.is-selectable:hover {
+  border-color: #b4640c;
+  box-shadow: 0 0 0 3px rgba(209, 134, 30, 0.42), 0 10px 20px rgba(34, 46, 30, 0.26);
 }
 
 .game-werewolf .ww-seat-card.is-selected {
@@ -571,8 +718,18 @@
   transform: translateY(-4px) scale(1.04);
 }
 
+.game-werewolf.ww-theme-day .ww-seat-card.is-selected {
+  border-color: #c92a38;
+  background: rgba(255, 232, 234, 0.97);
+  box-shadow: 0 0 0 3px rgba(201, 42, 56, 0.45), 0 10px 22px rgba(80, 18, 24, 0.24);
+}
+
 .game-werewolf .ww-seat-card.is-me {
   border-color: #88b8ff;
+}
+
+.game-werewolf.ww-theme-day .ww-seat-card.is-me {
+  border-color: #2f6fc9;
 }
 
 .game-werewolf .ww-seat-card.is-winner {
@@ -608,6 +765,10 @@
   color: #f8e5bd;
 }
 
+.game-werewolf.ww-theme-day .ww-seat-name {
+  color: #261b0f;
+}
+
 .game-werewolf .ww-status-dot {
   font-size: 0.68rem;
   font-weight: 600;
@@ -621,9 +782,19 @@
   color: #93efc0;
 }
 
+.game-werewolf.ww-theme-day .ww-status-dot.alive {
+  background: rgba(31, 125, 78, 0.14);
+  color: #16613b;
+}
+
 .game-werewolf .ww-status-dot.dead {
   background: rgba(156, 204, 214, 0.18);
   color: #bfe9f0;
+}
+
+.game-werewolf.ww-theme-day .ww-status-dot.dead {
+  background: rgba(71, 98, 114, 0.16);
+  color: #365060;
 }
 
 .game-werewolf .ww-seat-badges {
@@ -649,9 +820,19 @@
   color: #ffc5cb;
 }
 
+.game-werewolf.ww-theme-day .ww-mini-wolf {
+  background: rgba(198, 49, 62, 0.16);
+  color: #9e1b27;
+}
+
 .game-werewolf .ww-mini-lover {
   background: rgba(236, 98, 152, 0.34);
   color: #ffd0e4;
+}
+
+.game-werewolf.ww-theme-day .ww-mini-lover {
+  background: rgba(204, 52, 118, 0.15);
+  color: #9c1a54;
 }
 
 .game-werewolf .ww-mini-royal {
@@ -659,14 +840,29 @@
   color: #ffe8ad;
 }
 
+.game-werewolf.ww-theme-day .ww-mini-royal {
+  background: rgba(176, 114, 22, 0.16);
+  color: #7d4a08;
+}
+
 .game-werewolf .ww-mini-dead {
   background: rgba(255, 255, 255, 0.12);
   color: #d7deec;
 }
 
+.game-werewolf.ww-theme-day .ww-mini-dead {
+  background: rgba(60, 52, 44, 0.12);
+  color: #4a3f34;
+}
+
 .game-werewolf .ww-mini-vote {
   background: rgba(96, 165, 250, 0.28);
   color: #cde3ff;
+}
+
+.game-werewolf.ww-theme-day .ww-mini-vote {
+  background: rgba(37, 99, 235, 0.14);
+  color: #1d4ed8;
 }
 
 /* Bottom HUD Dock: Personal Card (left) + Village Log (right), zero overlap with table seats */
@@ -696,7 +892,8 @@
 }
 
 .game-werewolf.ww-theme-day .ww-my-panel {
-  background: rgba(32, 22, 14, 0.94);
+  background: rgba(255, 251, 243, 0.95);
+  box-shadow: 0 8px 24px rgba(34, 46, 30, 0.14);
 }
 
 .game-werewolf .ww-my-card-col {
@@ -752,6 +949,10 @@
   color: #d6ddf0;
 }
 
+.game-werewolf.ww-theme-day .ww-secret-summary {
+  color: #443728;
+}
+
 .game-werewolf .ww-secrets {
   width: 100%;
   display: flex;
@@ -769,6 +970,10 @@
   color: #ff9ec4;
 }
 
+.game-werewolf.ww-theme-day .ww-secret-lover {
+  color: #b01f5b;
+}
+
 .game-werewolf .ww-badge {
   align-self: flex-start;
   padding: 2px 9px;
@@ -783,10 +988,22 @@
   border: 1px solid rgba(76, 194, 138, 0.45);
 }
 
+.game-werewolf.ww-theme-day .ww-badge-village {
+  background: rgba(31, 125, 78, 0.14);
+  color: #16613b;
+  border-color: rgba(31, 125, 78, 0.35);
+}
+
 .game-werewolf .ww-badge-werewolves {
   background: rgba(217, 76, 87, 0.24);
   color: #ffb8bf;
   border: 1px solid rgba(217, 76, 87, 0.5);
+}
+
+.game-werewolf.ww-theme-day .ww-badge-werewolves {
+  background: rgba(198, 49, 62, 0.14);
+  color: #9e1b27;
+  border-color: rgba(198, 49, 62, 0.38);
 }
 
 .game-werewolf .ww-badge-lovers {
@@ -795,16 +1012,32 @@
   border: 1px solid rgba(236, 98, 152, 0.5);
 }
 
+.game-werewolf.ww-theme-day .ww-badge-lovers {
+  background: rgba(204, 52, 118, 0.14);
+  color: #9c1a54;
+  border-color: rgba(204, 52, 118, 0.38);
+}
+
 .game-werewolf .ww-badge-tanner {
   background: rgba(228, 189, 109, 0.22);
   color: #ffe3a3;
   border: 1px solid rgba(228, 189, 109, 0.5);
 }
 
+.game-werewolf.ww-theme-day .ww-badge-tanner {
+  background: rgba(176, 114, 22, 0.15);
+  color: #7d4a08;
+  border-color: rgba(176, 114, 22, 0.4);
+}
+
 .game-werewolf .ww-history {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
   padding: 6px 8px;
+}
+
+.game-werewolf.ww-theme-day .ww-history {
+  background: rgba(145, 108, 56, 0.1);
 }
 
 .game-werewolf .ww-history ul {
@@ -816,8 +1049,16 @@
   color: #ff8c96;
 }
 
+.game-werewolf.ww-theme-day .ww-text-wolf {
+  color: #b5202e;
+}
+
 .game-werewolf .ww-text-safe {
   color: #8ee8bc;
+}
+
+.game-werewolf.ww-theme-day .ww-text-safe {
+  color: #16613b;
 }
 
 /* Bottom-Right: Collapsible Village Log */
@@ -847,7 +1088,8 @@
 }
 
 .game-werewolf.ww-theme-day .ww-log-panel {
-  background: rgba(32, 22, 14, 0.94);
+  background: rgba(255, 251, 243, 0.95);
+  box-shadow: 0 8px 24px rgba(34, 46, 30, 0.14);
 }
 
 .game-werewolf .ww-log-head {
@@ -888,6 +1130,11 @@
   border-left: 3px solid rgba(255, 255, 255, 0.2);
 }
 
+.game-werewolf.ww-theme-day .ww-log-item {
+  background: rgba(145, 108, 56, 0.08);
+  border-left-color: rgba(145, 108, 56, 0.35);
+}
+
 .game-werewolf .ww-log-night {
   border-left-color: #6b8afd;
 }
@@ -896,9 +1143,18 @@
   border-left-color: #eab95b;
 }
 
+.game-werewolf.ww-theme-day .ww-log-day {
+  border-left-color: #c88318;
+  background: rgba(216, 154, 44, 0.12);
+}
+
 .game-werewolf .ww-log-danger {
   border-left-color: var(--ww-crimson);
   background: rgba(217, 76, 87, 0.14);
+}
+
+.game-werewolf.ww-theme-day .ww-log-danger {
+  background: rgba(198, 49, 62, 0.11);
 }
 
 .game-werewolf .ww-log-secret {
@@ -906,10 +1162,18 @@
   background: rgba(167, 124, 245, 0.14);
 }
 
+.game-werewolf.ww-theme-day .ww-log-secret {
+  background: rgba(109, 69, 194, 0.1);
+}
+
 .game-werewolf .ww-log-victory {
   border-left-color: var(--ww-emerald);
   background: rgba(76, 194, 138, 0.18);
   font-weight: 700;
+}
+
+.game-werewolf.ww-theme-day .ww-log-victory {
+  background: rgba(31, 125, 78, 0.14);
 }
 
 /* Role Cards (Ultimate Werewolf style) */
@@ -922,6 +1186,25 @@
   display: flex;
   flex-direction: column;
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+}
+
+.game-werewolf.ww-theme-day .ww-card {
+  background: linear-gradient(180deg, #fffdf8 0%, #f1e6d2 100%);
+  box-shadow: 0 4px 10px rgba(34, 46, 30, 0.18);
+}
+
+.game-werewolf.ww-theme-day .ww-card-summary {
+  color: #4a3c2c;
+}
+
+.game-werewolf.ww-theme-day .ww-modal {
+  background: #fffcf5;
+  border-color: rgba(154, 108, 48, 0.6);
+  box-shadow: 0 24px 64px rgba(30, 42, 26, 0.32);
+}
+
+.game-werewolf.ww-theme-day .ww-modal::backdrop {
+  background: rgba(34, 44, 32, 0.45);
 }
 
 .game-werewolf .ww-card.ww-team-village {
@@ -1023,7 +1306,7 @@
   text-align: left;
 }
 
-/* Waiting Room Sidebar Integration (mirrors BANG!'s right-hand saloon-poster sidebar next to the table) */
+/* Waiting Room Campfire Scene & Sidebar Integration */
 .game-werewolf-root {
   display: contents;
 }
@@ -1032,6 +1315,79 @@
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 16px;
   padding: 48px 16px 24px;
+  background: radial-gradient(circle at 38% 46%, #161d31 0%, #080b14 78%);
+}
+
+.game-werewolf .ww-waiting-campfire .waiting-stage {
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65);
+}
+
+.game-werewolf .ww-waiting-campfire .waiting-stage::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  z-index: -1;
+  width: 48%;
+  height: 44%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 186, 74, 0.36) 0%,
+    rgba(255, 118, 36, 0.18) 38%,
+    rgba(255, 88, 24, 0) 74%
+  );
+  mix-blend-mode: screen;
+  transform: translate(-50%, -50%);
+  animation: ww-firelight-pulse 2.6s ease-in-out infinite;
+}
+
+.game-werewolf .ww-waiting-campfire .waiting-backdrop {
+  object-fit: cover;
+}
+
+/* Keep the central blazing campfire clear in the waiting room */
+@media (min-width: 1000px) and (height > 560px) {
+  .game-werewolf .ww-waiting-campfire .waiting-code {
+    left: 1.5%;
+    top: 2.5%;
+    transform: none;
+    width: clamp(210px, 21%, 280px);
+    padding: 10px 14px 8px;
+  }
+
+  .game-werewolf .ww-waiting-campfire .waiting-table-note {
+    top: 2.5%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: clamp(230px, 27%, 350px);
+    padding: 12px 18px;
+  }
+
+  .game-werewolf .ww-waiting-campfire .waiting-portrait {
+    position: relative;
+  }
+
+  .game-werewolf .ww-waiting-campfire .waiting-portrait::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 2%;
+    width: 78%;
+    height: 14%;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(8, 6, 4, 0.56) 0%, rgba(8, 6, 4, 0) 72%);
+    z-index: -1;
+  }
+
+  .game-werewolf .ww-waiting-campfire .waiting-portrait img {
+    mask-image: none;
+    filter: brightness(0.9) sepia(0.12) drop-shadow(0 6px 10px rgba(0, 0, 0, 0.72));
+  }
 }
 
 @media (min-width: 1360px) and (height > 560px) {
@@ -1044,7 +1400,7 @@
 .game-werewolf .saloon-waiting.with-settings .waiting-options {
   width: 100%;
   padding-bottom: 0;
-  align-self: center;
+  align-self: start;
 }
 
 .game-werewolf .saloon-waiting.with-settings .waiting-options > .game-werewolf {
@@ -1235,8 +1591,23 @@
   color: #352314;
 }
 
+.game-werewolf .ww-settings-status {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.game-werewolf .ww-settings-status > p {
+  width: 100%;
+}
+
+.game-werewolf .ww-hint-placeholder {
+  visibility: hidden;
+  user-select: none;
+}
+
 .game-werewolf .ww-settings .ww-error {
-  padding: 6px 8px;
+  padding: 5px 8px;
   background: rgba(168, 42, 28, 0.12);
   border: 1px solid #9e3124;
   color: #732016;
@@ -1388,8 +1759,9 @@
   }
 
   .game-werewolf .ww-table-center {
-    width: min(88%, 320px);
-    padding: 8px 10px;
+    top: 16%;
+    width: min(92%, 340px);
+    padding: 7px 10px;
   }
 
   .game-werewolf .ww-seat-card {
