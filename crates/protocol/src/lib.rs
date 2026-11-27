@@ -39,6 +39,8 @@ pub enum GameView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "game", rename_all = "snake_case")]
+// The BANG! view is the largest variant; not worth boxing for a once-per-message value.
+#[allow(clippy::large_enum_variant)]
 pub enum GameDelta {
     Bang {
         events: bang::BangEvents,
@@ -451,6 +453,7 @@ mod tests {
             discard_top: None,
             winner: None,
             store_slots: 0,
+            loot_table: None,
         };
         let player = BangView::Player(::bang::PlayerView {
             you: ::bang::PlayerId(0),

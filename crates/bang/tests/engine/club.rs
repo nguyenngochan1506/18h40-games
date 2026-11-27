@@ -561,6 +561,7 @@ fn club_seeded_games_preserve_cards_metadata_and_replay() {
                     GameConfig {
                         mode: GameMode::Club,
                         roles,
+                        ..Default::default()
                     },
                     &mut rng,
                 )

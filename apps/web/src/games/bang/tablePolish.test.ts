@@ -25,8 +25,8 @@ test('Escape works on narrow viewports while Enter and card shortcuts remain des
   for (const key of ['Enter', '1', '2', '3', '4', '5', '6', '7', '8', '9']) assert.equal(tableShortcut(key, narrow), null);
 });
 
-test('Vietnamese tooltips cover all 22 cards, 16 characters, every role and public health without leaking a hidden role', () => {
-  assert.equal(Object.keys(cardFiles).length, 22); assert.equal(Object.keys(characterFiles).length, 16);
+test('Vietnamese tooltips cover all 44 card kinds, 31 characters, every role and public health without leaking a hidden role', () => {
+  assert.equal(Object.keys(cardFiles).length, 44); assert.equal(Object.keys(characterFiles).length, 31);
   for (const [type, files] of [['card', cardFiles], ['character', characterFiles]] as const) for (const key of Object.keys(files)) {
     const content = tooltipContent(`${type}:${key}`);
     assert.ok(content?.title && content.text, key);

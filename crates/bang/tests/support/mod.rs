@@ -9,17 +9,32 @@ pub struct Scenario {
 
 impl Scenario {
     pub fn new(count: usize) -> Self {
+        Self::with_config(count, GameConfig::default())
+    }
+
+    /// Dodge City on: 120-card deck, up to 8 players.
+    pub fn dodge(count: usize) -> Self {
+        Self::with_config(
+            count,
+            GameConfig {
+                expansions: [Expansion::DodgeCity].into(),
+                ..Default::default()
+            },
+        )
+    }
+
+    fn with_config(count: usize, config: GameConfig) -> Self {
         let mut rng = ChaCha8Rng::seed_from_u64(42);
         let (mut state, _) = setup(
             count,
             bang::GameConfig {
                 roles: bang::RoleCounts::standard(count),
-                ..Default::default()
+                ..config
             },
             &mut rng,
         )
         .unwrap();
-        state.draw_pile = (0..80).map(CardId).collect();
+        state.draw_pile = state.config.deck();
         state.discard_pile.clear();
         state.pending.clear();
         state.turn = TurnState {
@@ -61,6 +76,25 @@ impl Scenario {
         let id = self.state.draw_pile.remove(index);
         self.state.players[player].hand.push(id);
         id
+    }
+
+    /// Moves the exact physical card (kind, suit, rank) from the draw pile to a hand.
+    pub fn give_face(&mut self, player: usize, kind: CardKind, suit: Suit, rank: Rank) -> CardId {
+        let face = Card { kind, suit, rank };
+        let index = self
+            .state
+            .draw_pile
+            .iter()
+            .position(|id| id.card() == Some(face))
+            .unwrap();
+        let id = self.state.draw_pile.remove(index);
+        self.state.players[player].hand.push(id);
+        id
+    }
+
+    /// Puts a green card in front of a player as if placed in an earlier turn (ready to use).
+    pub fn ready_green(&mut self, player: usize, kind: CardKind) -> CardId {
+        self.equip(player, kind)
     }
 
     pub fn equip(&mut self, player: usize, kind: CardKind) -> CardId {
@@ -192,7 +226,7 @@ impl Scenario {
 }
 
 pub fn invariant(state: &GameState) {
-    let mut counts = [0u8; 80];
+    let mut counts = [0u8; 256];
     for card in state
         .draw_pile
         .iter()
@@ -208,9 +242,14 @@ pub fn invariant(state: &GameState) {
         assert!(card.card().is_some());
         counts[usize::from(card.0)] += 1;
     }
+    // One pass over the room deck builds the expected counts; compare the two arrays.
+    let mut expected = [0u8; 256];
+    for id in state.config.deck() {
+        expected[usize::from(id.0)] = 1;
+    }
     assert!(
-        counts.iter().all(|count| *count == 1),
-        "Every physical card must belong to exactly one zone"
+        counts == expected,
+        "Every physical card of the room deck must belong to exactly one zone"
     );
     for (index, player) in state.players.iter().enumerate() {
         assert_eq!(
@@ -238,6 +277,19 @@ pub fn invariant(state: &GameState) {
         if !player.alive {
             assert!(player.hand.is_empty() && player.in_play.is_empty());
         }
+        assert!(
+            player
+                .fresh_green
+                .iter()
+                .all(|c| player.in_play.contains(c))
+        );
+        assert!(
+            player
+                .placed_green
+                .iter()
+                .all(|c| player.fresh_green.contains(c))
+        );
+        assert!(player.copied.is_none() || player.character == Character::VeraCuster);
     }
     if state.winner.is_none() {
         let decision = state
@@ -280,13 +332,26 @@ fn decision_actions(state: &GameState) -> Vec<Action> {
             PendingKind::AttackResponse { .. } => CardKind::Missed,
             PendingKind::Dying { .. } => CardKind::Beer,
             PendingKind::DrawChoice { .. } => {
-                if own.character == Character::PedroRamirez && !state.discard_pile.is_empty() {
+                if own.has(Character::PedroRamirez) && !state.discard_pile.is_empty() {
                     actions.push(Action::ChooseDrawSource {
                         pending_id: frame.id,
                         source: DrawSource::Discard,
                     });
                 }
-                if own.character == Character::JesseJones {
+                if own.has(Character::PatBrennan) {
+                    for (i, target) in state.players.iter().enumerate() {
+                        for &card in &target.in_play {
+                            actions.push(Action::ChooseDrawSource {
+                                pending_id: frame.id,
+                                source: DrawSource::InPlay {
+                                    player: PlayerId(i),
+                                    card,
+                                },
+                            });
+                        }
+                    }
+                }
+                if own.has(Character::JesseJones) {
                     for (i, target) in state.players.iter().enumerate() {
                         if i != player.0 && target.alive && !target.hand.is_empty() {
                             actions.push(Action::ChooseDrawSource {
@@ -327,7 +392,31 @@ fn decision_actions(state: &GameState) -> Vec<Action> {
                 }));
                 return actions;
             }
-            PendingKind::ResolveTargets { .. } => panic!("Automatic frame must not await input"),
+            PendingKind::ChooseCopy { .. } => {
+                return (0..state.players.len())
+                    .filter(|i| *i != player.0 && state.players[*i].alive)
+                    .map(|i| Action::ChooseCopy {
+                        pending_id: frame.id,
+                        target: PlayerId(i),
+                    })
+                    .collect();
+            }
+            PendingKind::VultureSplit { pool, hand_len, .. } => {
+                if *hand_len > 0 {
+                    actions.push(Action::VultureTake {
+                        pending_id: frame.id,
+                        selection: CardSelection::Hand,
+                    });
+                }
+                actions.extend(pool[*hand_len..].iter().map(|&card| Action::VultureTake {
+                    pending_id: frame.id,
+                    selection: CardSelection::InPlay(card),
+                }));
+                return actions;
+            }
+            PendingKind::ResolveTargets { .. } | PendingKind::ResolveBrawl { .. } => {
+                panic!("Automatic frame must not await input")
+            }
         };
         if matches!(frame.kind, PendingKind::AttackResponse { checks_left, .. } if checks_left > 0)
         {
@@ -345,6 +434,12 @@ fn decision_actions(state: &GameState) -> Vec<Action> {
                     card: Some(card),
                 }),
         );
+        if kind == CardKind::Missed {
+            actions.extend(own.green_answers().map(|card| Action::Respond {
+                pending_id: frame.id,
+                card: Some(card),
+            }));
+        }
     } else {
         for &card in &own.hand {
             let kind = own.play_kind(card.card().unwrap().kind);
@@ -394,7 +489,14 @@ fn decision_actions(state: &GameState) -> Vec<Action> {
                         }));
                     }
                 }
-                CardKind::Missed => {}
+                CardKind::Missed
+                | CardKind::Dodge
+                | CardKind::Punch
+                | CardKind::RagTime
+                | CardKind::Brawl
+                | CardKind::Springfield
+                | CardKind::Tequila
+                | CardKind::Whisky => {}
                 _ if kind.is_equipment() && own.has_in_play(kind) => {}
                 _ => actions.push(Action::Play { card, target: None }),
             }
@@ -431,4 +533,119 @@ pub fn legal_actions(state: &GameState) -> Vec<(PlayerId, Action)> {
         }
     }
     actions
+}
+
+/// Dodge City decision candidates for the fuzz bots: everything `legal_actions` offers plus
+/// the new actions, keeping only those the engine accepts (checked on clones).
+pub fn dodge_legal_actions(state: &GameState, rng: &ChaCha8Rng) -> Vec<(PlayerId, Action)> {
+    let mut candidates = legal_actions(state);
+    let decision = state.decision().unwrap();
+    if decision.pending_id.is_none() {
+        let player = decision.player;
+        let own = &state.players[player.0];
+        let others: Vec<_> = (0..state.players.len())
+            .filter(|i| *i != player.0 && state.players[*i].alive)
+            .map(PlayerId)
+            .collect();
+        let selections = |target: PlayerId| {
+            let t = &state.players[target.0];
+            let mut list = vec![CardSelection::Hand];
+            list.extend(t.in_play.iter().map(|c| CardSelection::InPlay(*c)));
+            list
+        };
+        let mut actions = vec![Action::ChuckDraw];
+        for &card in &own.hand {
+            if card.card().unwrap().kind == CardKind::Punch {
+                actions.extend(others.iter().map(|&target| Action::Play {
+                    card,
+                    target: Some(target),
+                }));
+            }
+        }
+        let mut targets: Vec<Option<PlayerId>> = vec![None];
+        targets.extend((0..state.players.len()).map(|i| Some(PlayerId(i))));
+        for &card in &own.hand {
+            actions.push(Action::JoseDelgado { card });
+            for &discard in own.hand.iter().filter(|c| **c != card).take(2) {
+                for &target in &targets {
+                    actions.push(Action::PlayWithDiscard {
+                        card,
+                        discard,
+                        target,
+                    });
+                }
+                for i in 0..state.players.len() {
+                    for selection in selections(PlayerId(i)) {
+                        actions.push(Action::AffectWithDiscard {
+                            card,
+                            discard,
+                            target: PlayerId(i),
+                            selection,
+                        });
+                    }
+                }
+                for in_play_first in [false, true] {
+                    let picks = others
+                        .iter()
+                        .filter_map(|&target| {
+                            let t = &state.players[target.0];
+                            let selection =
+                                if t.hand.is_empty() || (in_play_first && !t.in_play.is_empty()) {
+                                    CardSelection::InPlay(*t.in_play.first()?)
+                                } else {
+                                    CardSelection::Hand
+                                };
+                            Some(BrawlPick { target, selection })
+                        })
+                        .collect();
+                    actions.push(Action::Brawl {
+                        card,
+                        discard,
+                        picks,
+                    });
+                }
+            }
+            for second in own.hand.iter().filter(|c| **c != card).take(2) {
+                for &target in &others {
+                    actions.push(Action::DocHolyday {
+                        cards: [card, *second],
+                        target,
+                    });
+                }
+            }
+        }
+        for green in own.ready_green() {
+            actions.push(Action::ActivateGreen {
+                card: green,
+                target: None,
+                selection: None,
+            });
+            for i in 0..state.players.len() {
+                actions.push(Action::ActivateGreen {
+                    card: green,
+                    target: Some(PlayerId(i)),
+                    selection: None,
+                });
+                for selection in selections(PlayerId(i)) {
+                    actions.push(Action::ActivateGreen {
+                        card: green,
+                        target: Some(PlayerId(i)),
+                        selection: Some(selection),
+                    });
+                }
+            }
+        }
+        candidates.extend(actions.into_iter().map(|a| (player, a)));
+    }
+    candidates.retain(|(player, action)| {
+        apply(
+            &mut state.clone(),
+            *player,
+            action.clone(),
+            &mut rng.clone(),
+        )
+        .is_ok()
+    });
+    assert!(!candidates.is_empty());
+    candidates
 }

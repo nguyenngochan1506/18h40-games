@@ -116,7 +116,7 @@ test('returning to the lobby from the result explicitly leaves the room', async 
 
 test('room settings edit a draft, validate totals and send the selected mode with custom roles', async t => {
   const { container, root, sent, fill } = await mount(t);
-  const settings = { mode: 'classic' as const, roles: { deputy: 0, outlaw: 2, renegade: 1 } };
+  const settings = { mode: 'classic' as const, roles: { deputy: 0, outlaw: 2, renegade: 1 }, expansions: [] };
   await act(async () => root.render(createElement(WaitingSettings, { settings: { game: 'bang', payload: settings }, players: 4, editable: true, onChange: settings => sent.push({ v: PROTOCOL_VERSION, type: 'update_settings', settings }) })));
   const button = (label: string) => [...container.querySelectorAll<HTMLButtonElement>('button')].find(b => b.getAttribute('aria-label') === label || b.textContent === label)!;
   await act(() => button('Tăng Phó cảnh sát').click());
@@ -127,12 +127,12 @@ test('room settings edit a draft, validate totals and send the selected mode wit
   assert.equal(container.querySelector('[role="alert"]'), null);
   await act(() => container.querySelector<HTMLInputElement>('input[value="club"]')!.click());
   await act(() => button('Áp dụng cài đặt').click());
-  assert.deepEqual([...sent], [{ v: PROTOCOL_VERSION, type: 'update_settings', settings: { game: 'bang', payload: { mode: 'club', roles: { deputy: 1, outlaw: 1, renegade: 1 } } } }]);
+  assert.deepEqual([...sent], [{ v: PROTOCOL_VERSION, type: 'update_settings', settings: { game: 'bang', payload: { mode: 'club', roles: { deputy: 1, outlaw: 1, renegade: 1 }, expansions: [] } } }]);
   await act(() => button('Về mặc định').click());
   assert.equal(container.querySelector<HTMLInputElement>('#role-deputy')!.value, '0');
   assert.equal(container.querySelector<HTMLInputElement>('input[value="club"]')!.checked, true);
   await act(() => button('Áp dụng cài đặt').click());
-  assert.deepEqual(sent.at(-1), { v: PROTOCOL_VERSION, type: 'update_settings', settings: { game: 'bang', payload: { mode: 'club', roles: settings.roles } } });
+  assert.deepEqual(sent.at(-1), { v: PROTOCOL_VERSION, type: 'update_settings', settings: { game: 'bang', payload: { mode: 'club', roles: settings.roles, expansions: [] } } });
   await fill('#role-deputy', '');
   await act(() => button('Áp dụng cài đặt').click());
   assert.match(container.querySelector('[role="alert"]')!.textContent!, /0 đến 6/);
@@ -143,7 +143,7 @@ test('room settings edit a draft, validate totals and send the selected mode wit
 
 test('room settings are read-only to guests and reset a host draft on a seat-count snapshot', async t => {
   const { container, root, sent } = await mount(t);
-  const room = { ...demoRoom, phase: 'waiting' as const, members: demoRoom.members.slice(0, 4), settings: { game: 'bang' as const, payload: { mode: 'classic' as const, roles: { deputy: 0, outlaw: 2, renegade: 1 } } } };
+  const room = { ...demoRoom, phase: 'waiting' as const, members: demoRoom.members.slice(0, 4), settings: { game: 'bang' as const, payload: { mode: 'classic' as const, roles: { deputy: 0, outlaw: 2, renegade: 1 }, expansions: [] } } };
   const props = { room, game: null, log: [], fxBatch: null, soundBatch: null, fxEnabled: false, viewer: 0, disabled: false, send: (message: ClientMessage) => sent.push(message) };
   await act(async () => root.render(createElement(Room, props)));
   await act(() => container.querySelector<HTMLButtonElement>('[aria-label="Tăng Phó cảnh sát"]')!.click());
@@ -164,7 +164,7 @@ test('BANG HUD lists stacked weapons and displays the server-supplied maximum ra
   if (game.view.perspective !== 'player') throw Error('Expected player view');
   game.view.view.table.players[0].in_play = [72, 79];
   game.view.view.table.players[0].weapon_range = 5;
-  await act(async () => root.render(createElement(Room, { room: { ...demoRoom, settings: { game: 'bang', payload: { ...((demoRoom.settings.game === 'bang') ? demoRoom.settings.payload : { mode: 'classic', roles: { deputy: 1, outlaw: 2, renegade: 1 } }), mode: 'club' } } }, game, log: [], fxBatch: null, soundBatch: null, fxEnabled: false, viewer: 0, disabled: false, send() {} })));
+  await act(async () => root.render(createElement(Room, { room: { ...demoRoom, settings: { game: 'bang', payload: { ...((demoRoom.settings.game === 'bang') ? demoRoom.settings.payload : { mode: 'classic', roles: { deputy: 1, outlaw: 2, renegade: 1 }, expansions: [] }), mode: 'club' } } }, game, log: [], fxBatch: null, soundBatch: null, fxEnabled: false, viewer: 0, disabled: false, send() {} })));
   assert.match(container.querySelector('.hud-gun')!.textContent!, /Volcanic \+ Winchester/);
   assert.match(container.querySelector('.hud-gun')!.textContent!, /Tầm bắn: 5/);
 });

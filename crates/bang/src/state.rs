@@ -12,6 +12,25 @@ pub struct Player {
     pub in_play: Vec<CardId>,
     #[serde(default)]
     pub jail_turns_served: u8,
+    /// Green cards placed since the owner's last turn started; they cannot be used yet.
+    #[serde(default)]
+    pub fresh_green: Vec<CardId>,
+    /// Green cards placed during the turn now in progress; they can answer a Missed! only from
+    /// the next player's turn on (the turn that placed them has to end first).
+    #[serde(default)]
+    pub placed_green: Vec<CardId>,
+    /// Vera Custer: the character whose ability she holds until her next turn.
+    #[serde(default)]
+    pub copied: Option<Character>,
+}
+
+/// Once-per-turn skill usage, reset when a turn starts.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkillUses {
+    pub doc_holyday: bool,
+    pub jose_delgado: u8,
+    /// Vera Custer already picked her ability this turn.
+    pub vera_copy: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -121,6 +140,31 @@ pub enum PendingKind {
         initiator: PlayerId,
         opponent: PlayerId,
         next: PlayerId,
+        /// BANG! cards each side discarded voluntarily (Molly Stark draws for them afterwards).
+        #[serde(default)]
+        initiator_bangs: u8,
+        #[serde(default)]
+        opponent_bangs: u8,
+    },
+    /// Brawl: every other player discards the card the source picked for them.
+    ResolveBrawl {
+        source: PlayerId,
+        picks: Vec<crate::actions::BrawlPick>,
+        cursor: usize,
+    },
+    /// Vera Custer picks whose ability she holds until her next turn.
+    ChooseCopy {
+        player: PlayerId,
+    },
+    /// Two players share Vulture Sam's ability: they take turns claiming the victim's cards,
+    /// each time either a random hand card or a table card. `pool` holds the `hand_len` hidden
+    /// hand cards first, then the face-up table cards.
+    VultureSplit {
+        victim: PlayerId,
+        holders: Vec<PlayerId>,
+        cursor: usize,
+        pool: Vec<CardId>,
+        hand_len: usize,
     },
     GeneralStore {
         pool: Vec<CardId>,
@@ -140,6 +184,7 @@ impl Pending {
     pub fn cards(&self) -> &[CardId] {
         match &self.kind {
             PendingKind::GeneralStore { pool, .. }
+            | PendingKind::VultureSplit { pool, .. }
             | PendingKind::KeepCards { pool, .. }
             | PendingKind::ChooseDrawResult { pool, .. } => pool,
             _ => &[],
@@ -157,7 +202,11 @@ impl Pending {
             | PendingKind::ChooseDrawResult { player, .. } => Some(*player),
             PendingKind::Duel { next, .. } => Some(*next),
             PendingKind::GeneralStore { order, cursor, .. } => order.get(*cursor).copied(),
-            PendingKind::ResolveTargets { .. } => None,
+            PendingKind::ChooseCopy { player } => Some(*player),
+            PendingKind::VultureSplit {
+                holders, cursor, ..
+            } => holders.get(*cursor % holders.len().max(1)).copied(),
+            PendingKind::ResolveTargets { .. } | PendingKind::ResolveBrawl { .. } => None,
         }
     }
 }
@@ -192,6 +241,12 @@ pub enum DecisionKind {
     Duel,
     GeneralStore,
     DrawChoice,
+    ChooseCopy,
+    VultureSplit {
+        victim: PlayerId,
+        hand_count: u8,
+        table_count: u8,
+    },
     KeepCards {
         keep: usize,
     },
@@ -222,6 +277,8 @@ pub struct GameState {
     pub turn: TurnState,
     pub pending: Vec<Pending>,
     pub winner: Option<Winner>,
+    #[serde(default)]
+    pub skill_uses: SkillUses,
     pub(crate) next_pending_id: u64,
     // Pedro can uncover an older private discard after taking the public top.
     pub(crate) hidden_discards: Vec<CardId>,
@@ -266,7 +323,20 @@ impl GameState {
                     PendingKind::ChooseDrawResult { reason, .. } => {
                         DecisionKind::ChooseDrawResult { reason: *reason }
                     }
-                    PendingKind::ResolveTargets { .. } => return None,
+                    PendingKind::ChooseCopy { .. } => DecisionKind::ChooseCopy,
+                    PendingKind::VultureSplit {
+                        victim,
+                        pool,
+                        hand_len,
+                        ..
+                    } => DecisionKind::VultureSplit {
+                        victim: *victim,
+                        hand_count: *hand_len as u8,
+                        table_count: (pool.len() - *hand_len) as u8,
+                    },
+                    PendingKind::ResolveTargets { .. } | PendingKind::ResolveBrawl { .. } => {
+                        return None;
+                    }
                 },
             })
         } else if self.turn.step == TurnStep::Play {
@@ -304,21 +374,32 @@ impl GameState {
 }
 
 impl Player {
-    pub fn unlimited_bangs(&self) -> bool {
-        self.character == Character::WillyTheKid || self.has_in_play(CardKind::Volcanic)
+    /// Printed character or the ability Vera Custer currently holds.
+    pub fn has(&self, character: Character) -> bool {
+        self.character == character || self.copied == Some(character)
     }
 
+    pub fn unlimited_bangs(&self) -> bool {
+        self.has(Character::WillyTheKid) || self.has_in_play(CardKind::Volcanic)
+    }
+
+    /// Whether a hand card of kind `actual` may answer a request for `required`.
     pub fn accepts_response(&self, actual: CardKind, required: CardKind) -> bool {
         actual == required
-            || (self.character == Character::CalamityJanet
+            || (required == CardKind::Missed && actual == CardKind::Dodge)
+            || (required == CardKind::Missed && self.has(Character::ElenaFuente))
+            || (self.has(Character::CalamityJanet)
                 && matches!(
                     (actual, required),
-                    (CardKind::Bang, CardKind::Missed) | (CardKind::Missed, CardKind::Bang)
+                    (CardKind::Bang, CardKind::Missed)
+                        | (CardKind::Missed | CardKind::Dodge, CardKind::Bang)
                 ))
     }
 
     pub fn play_kind(&self, physical: CardKind) -> CardKind {
-        if physical == CardKind::Missed && self.character == Character::CalamityJanet {
+        if matches!(physical, CardKind::Missed | CardKind::Dodge)
+            && self.has(Character::CalamityJanet)
+        {
             CardKind::Bang
         } else {
             physical
@@ -337,5 +418,28 @@ impl Player {
             .filter_map(|card| card.card().and_then(|card| card.kind.weapon_range()))
             .max()
             .unwrap_or(1)
+    }
+
+    /// Hand size to keep at the end of the turn.
+    pub fn hand_limit(&self) -> usize {
+        if self.has(Character::SeanMallory) {
+            10
+        } else {
+            self.health.max(0) as usize
+        }
+    }
+
+    /// Green Missed! cards that may answer a shot now (placed in a turn that has ended).
+    pub fn green_answers(&self) -> impl Iterator<Item = CardId> + '_ {
+        self.in_play.iter().copied().filter(|card| {
+            card.card().is_some_and(|c| c.kind.green_missed()) && !self.placed_green.contains(card)
+        })
+    }
+
+    /// Green cards in front of the player that were placed in an earlier turn.
+    pub fn ready_green(&self) -> impl Iterator<Item = CardId> + '_ {
+        self.in_play.iter().copied().filter(|card| {
+            card.card().is_some_and(|c| c.kind.is_green()) && !self.fresh_green.contains(card)
+        })
     }
 }

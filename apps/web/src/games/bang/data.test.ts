@@ -11,13 +11,13 @@ function keys(type: string) {
   return [...declaration.matchAll(/"([a-z_]+)"/g)].map((match) => match[1]).sort();
 }
 
-test('asset whitelist covers exactly 22 cards, 16 characters, 4 roles and 2 backs at the pinned commit', () => {
+test('asset whitelist covers 22 base cards, 16 base characters, 4 roles and 2 backs at the pinned commit; Dodge City shows the back until its art lands', () => {
   assert.equal(ASSET_COMMIT, 'dc7c29abffc566629ab0fae3bb3386280a7ae52c');
   assert.deepEqual(Object.keys(cardFiles).sort(), keys('CardKind'));
   assert.deepEqual(Object.keys(characterFiles).sort(), keys('Character'));
   assert.deepEqual(Object.keys(roleFiles).sort(), keys('BangRole'));
-  assert.equal(Object.keys(cardFiles).length, 22);
-  assert.equal(Object.keys(characterFiles).length, 16);
+  assert.equal(Object.keys(cardFiles).length, 44);
+  assert.equal(Object.keys(characterFiles).length, 31);
   assert.equal(Object.keys(roleFiles).length, 4);
   assert.equal(Object.keys(backFiles).length, 2);
   assert.equal(assetFiles.length, 44);

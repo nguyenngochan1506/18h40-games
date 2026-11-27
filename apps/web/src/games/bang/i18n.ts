@@ -107,6 +107,94 @@ export const cards = {
   "winchester": {
     "name": "Winchester",
     "effect": "Tầm 5"
+  },
+  "binocular": {
+    "name": "Binocular",
+    "effect": "Bạn nhìn tới người khác gần hơn 1"
+  },
+  "hideout": {
+    "name": "Hideout",
+    "effect": "Người khác nhìn tới bạn xa thêm 1"
+  },
+  "punch": {
+    "name": "Punch",
+    "effect": "BANG! vào người ở khoảng cách 1, không tính giới hạn BANG!"
+  },
+  "rag_time": {
+    "name": "Rag Time",
+    "effect": "Bỏ thêm 1 lá; lấy 1 lá từ tay hoặc trước mặt bất kỳ người nào, không giới hạn khoảng cách"
+  },
+  "brawl": {
+    "name": "Brawl",
+    "effect": "Bỏ thêm 1 lá; mỗi người khác bỏ 1 lá do bạn chọn, từ tay hoặc trước mặt"
+  },
+  "dodge": {
+    "name": "Dodge",
+    "effect": "Missed! rồi rút 1 lá"
+  },
+  "springfield": {
+    "name": "Springfield",
+    "effect": "Bỏ thêm 1 lá; BANG! vào bất kỳ ai, không giới hạn tầm"
+  },
+  "tequila": {
+    "name": "Tequila",
+    "effect": "Bỏ thêm 1 lá; một người tùy chọn (kể cả bạn) hồi 1 máu"
+  },
+  "whisky": {
+    "name": "Whisky",
+    "effect": "Bỏ thêm 1 lá; hồi 2 máu"
+  },
+  "bible": {
+    "name": "Bible",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để có Missed! và rút 1 lá"
+  },
+  "canteen": {
+    "name": "Canteen",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để hồi 1 máu"
+  },
+  "can_can": {
+    "name": "Can Can",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để bắt bất kỳ người nào bỏ 1 lá, từ tay hoặc trước mặt"
+  },
+  "ten_gallon_hat": {
+    "name": "Ten Gallon Hat",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để có Missed!"
+  },
+  "conestoga": {
+    "name": "Conestoga",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để lấy 1 lá từ tay hoặc trước mặt bất kỳ người nào"
+  },
+  "derringer": {
+    "name": "Derringer",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để BANG! vào người ở khoảng cách 1 và rút 1 lá"
+  },
+  "buffalo_rifle": {
+    "name": "Buffalo Rifle",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để BANG! vào bất kỳ ai, không giới hạn tầm"
+  },
+  "howitzer": {
+    "name": "Howitzer",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để BANG! vào tất cả người chơi khác"
+  },
+  "pepperbox": {
+    "name": "Pepperbox",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để BANG! vào người trong tầm vũ khí đang trang bị"
+  },
+  "iron_plate": {
+    "name": "Iron Plate",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để có Missed!"
+  },
+  "pony_express": {
+    "name": "Pony Express",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để rút 3 lá"
+  },
+  "knife": {
+    "name": "Knife",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để BANG! vào người ở khoảng cách 1"
+  },
+  "sombrero": {
+    "name": "Sombrero",
+    "effect": "Viền xanh lá, dùng từ lượt sau: bỏ để có Missed!"
   }
 } satisfies Record<CardKind, { name: string, effect: string }>;
 
@@ -174,5 +262,65 @@ export const characters = {
   "willy_the_kid": {
     "name": "Willy the Kid",
     "ability": "Bắn BANG! không giới hạn số lá mỗi lượt"
+  },
+  "apache_kid": {
+    "name": "Apache Kid",
+    "ability": "Không bị ảnh hưởng bởi lá ♦ của người khác (trừ trong Duel)"
+  },
+  "belle_star": {
+    "name": "Belle Star",
+    "ability": "Trong lượt của cô, mọi lá trước mặt người khác mất hiệu lực"
+  },
+  "bill_noface": {
+    "name": "Bill Noface",
+    "ability": "Rút 1 lá, thêm 1 lá cho mỗi máu đã mất"
+  },
+  "chuck_wengam": {
+    "name": "Chuck Wengam",
+    "ability": "Trong lượt, mất 1 máu để rút 2 lá (không dùng máu cuối)"
+  },
+  "doc_holyday": {
+    "name": "Doc Holyday",
+    "ability": "Mỗi lượt 1 lần, bỏ 2 lá trên tay để BANG! vào người trong tầm; không tính giới hạn BANG!"
+  },
+  "elena_fuente": {
+    "name": "Elena Fuente",
+    "ability": "Dùng bất kỳ lá nào trên tay như Missed!"
+  },
+  "greg_digger": {
+    "name": "Greg Digger",
+    "ability": "Mỗi khi người khác bị loại, hồi 2 máu"
+  },
+  "herb_hunter": {
+    "name": "Herb Hunter",
+    "ability": "Mỗi khi người khác bị loại, rút thêm 2 lá"
+  },
+  "jose_delgado": {
+    "name": "Jose Delgado",
+    "ability": "Bỏ 1 lá xanh dương trên tay để rút 2 lá, tối đa 2 lần mỗi lượt"
+  },
+  "molly_stark": {
+    "name": "Molly Stark",
+    "ability": "Mỗi lần tự nguyện chơi hoặc bỏ Missed!, Beer, BANG! ngoài lượt, rút 1 lá"
+  },
+  "pat_brennan": {
+    "name": "Pat Brennan",
+    "ability": "Khi rút bài, có thể lấy 1 lá trước mặt bất kỳ người nào thay vì rút 2"
+  },
+  "pixie_pete": {
+    "name": "Pixie Pete",
+    "ability": "Rút 3 lá thay vì 2"
+  },
+  "sean_mallory": {
+    "name": "Sean Mallory",
+    "ability": "Giữ tối đa 10 lá cuối lượt"
+  },
+  "tequila_joe": {
+    "name": "Tequila Joe",
+    "ability": "Beer hồi 2 máu"
+  },
+  "vera_custer": {
+    "name": "Vera Custer",
+    "ability": "Đầu lượt, chọn một người chơi khác và có khả năng nhân vật của họ đến lượt sau"
   }
 } satisfies Record<Character, { name: string, ability: string }>;

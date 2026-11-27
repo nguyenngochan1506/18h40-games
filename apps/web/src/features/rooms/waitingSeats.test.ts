@@ -4,7 +4,7 @@ import type { Member, RoomView } from '../../generated/protocol.ts';
 import { waitingSeats } from './waitingSeats.ts';
 
 const player = (id: string, online = true): Member => ({ id, nickname: `Cao bồi ${id}`, role: 'player', online });
-const room = (members: Member[]): RoomView => ({ code: 'ABCDE', game: 'bang', settings: { game: 'bang', payload: { mode: 'classic', roles: { deputy: 0, outlaw: 2, renegade: 1 } } }, phase: 'waiting', host: 'a', you: 'a', min_players: 4, max_players: 7, members });
+const room = (members: Member[]): RoomView => ({ code: 'ABCDE', game: 'bang', settings: { game: 'bang', payload: { mode: 'classic', roles: { deputy: 0, outlaw: 2, renegade: 1 }, expansions: [] } }, phase: 'waiting', host: 'a', you: 'a', min_players: 4, max_players: 7, members });
 
 // Independent fixture from the seven painted chair positions before the module move.
 const paintedChairs = [

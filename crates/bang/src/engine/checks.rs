@@ -9,7 +9,7 @@ pub(super) fn begin<R: Rng + ?Sized>(
     rng: &mut R,
     events: &mut Vec<Event>,
 ) {
-    let lucky = state.players[player.0].character == Character::LuckyDuke;
+    let lucky = state.players[player.0].has(Character::LuckyDuke);
     let pool = take_draw(state, if lucky { 2 } else { 1 }, rng, events);
     if lucky && !pool.is_empty() {
         skills::activate(state, player, events);
@@ -130,7 +130,18 @@ fn resume<R: Rng + ?Sized>(
                     };
                     target
                 } else {
-                    next_living(state, player)
+                    // With two Dynamites (Dodge City) it skips players that already hold one.
+                    let count = state.players.len();
+                    let Some(target) = (1..count)
+                        .map(|offset| PlayerId((player.0 + offset) % count))
+                        .find(|id| {
+                            state.players[id.0].alive
+                                && !state.players[id.0].has_in_play(CardKind::Dynamite)
+                        })
+                    else {
+                        return;
+                    };
+                    target
                 };
                 let index = state.players[player.0]
                     .in_play
@@ -158,6 +169,9 @@ fn resume<R: Rng + ?Sized>(
                 discard_in_play(state, player, jail, events);
             }
             if !escaped {
+                // The turn is skipped before the draw step, so Vera never gets to pick again:
+                // her old copy ends with the lost turn (it still held for the check above).
+                state.players[player.0].copied = None;
                 next_turn(state, events);
             }
         }

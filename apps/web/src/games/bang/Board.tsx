@@ -119,6 +119,8 @@ function waitText(table: SpectatorView, name: (id: number) => string): string {
     case 'draw_choice': return `${who} Chọn nơi rút lá đầu.`;
     case 'keep_cards': return `${who} Chọn ${decision.kind.keep} lá để giữ.`;
     case 'choose_draw_result': return `${who} Chọn 1 lá lật kiểm tra.`;
+    case 'vulture_split': return `${who} Chia bài của ${name(decision.kind.victim)}: lấy 1 lá úp trên tay hoặc 1 lá trước mặt.`;
+    case 'choose_copy': return `${who} Chọn người chơi để dùng khả năng nhân vật của họ.`;
   }
 }
 

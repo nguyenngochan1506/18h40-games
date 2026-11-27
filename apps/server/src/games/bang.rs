@@ -28,7 +28,9 @@ impl GameModule for Module {
         let GameSettings::Bang(settings) = settings else {
             return Err(ErrorCode::InvalidSettings);
         };
-        if !settings.roles.valid_for(players.max(4))
+        // Expansions exist in the engine only; the room/web stages that expose them come later.
+        if !settings.expansions.is_empty()
+            || !settings.roles.valid_for(players.max(4))
             || (players < 4 && settings.roles != RoleCounts::standard(4))
         {
             return Err(ErrorCode::InvalidSettings);
@@ -53,7 +55,7 @@ impl GameModule for Module {
         let GameSettings::Bang(settings) = settings else {
             return Err(ErrorCode::InvalidSettings);
         };
-        Ok(Box::new(Session::new(seats, *settings, seed, now)?))
+        Ok(Box::new(Session::new(seats, settings.clone(), seed, now)?))
     }
 }
 

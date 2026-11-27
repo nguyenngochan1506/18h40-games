@@ -3,7 +3,7 @@ import type { BangRole, CardKind, Character } from '../../../generated/protocol.
 export const ASSET_COMMIT = 'dc7c29abffc566629ab0fae3bb3386280a7ae52c';
 export const ASSET_BASE_URL = `https://raw.githubusercontent.com/bangsalvoserver/bang-cards/${ASSET_COMMIT}/`;
 
-export const cardFiles = {
+const baseCardFiles = {
   bang: 'main_deck/01_bang.webp', missed: 'main_deck/01_mancato.webp',
   beer: 'main_deck/01_birra.webp', panic: 'main_deck/01_panico.webp',
   cat_balou: 'main_deck/01_catbalou.webp', duel: 'main_deck/01_duello.webp',
@@ -15,9 +15,9 @@ export const cardFiles = {
   scope: 'main_deck/01_mirino.webp', volcanic: 'main_deck/01_volcanic.webp',
   schofield: 'main_deck/01_schofield.webp', remington: 'main_deck/01_remington.webp',
   rev_carabine: 'main_deck/01_carabine.webp', winchester: 'main_deck/01_winchester.webp',
-} satisfies Record<CardKind, string>;
+} satisfies Partial<Record<CardKind, string>>;
 
-export const characterFiles = {
+const baseCharacterFiles = {
   bart_cassidy: 'character/01_bartcassidy.webp', black_jack: 'character/01_blackjack.webp',
   calamity_janet: 'character/01_calamityjanet.webp', el_gringo: 'character/01_elgringo.webp',
   jesse_jones: 'character/01_jessejones.webp', jourdonnais: 'character/01_jourdonnais.webp',
@@ -26,14 +26,21 @@ export const characterFiles = {
   rose_doolan: 'character/01_rosedoolan.webp', sid_ketchum: 'character/01_sidketchum.webp',
   slab_the_killer: 'character/01_slab.webp', suzy_lafayette: 'character/01_suzylafayette.webp',
   vulture_sam: 'character/01_vulturesam.webp', willy_the_kid: 'character/01_willythekid.webp',
-} satisfies Record<Character, string>;
+} satisfies Partial<Record<Character, string>>;
+
+// Dodge City art (`main_deck/03_*`, `character/03_*` in bang-cards) is not in assets/ yet: until the
+// UI stage adds it, those cards and characters show the plain card back.
+const dodgeCityKinds = ['binocular', 'hideout', 'punch', 'rag_time', 'brawl', 'dodge', 'springfield', 'tequila', 'whisky', 'bible', 'canteen', 'can_can', 'ten_gallon_hat', 'conestoga', 'derringer', 'buffalo_rifle', 'howitzer', 'pepperbox', 'iron_plate', 'pony_express', 'knife', 'sombrero'] as const;
+const dodgeCityCharacters = ['apache_kid', 'belle_star', 'bill_noface', 'chuck_wengam', 'doc_holyday', 'elena_fuente', 'greg_digger', 'herb_hunter', 'jose_delgado', 'molly_stark', 'pat_brennan', 'pixie_pete', 'sean_mallory', 'tequila_joe', 'vera_custer'] as const;
+export const cardFiles: Record<CardKind, string> = { ...baseCardFiles, ...Object.fromEntries(dodgeCityKinds.map((kind) => [kind, 'backface/main_deck.webp'])) } as Record<CardKind, string>;
+export const characterFiles: Record<Character, string> = { ...baseCharacterFiles, ...Object.fromEntries(dodgeCityCharacters.map((id) => [id, 'backface/role.webp'])) } as Record<Character, string>;
 
 export const roleFiles = {
   sheriff: 'role/sheriff.webp', deputy: 'role/deputy.webp',
   outlaw: 'role/outlaw.webp', renegade: 'role/renegade.webp',
 } satisfies Record<BangRole, string>;
 export const backFiles = { card: 'backface/main_deck.webp', role: 'backface/role.webp' };
-export const assetFiles = [...Object.values(cardFiles), ...Object.values(characterFiles), ...Object.values(roleFiles), ...Object.values(backFiles)];
+export const assetFiles = [...Object.values(baseCardFiles), ...Object.values(baseCharacterFiles), ...Object.values(roleFiles), ...Object.values(backFiles)];
 export const assetUrl = (file: string) => `/bang/${file}`;
 
 export const sceneFiles = {

@@ -19,6 +19,19 @@ pub struct PublicPlayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub jail_turns_left: Option<u8>,
+    /// Green cards in `in_play` that can be used now (placed in an earlier turn).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub green_ready: Option<Vec<CardId>>,
+    /// Green Missed! cards that may answer a shot right now: placed in a turn that has ended and
+    /// not switched off by Belle Star. (Active effects use `green_ready`, which waits longer.)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub green_answers: Option<Vec<CardId>>,
+    /// Vera Custer: the character whose ability she currently holds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub copied: Option<Character>,
     pub role: Option<Role>,
 }
 
@@ -33,6 +46,10 @@ pub struct SpectatorView {
     pub discard_top: Option<CardId>,
     pub winner: Option<Winner>,
     pub store_slots: u8,
+    /// Face-up table cards still to be claimed while Vulture Sam's loot is being shared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub loot_table: Option<Vec<CardId>>,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -63,6 +80,15 @@ pub fn spectator_view(state: &GameState) -> SpectatorView {
                 jail_turns_left: (state.config.mode == crate::GameMode::Club
                     && p.has_in_play(crate::CardKind::Jail))
                 .then_some(3u8.saturating_sub(p.jail_turns_served)),
+                green_answers: Some(if crate::rules::table_active(state, PlayerId(i)) {
+                    p.green_answers().collect::<Vec<_>>()
+                } else {
+                    Vec::new()
+                })
+                .filter(|answers: &Vec<_>| !answers.is_empty()),
+                green_ready: Some(p.ready_green().collect())
+                    .filter(|ready: &Vec<_>| !ready.is_empty()),
+                copied: p.copied,
                 role: (p.role == Role::Sheriff || !p.alive || state.winner.is_some())
                     .then_some(p.role),
             })
@@ -77,6 +103,12 @@ pub fn spectator_view(state: &GameState) -> SpectatorView {
             .copied()
             .filter(|card| !state.hidden_discards.contains(card)),
         winner: state.winner,
+        loot_table: state.pending.iter().find_map(|frame| match &frame.kind {
+            crate::state::PendingKind::VultureSplit { pool, hand_len, .. } => {
+                Some(pool[*hand_len..].to_vec())
+            }
+            _ => None,
+        }),
         store_slots: state
             .pending
             .iter()

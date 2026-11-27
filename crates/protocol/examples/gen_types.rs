@@ -13,6 +13,7 @@ fn main() -> std::io::Result<()> {
     fs::create_dir_all(output.parent().unwrap())?;
     let declarations = [
         bang::GameMode::decl(&config),
+        bang::Expansion::decl(&config),
         bang::RoleCounts::decl(&config),
         bang::GameConfig::decl(&config),
         bang::PlayerId::decl(&config),
@@ -21,6 +22,7 @@ fn main() -> std::io::Result<()> {
         bang::Role::decl(&config),
         bang::Character::decl(&config),
         bang::CardSelection::decl(&config),
+        bang::BrawlPick::decl(&config),
         bang::DrawSource::decl(&config),
         bang::Action::decl(&config),
         bang::TurnStep::decl(&config),

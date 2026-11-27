@@ -520,7 +520,7 @@ async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() 
     })
     .await;
     let (mut host, joined) = server.create("Host").await;
-    let defaults = json!({"game":"bang","payload":{"mode":"classic","roles":{"deputy":0,"outlaw":2,"renegade":1}}});
+    let defaults = json!({"game":"bang","payload":{"expansions":[],"mode":"classic","roles":{"deputy":0,"outlaw":2,"renegade":1}}});
     assert_eq!(joined["room"]["settings"], defaults);
     host.send(json!({"type":"update_settings","settings":{"game":"bang","payload":{"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}}}})).await;
     host.error("invalid_settings").await;
@@ -535,7 +535,7 @@ async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() 
         assert_eq!(data["room"]["settings"], club);
         guests.push(guest);
     }
-    let custom = json!({"game":"bang","payload":{"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}}});
+    let custom = json!({"game":"bang","payload":{"expansions":[],"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}}});
     guests[0]
         .send(json!({"type":"update_settings","settings":custom}))
         .await;
@@ -551,13 +551,17 @@ async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() 
         host.send(json!({"type":"ping","nonce":123})).await;
         assert_eq!(host.until("pong").await["nonce"], 123);
     }
+    // Valid roles, but expansions are engine-only until the room stage: refused, settings unchanged.
+    host.send(json!({"type":"update_settings","settings":{"game":"bang","payload":{"expansions":["dodge_city"],"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}}}}))
+        .await;
+    host.error("invalid_settings").await;
     host.send(json!({"type":"update_settings","settings":custom}))
         .await;
     for guest in &mut guests {
         guest.state(|room| room["settings"] == custom).await;
     }
     let (mut fifth, fifth_data) = server.join(code(&joined), "Fifth").await;
-    let five = json!({"game":"bang","payload":{"mode":"club","roles":{"deputy":1,"outlaw":2,"renegade":1}}});
+    let five = json!({"game":"bang","payload":{"expansions":[],"mode":"club","roles":{"deputy":1,"outlaw":2,"renegade":1}}});
     assert_eq!(fifth_data["room"]["settings"], five);
     fifth.send(json!({"type":"leave_room"})).await;
     fifth.until("left").await;

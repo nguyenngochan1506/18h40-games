@@ -14,6 +14,8 @@ export function actionMode(game: GameSnapshot): 'view' | 'waiting' | 'turn' | 'r
     case 'turn': return 'turn';
     case 'attack_response': case 'duel': case 'dying': return 'response';
     case 'pick_hand_slot': case 'check': case 'general_store': case 'draw_choice': case 'keep_cards': case 'choose_draw_result': return table.waiting.kind.type;
+    // Dodge City is not offered in rooms yet; its choice has no UI until that stage.
+    case 'choose_copy': case 'vulture_split': return 'waiting';
   }
 }
 
@@ -124,7 +126,7 @@ export function chooseDrawSourceAction(game: GameSnapshot, source: DrawSource, l
   if (locked || actionMode(game) !== 'draw_choice' || table.waiting?.pending_id == null) return null;
   const own = table.players.find((player) => player.id === you)!;
   if (source === 'discard' && (own.character !== 'pedro_ramirez' || table.discard_count === 0)) return null;
-  if (typeof source === 'object' && (own.character !== 'jesse_jones' || source.player === you || !table.players.some((player) => player.id === source.player && player.alive && player.hand_count > 0))) return null;
+  if (typeof source === 'object' && (!('player' in source) || own.character !== 'jesse_jones' || source.player === you || !table.players.some((player) => player.id === source.player && player.alive && player.hand_count > 0))) return null;
   return { type: 'choose_draw_source', pending_id: table.waiting.pending_id, source };
 }
 

@@ -121,6 +121,9 @@ fn seeded_bots_cover_all_cards_frames_and_outcomes() {
                         PendingKind::DrawChoice { .. } => "draw_choice",
                         PendingKind::KeepCards { .. } => "keep_cards",
                         PendingKind::ChooseDrawResult { .. } => "choose_draw_result",
+                        PendingKind::ResolveBrawl { .. } => "resolve_brawl",
+                        PendingKind::ChooseCopy { .. } => "choose_copy",
+                        PendingKind::VultureSplit { .. } => "vulture_split",
                     };
                     if !frames.contains_key(name) {
                         let restored: GameState =

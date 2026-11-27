@@ -27,6 +27,9 @@ export function eventsToLog(events: EventKind[], ctx: LogContext): string[] {
   let waiting = ctx.waiting;
   return events.map((event): string => {
     switch (event.type) {
+      case 'green_activated': return `${name(event.player)} bỏ lá xanh lá ${cardName(event.card)} để dùng hiệu ứng${event.target !== null ? ` lên ${name(event.target)}` : ''}.`;
+      case 'table_card_taken': return `${name(event.player)} lấy ${cardName(event.card)} từ trước mặt ${name(event.target)}.`;
+      case 'copy_chosen': return `${name(event.player)} có khả năng của ${characters[event.copied].name}.`;
       case 'skill_activated': return `${name(event.player)} dùng kỹ năng ${characters[event.character].name}.`;
       case 'choice_offered': return `${name(event.player)} xem riêng để chọn: ${list(event.cards)}.`;
       case 'card_shown': return `${name(event.player)} lộ lá ${cardName(event.card)}.`;
@@ -56,7 +59,7 @@ export function eventsToLog(events: EventKind[], ctx: LogContext): string[] {
         waiting = event.decision;
         if (!waiting) return 'Đã giải quyết xong lượt chờ.';
         const kind = waiting.kind;
-        const prompt = kind.type === 'pick_hand_slot' ? `chọn 1 lá úp trên tay ${name(kind.target)}` : kind.type === 'turn' ? 'chơi lượt của mình' : kind.type === 'check' ? `lật kiểm tra cho ${cards[kind.reason].name}` : kind.type === 'attack_response' ? kind.kind === 'indians' ? 'bỏ BANG! hoặc chịu đòn' : `${kind.checks_left > 0 ? `lật Barrel (còn ${kind.checks_left} lần), ` : ''}đỡ bằng Missed! (còn ${kind.remaining}) hoặc chịu đòn` : kind.type === 'duel' ? 'đáp Duel' : kind.type === 'dying' ? 'dùng Beer hoặc kỹ năng để sống, hoặc chấp nhận bị loại' : kind.type === 'general_store' ? 'chọn 1 lá General Store' : kind.type === 'draw_choice' ? 'chọn nơi rút lá đầu' : kind.type === 'keep_cards' ? `chọn ${kind.keep} lá để giữ` : `chọn kết quả lật kiểm tra cho ${cards[kind.reason].name}`;
+        const prompt = kind.type === 'pick_hand_slot' ? `chọn 1 lá úp trên tay ${name(kind.target)}` : kind.type === 'turn' ? 'chơi lượt của mình' : kind.type === 'check' ? `lật kiểm tra cho ${cards[kind.reason].name}` : kind.type === 'attack_response' ? kind.kind === 'indians' ? 'bỏ BANG! hoặc chịu đòn' : `${kind.checks_left > 0 ? `lật Barrel (còn ${kind.checks_left} lần), ` : ''}đỡ bằng Missed! (còn ${kind.remaining}) hoặc chịu đòn` : kind.type === 'duel' ? 'đáp Duel' : kind.type === 'dying' ? 'dùng Beer hoặc kỹ năng để sống, hoặc chấp nhận bị loại' : kind.type === 'general_store' ? 'chọn 1 lá General Store' : kind.type === 'draw_choice' ? 'chọn nơi rút lá đầu' : kind.type === 'keep_cards' ? `chọn ${kind.keep} lá để giữ` : kind.type === 'choose_copy' ? 'chọn nhân vật để sao chép khả năng' : kind.type === 'vulture_split' ? `lấy một lá của ${name(kind.victim)} (chia với người cùng khả năng Vulture Sam)` : `chọn kết quả lật kiểm tra cho ${cards[kind.reason].name}`;
         return `Đang chờ ${name(waiting.player)} ${prompt}.`;
       }
       case 'card_equipped': return `${name(event.player)} đặt ${cardName(event.card)} trước mặt.`;

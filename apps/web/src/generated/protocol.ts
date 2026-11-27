@@ -4,29 +4,37 @@ export const PROTOCOL_VERSION = 9;
 
 export type GameMode = "classic" | "club";
 
+export type Expansion = "dodge_city";
+
 export type RoleCounts = { deputy: number, outlaw: number, renegade: number, };
 
-export type GameConfig = { mode: GameMode, roles: RoleCounts, };
+export type GameConfig = { mode: GameMode, roles: RoleCounts,
+/**
+ * Enabled expansions; empty (the default, also when absent) is the plain base game.
+ */
+expansions: Array<Expansion>, };
 
 export type PlayerId = number;
 
 export type CardId = number;
 
-export type CardKind = "bang" | "missed" | "beer" | "panic" | "cat_balou" | "duel" | "indians" | "general_store" | "gatling" | "saloon" | "stagecoach" | "wells_fargo" | "barrel" | "dynamite" | "jail" | "mustang" | "scope" | "volcanic" | "schofield" | "remington" | "rev_carabine" | "winchester";
+export type CardKind = "bang" | "missed" | "beer" | "panic" | "cat_balou" | "duel" | "indians" | "general_store" | "gatling" | "saloon" | "stagecoach" | "wells_fargo" | "barrel" | "dynamite" | "jail" | "mustang" | "scope" | "volcanic" | "schofield" | "remington" | "rev_carabine" | "winchester" | "binocular" | "hideout" | "punch" | "rag_time" | "brawl" | "dodge" | "springfield" | "tequila" | "whisky" | "bible" | "canteen" | "can_can" | "ten_gallon_hat" | "conestoga" | "derringer" | "buffalo_rifle" | "howitzer" | "pepperbox" | "iron_plate" | "pony_express" | "knife" | "sombrero";
 
 export type BangRole = "sheriff" | "deputy" | "outlaw" | "renegade";
 
-export type Character = "bart_cassidy" | "black_jack" | "calamity_janet" | "el_gringo" | "jesse_jones" | "jourdonnais" | "kit_carlson" | "lucky_duke" | "paul_regret" | "pedro_ramirez" | "rose_doolan" | "sid_ketchum" | "slab_the_killer" | "suzy_lafayette" | "vulture_sam" | "willy_the_kid";
+export type Character = "bart_cassidy" | "black_jack" | "calamity_janet" | "el_gringo" | "jesse_jones" | "jourdonnais" | "kit_carlson" | "lucky_duke" | "paul_regret" | "pedro_ramirez" | "rose_doolan" | "sid_ketchum" | "slab_the_killer" | "suzy_lafayette" | "vulture_sam" | "willy_the_kid" | "apache_kid" | "belle_star" | "bill_noface" | "chuck_wengam" | "doc_holyday" | "elena_fuente" | "greg_digger" | "herb_hunter" | "jose_delgado" | "molly_stark" | "pat_brennan" | "pixie_pete" | "sean_mallory" | "tequila_joe" | "vera_custer";
 
 export type CardSelection = "hand" | { "in_play": CardId };
 
-export type DrawSource = "deck" | "discard" | { "player": PlayerId };
+export type BrawlPick = { target: PlayerId, selection: CardSelection, };
+
+export type DrawSource = "deck" | "discard" | { "player": PlayerId } | { "in_play": { player: PlayerId, card: CardId, } };
 
 export type Action = { "type": "choose_hand_slot", pending_id: PendingId, slot: number, } | { "type": "flip_check", pending_id: PendingId, } | { "type": "flip_barrel", pending_id: PendingId, } | { "type": "choose_draw_source", pending_id: PendingId, source: DrawSource, } | { "type": "keep_cards", pending_id: PendingId, cards: Array<CardId>, } | { "type": "choose_draw_result", pending_id: PendingId, card: CardId, } | { "type": "sid_heal",
 /**
  * The current own Dying id; None when healing outside that window.
  */
-pending_id: PendingId | null, discard: [CardId, CardId], } | { "type": "play", card: CardId, target: PlayerId | null, } | { "type": "affect_card", card: CardId, target: PlayerId, selection: CardSelection, } | { "type": "choose_store_slot", pending_id: PendingId, slot: number, } | { "type": "respond", pending_id: PendingId, card: CardId | null, } | { "type": "end_turn", discard: Array<CardId>, };
+pending_id: PendingId | null, discard: [CardId, CardId], } | { "type": "play", card: CardId, target: PlayerId | null, } | { "type": "affect_card", card: CardId, target: PlayerId, selection: CardSelection, } | { "type": "choose_store_slot", pending_id: PendingId, slot: number, } | { "type": "play_with_discard", card: CardId, discard: CardId, target: PlayerId | null, } | { "type": "affect_with_discard", card: CardId, discard: CardId, target: PlayerId, selection: CardSelection, } | { "type": "brawl", card: CardId, discard: CardId, picks: Array<BrawlPick>, } | { "type": "activate_green", card: CardId, target: PlayerId | null, selection: CardSelection | null, } | { "type": "chuck_draw" } | { "type": "jose_delgado", card: CardId, } | { "type": "doc_holyday", cards: [CardId, CardId], target: PlayerId, } | { "type": "vulture_take", pending_id: PendingId, selection: CardSelection, } | { "type": "choose_copy", pending_id: PendingId, target: PlayerId, } | { "type": "respond", pending_id: PendingId, card: CardId | null, } | { "type": "end_turn", discard: Array<CardId>, };
 
 export type TurnStep = "dynamite" | "jail" | "draw" | "play";
 
@@ -38,13 +46,30 @@ export type AttackKind = "bang" | "gatling" | "indians";
 
 export type Winner = "sheriff_and_deputies" | "outlaws" | { "renegade": { player: PlayerId, } };
 
-export type DecisionKind = { "type": "pick_hand_slot", target: PlayerId, kind: CardKind, count: number, } | { "type": "turn" } | { "type": "attack_response", kind: AttackKind, remaining: number, checks_left: number, } | { "type": "check", reason: CardKind, } | { "type": "duel" } | { "type": "general_store" } | { "type": "draw_choice" } | { "type": "keep_cards", keep: number, } | { "type": "choose_draw_result", reason: CardKind, } | { "type": "dying", needed: number, };
+export type DecisionKind = { "type": "pick_hand_slot", target: PlayerId, kind: CardKind, count: number, } | { "type": "turn" } | { "type": "attack_response", kind: AttackKind, remaining: number, checks_left: number, } | { "type": "check", reason: CardKind, } | { "type": "duel" } | { "type": "general_store" } | { "type": "draw_choice" } | { "type": "choose_copy" } | { "type": "vulture_split", victim: PlayerId, hand_count: number, table_count: number, } | { "type": "keep_cards", keep: number, } | { "type": "choose_draw_result", reason: CardKind, } | { "type": "dying", needed: number, };
 
 export type Decision = { player: PlayerId, pending_id: PendingId | null, kind: DecisionKind, };
 
-export type PublicPlayer = { id: PlayerId, character: Character, health: number, max_health: number, alive: boolean, hand_count: number, in_play: Array<CardId>, weapon_range: number, jail_turns_left?: number, role: BangRole | null, };
+export type PublicPlayer = { id: PlayerId, character: Character, health: number, max_health: number, alive: boolean, hand_count: number, in_play: Array<CardId>, weapon_range: number, jail_turns_left?: number,
+/**
+ * Green cards in `in_play` that can be used now (placed in an earlier turn).
+ */
+green_ready?: Array<CardId>,
+/**
+ * Green Missed! cards that may answer a shot right now: placed in a turn that has ended and
+ * not switched off by Belle Star. (Active effects use `green_ready`, which waits longer.)
+ */
+green_answers?: Array<CardId>,
+/**
+ * Vera Custer: the character whose ability she currently holds.
+ */
+copied?: Character, role: BangRole | null, };
 
-export type SpectatorView = { players: Array<PublicPlayer>, turn: TurnState, waiting: Decision | null, draw_count: number, discard_count: number, discard_top: CardId | null, winner: Winner | null, store_slots: number, };
+export type SpectatorView = { players: Array<PublicPlayer>, turn: TurnState, waiting: Decision | null, draw_count: number, discard_count: number, discard_top: CardId | null, winner: Winner | null, store_slots: number,
+/**
+ * Face-up table cards still to be claimed while Vulture Sam's loot is being shared.
+ */
+loot_table?: Array<CardId>, };
 
 export type PlayerView = { you: PlayerId, hand: Array<CardId>,
 /**
@@ -52,7 +77,7 @@ export type PlayerView = { you: PlayerId, hand: Array<CardId>,
  */
 choices: Array<CardId>, table: SpectatorView, };
 
-export type EventKind = { "type": "hand_slots_opened", actor: PlayerId, target: PlayerId, count: number, } | { "type": "hand_slot_claimed", actor: PlayerId, target: PlayerId, slot: number, } | { "type": "hand_pick_cancelled", actor: PlayerId, target: PlayerId, } | { "type": "skill_activated", player: PlayerId, character: Character, } | { "type": "choice_offered", player: PlayerId, cards: Array<CardId>, } | { "type": "card_shown", player: PlayerId, card: CardId, } | { "type": "cards_stolen", source: PlayerId, target: PlayerId, count: number, } | { "type": "stolen_cards", source: PlayerId, target: PlayerId, cards: Array<CardId>, } | { "type": "cards_inherited", player: PlayerId, victim: PlayerId, count: number, } | { "type": "private_pool_discarded", count: number, } | { "type": "game_started", sheriff: PlayerId, } | { "type": "turn_started", player: PlayerId, } | { "type": "cards_drawn", player: PlayerId, count: number, } | { "type": "cards_received", player: PlayerId, cards: Array<CardId>, } | { "type": "deck_reshuffled", count: number, } | { "type": "card_played", player: PlayerId, card: CardId, target: PlayerId | null, } | { "type": "card_discarded", player: PlayerId, card: CardId, } | { "type": "health_changed", player: PlayerId, source: PlayerId | null, delta: number, health: number, } | { "type": "player_eliminated", player: PlayerId, role: BangRole, } | { "type": "decision_changed", decision: Decision | null, } | { "type": "card_equipped", player: PlayerId, card: CardId, } | { "type": "card_passed", source: PlayerId, target: PlayerId, card: CardId, } | { "type": "dynamite_round_ended", player: PlayerId, } | { "type": "jail_held", player: PlayerId, turns_left: number, } | { "type": "jail_expired", player: PlayerId, } | { "type": "hand_affected", source: PlayerId, target: PlayerId, kind: CardKind, count: number, } | { "type": "hand_card_affected", source: PlayerId, target: PlayerId, kind: CardKind, card: CardId, } | { "type": "in_play_card_affected", source: PlayerId, target: PlayerId, kind: CardKind, card: CardId, } | { "type": "draw_revealed", player: PlayerId, reason: CardKind, card: CardId, } | { "type": "store_opened", count: number, } | { "type": "store_card_claimed", player: PlayerId, slot: number, } | { "type": "store_card_received", card: CardId, } | { "type": "pool_discarded", cards: Array<CardId>, } | { "type": "bounty_awarded", player: PlayerId, victim: PlayerId, } | { "type": "sheriff_penalized", player: PlayerId, victim: PlayerId, } | { "type": "game_ended", winner: Winner, roles: Array<BangRole>, };
+export type EventKind = { "type": "hand_slots_opened", actor: PlayerId, target: PlayerId, count: number, } | { "type": "hand_slot_claimed", actor: PlayerId, target: PlayerId, slot: number, } | { "type": "hand_pick_cancelled", actor: PlayerId, target: PlayerId, } | { "type": "skill_activated", player: PlayerId, character: Character, } | { "type": "choice_offered", player: PlayerId, cards: Array<CardId>, } | { "type": "card_shown", player: PlayerId, card: CardId, } | { "type": "cards_stolen", source: PlayerId, target: PlayerId, count: number, } | { "type": "stolen_cards", source: PlayerId, target: PlayerId, cards: Array<CardId>, } | { "type": "cards_inherited", player: PlayerId, victim: PlayerId, count: number, } | { "type": "private_pool_discarded", count: number, } | { "type": "game_started", sheriff: PlayerId, } | { "type": "turn_started", player: PlayerId, } | { "type": "cards_drawn", player: PlayerId, count: number, } | { "type": "cards_received", player: PlayerId, cards: Array<CardId>, } | { "type": "deck_reshuffled", count: number, } | { "type": "card_played", player: PlayerId, card: CardId, target: PlayerId | null, } | { "type": "card_discarded", player: PlayerId, card: CardId, } | { "type": "health_changed", player: PlayerId, source: PlayerId | null, delta: number, health: number, } | { "type": "player_eliminated", player: PlayerId, role: BangRole, } | { "type": "decision_changed", decision: Decision | null, } | { "type": "card_equipped", player: PlayerId, card: CardId, } | { "type": "card_passed", source: PlayerId, target: PlayerId, card: CardId, } | { "type": "green_activated", player: PlayerId, card: CardId, target: PlayerId | null, } | { "type": "table_card_taken", player: PlayerId, target: PlayerId, card: CardId, } | { "type": "copy_chosen", player: PlayerId, copied: Character, } | { "type": "dynamite_round_ended", player: PlayerId, } | { "type": "jail_held", player: PlayerId, turns_left: number, } | { "type": "jail_expired", player: PlayerId, } | { "type": "hand_affected", source: PlayerId, target: PlayerId, kind: CardKind, count: number, } | { "type": "hand_card_affected", source: PlayerId, target: PlayerId, kind: CardKind, card: CardId, } | { "type": "in_play_card_affected", source: PlayerId, target: PlayerId, kind: CardKind, card: CardId, } | { "type": "draw_revealed", player: PlayerId, reason: CardKind, card: CardId, } | { "type": "store_opened", count: number, } | { "type": "store_card_claimed", player: PlayerId, slot: number, } | { "type": "store_card_received", card: CardId, } | { "type": "pool_discarded", cards: Array<CardId>, } | { "type": "bounty_awarded", player: PlayerId, victim: PlayerId, } | { "type": "sheriff_penalized", player: PlayerId, victim: PlayerId, } | { "type": "game_ended", winner: Winner, roles: Array<BangRole>, };
 
 export type UnoSettings = Record<symbol, never>;
 
