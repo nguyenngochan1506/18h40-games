@@ -23,6 +23,18 @@ pub enum WerewolfView {
 pub struct WerewolfEvents(Vec<::werewolf::EventKind>);
 
 impl WerewolfEvents {
+    pub fn empty() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn extend(&mut self, other: Self) {
+        self.0.extend(other.0);
+    }
+
     pub fn for_recipient(
         events: &[::werewolf::Event],
         player: Option<::werewolf::PlayerId>,

@@ -1,12 +1,15 @@
 use super::{GameModule, GameSession};
-use ::werewolf::{Action, Decision, Event, GameState, PlayerId, RoleDeck, Settings};
+use ::werewolf::{
+    Action, Decision, Event, GameState, NightStep, PlayerId, PublicPhase, RoleDeck, Settings,
+};
 use protocol::{
-    ErrorCode, GameAction, GameDelta, GameSeat, GameSettings, GameView, PROTOCOL_VERSION,
-    ServerMessage,
+    ErrorCode, GameAction, GameDelta, GameSeat, GameSettings, GameSnapshot, GameView,
+    PROTOCOL_VERSION, ServerMessage,
     werewolf::{WerewolfEvents, WerewolfView},
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
+use std::collections::HashMap;
 use tokio::time::Instant;
 
 pub(super) struct Module;
@@ -56,6 +59,24 @@ impl GameModule for Module {
     }
 }
 
+struct MemberSync {
+    seq: u32,
+    last_view: WerewolfView,
+    pending_events: WerewolfEvents,
+}
+
+fn timeout_anchor(
+    decision: &Option<Decision>,
+) -> Option<(PublicPhase, Option<NightStep>, Option<PlayerId>)> {
+    decision.as_ref().map(|decision| {
+        (
+            decision.phase,
+            decision.night_step,
+            decision.awaited.first().copied(),
+        )
+    })
+}
+
 struct Session {
     state: GameState,
     seq: u32,
@@ -64,6 +85,7 @@ struct Session {
     decision: Option<Decision>,
     waiting_since: Instant,
     events: Vec<Event>,
+    sync: HashMap<String, MemberSync>,
 }
 
 impl Session {
@@ -91,6 +113,7 @@ impl Session {
             decision,
             waiting_since: now,
             events,
+            sync: HashMap::new(),
         })
     }
 
@@ -128,9 +151,16 @@ impl Session {
         self.events = events;
         self.seq += 1;
         let decision = ::werewolf::decision(&self.state);
-        if decision != self.decision {
+        if timeout_anchor(&decision) != timeout_anchor(&self.decision) {
             self.waiting_since = now;
-            self.decision = decision;
+        }
+        self.decision = decision;
+        let members: Vec<String> = self.sync.keys().cloned().collect();
+        for member in members {
+            let filtered = WerewolfEvents::for_recipient(&self.events, self.recipient(&member));
+            if let Some(entry) = self.sync.get_mut(&member) {
+                entry.pending_events.extend(filtered);
+            }
         }
         Ok(())
     }
@@ -157,24 +187,77 @@ impl GameSession for Session {
         GameView::Werewolf(self.werewolf_view(member))
     }
 
-    fn update(&self, member: &str) -> ServerMessage {
-        let update = GameDelta::Werewolf {
-            events: WerewolfEvents::for_recipient(&self.events, self.recipient(member)),
-            view: self.werewolf_view(member),
-        };
-        if self.is_over() {
+    fn snapshot(&mut self, member: &str) -> GameSnapshot {
+        let view = self.werewolf_view(member);
+        let entry = self
+            .sync
+            .entry(member.to_owned())
+            .and_modify(|entry| {
+                entry.last_view = view.clone();
+                entry.pending_events = WerewolfEvents::empty();
+            })
+            .or_insert_with(|| MemberSync {
+                seq: 0,
+                last_view: view.clone(),
+                pending_events: WerewolfEvents::empty(),
+            });
+        GameSnapshot {
+            seq: entry.seq,
+            seats: self.seats.clone(),
+            view: GameView::Werewolf(view),
+        }
+    }
+
+    fn update(&mut self, member: &str) -> Option<ServerMessage> {
+        let view = self.werewolf_view(member);
+        let is_over = self.is_over();
+        let recipient = self.recipient(member);
+        if !self.sync.contains_key(member) {
+            let events = WerewolfEvents::for_recipient(&self.events, recipient);
+            self.sync.insert(
+                member.to_owned(),
+                MemberSync {
+                    seq: 0,
+                    last_view: view.clone(),
+                    pending_events: WerewolfEvents::empty(),
+                },
+            );
+            let update = GameDelta::Werewolf { events, view };
+            return Some(if is_over {
+                ServerMessage::GameOver {
+                    v: PROTOCOL_VERSION,
+                    seq: 0,
+                    update,
+                }
+            } else {
+                ServerMessage::GameUpdate {
+                    v: PROTOCOL_VERSION,
+                    seq: 0,
+                    update,
+                }
+            });
+        }
+        let entry = self.sync.get_mut(member).unwrap();
+        if !is_over && entry.pending_events.is_empty() && entry.last_view == view {
+            return None;
+        }
+        entry.seq += 1;
+        entry.last_view = view.clone();
+        let events = std::mem::replace(&mut entry.pending_events, WerewolfEvents::empty());
+        let update = GameDelta::Werewolf { events, view };
+        Some(if is_over {
             ServerMessage::GameOver {
                 v: PROTOCOL_VERSION,
-                seq: self.seq,
+                seq: entry.seq,
                 update,
             }
         } else {
             ServerMessage::GameUpdate {
                 v: PROTOCOL_VERSION,
-                seq: self.seq,
+                seq: entry.seq,
                 update,
             }
-        }
+        })
     }
 
     fn apply(&mut self, member: &str, action: GameAction, now: Instant) -> Result<(), ErrorCode> {

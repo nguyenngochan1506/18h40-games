@@ -122,6 +122,7 @@ test('Settings renders all 16 role cards, preserves unsaved draft across identic
       root.render(createElement(client.Settings, {
         settings,
         players: 5,
+        maxPlayers: 16,
         editable: true,
         onChange: (next: GameSettings) => submitted.push(next),
       }));
