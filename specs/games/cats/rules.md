@@ -1,4 +1,4 @@
-# Mèo Nổ — luật đã chốt (Base + 3 bản mở rộng)
+# Mèo Nổ — luật đã chốt (Base + đủ 3 bản mở rộng)
 
 Tài liệu này là nguồn luật của game `cats` trong `18h40-games`. Mọi thay đổi hành vi phải cập nhật file này trước.
 
@@ -8,20 +8,20 @@ Tài liệu này là nguồn luật của game `cats` trong `18h40-games`. Mọi
 - Người bị loại không còn lượt, không nhận action, chỉ xem `SpectatorView`.
 - Ván kết thúc khi còn đúng **1** người chưa bị loại.
 - Chủ phòng có thể bật/tắt 3 bản mở rộng trong `Settings` (mặc định bật cả 3):
-  - `imploding`: **Imploding Kittens** (`Imploding`, `Reverse`, `DrawBottom`, `FeralCat`, `AlterFuture`, `TargetedAttack`).
-  - `streaking`: **Streaking Kittens** (`Streaking`, `SuperSkip`, `SeeFuture5`, `SwapTopBottom`, `GarbageCollection`, `CatomicBomb`).
-  - `barking`: **Barking Kittens** (`AlterFuture5`, `PersonalAttack`, `ShareFuture`, `Bury`, `Potluck`).
+  - `imploding`: **Imploding Kittens (20 lá)** (`Imploding`, `Reverse`, `DrawBottom`, `FeralCat`, `AlterFuture`, `TargetedAttack`).
+  - `streaking`: **Streaking Kittens (15 lá)** (`Streaking`, +1 `Exploding`, `Mark`, `CurseCatButt`, `SwapTopBottom`, `SeeFuture5`, `AlterFuture5`, `CatomicBomb`, `SuperSkip`, `GarbageCollection`).
+  - `barking`: **Barking Kittens (20 lá)** (`BarkingKitten`, `IllTakeThat`, `TowerOfPower`, `AlterFutureNow`, `PersonalAttack`, `Bury`, `ShareFuture`, `Potluck`, `SuperSkip`).
 
-## 2. Bộ bài
+## 2. Bộ bài (36 loại lá)
 
 - **Bản gốc (46 lá an toàn + Defuse + Exploding)**:
   - 5 loại Mèo thường (`CatTaco`, `CatRainbow`, `CatBeard`, `CatPotato`, `CatCattermelon`) × 4 lá.
   - `SeeFuture` × 5, `Nope` × 5, `Attack` × 4, `Skip` × 4, `Shuffle` × 4, `Favour` × 4.
-- **Imploding Kittens**: +1 `Imploding` (úp ban đầu), `Reverse` × 4, `DrawBottom` × 4, `FeralCat` × 4, `AlterFuture` × 4, `TargetedAttack` × 3.
-- **Streaking Kittens**: `Streaking` × 1, `SuperSkip` × 1, `SeeFuture5` × 1, `SwapTopBottom` × 1, `GarbageCollection` × 1, `CatomicBomb` × 1. Khi bật `streaking`, số `Exploding` trong bộ rút là `player_count` (thay vì `player_count - 1`) để ván không hòa khi một người giữ `Exploding` trên tay.
-- **Barking Kittens**: `AlterFuture5` × 2, `PersonalAttack` × 4, `ShareFuture` × 2, `Bury` × 2, `Potluck` × 2.
-- Mỗi người luôn được chia **1 Defuse + 7 lá an toàn**. Tổng `Defuse` là `max(7, player_count)`; nếu 6–8 người chơi không bật mở rộng mà thiếu lá an toàn thì bổ sung theo vòng lặp để bộ rút còn ít nhất `player_count` lá an toàn.
-- Mọi `CardId` live nằm ở đúng một vùng: `deck | discard | hand[player] | pending | removed`.
+- **Imploding Kittens (20 lá)**: `Imploding` × 1 (úp ban đầu), `Reverse` × 4, `DrawBottom` × 4, `FeralCat` × 4, `AlterFuture` × 4, `TargetedAttack` × 3.
+- **Streaking Kittens (15 lá)**: `Streaking` × 1, +1 `Exploding` (tổng `Exploding` = `player_count`), `Mark` × 3, `CurseCatButt` × 2, `SwapTopBottom` × 3, `SeeFuture5` × 1, `AlterFuture5` × 1, `CatomicBomb` × 1, `SuperSkip` × 1, `GarbageCollection` × 1.
+- **Barking Kittens (20 lá)**: `BarkingKitten` × 2, `IllTakeThat` × 4, `TowerOfPower` × 1, `AlterFutureNow` × 2, `PersonalAttack` × 4, `Bury` × 2, `ShareFuture` × 2, `Potluck` × 2, `SuperSkip` × 1. Khi bật `barking`, trích sẵn **6 lá Stash** úp trên bàn cho Tháp Quyền Lực.
+- Mỗi người luôn được chia **1 Defuse + 7 lá an toàn**. Tổng `Defuse` là `max(7, player_count)`; nếu thiếu lá an toàn cho số người chơi + Stash thì tự bổ sung theo vòng lặp chuẩn.
+- Mọi `CardId` live nằm ở đúng một vùng: `deck | discard | tower_stash | hand[player] | barking_front[player] | ill_take_that[player] | pending | removed`.
 
 ## 3. Lượt, chiều chơi & các lá đặc biệt
 
@@ -35,15 +35,24 @@ Tài liệu này là nguồn luật của game `cats` trong `18h40-games`. Mọi
 - **Swap Top & Bottom**: hoán đổi lá đỉnh và lá đáy bộ rút (không xem).
 - **See the Future (3x / 5x)**: xem kín tối đa 3 hoặc 5 lá trên cùng.
 - **Alter the Future (3x / 5x)**: xem kín và sắp xếp lại thứ tự 3 hoặc 5 lá trên cùng.
+- **Alter the Future (3x) NOW**: giống Đổi Tương Lai 3x nhưng được phép đánh **bất cứ lúc nào** khi đang ở pha lượt (kể cả ngoài lượt của mình); có thể bị Nope.
 - **Share the Future (3x)**: xem, sắp xếp lại 3 lá trên cùng rồi cho người kế tiếp xem thứ tự mới.
 - **Bury**: rút lá đỉnh xem kín rồi chèn lại vào bất kỳ vị trí nào `[0, deck_count]` của bộ rút (nếu rút phải `Imploding` đang ngửa vẫn bị loại ngay).
 - **Garbage Collection**: lần lượt từng người còn sống (bắt đầu từ người đánh) chọn 1 lá trên tay bỏ vào bộ rút, sau đó xáo bộ rút.
 - **Potluck**: lần lượt từng người còn sống (bắt đầu từ người đánh) đặt 1 lá trên tay lên đỉnh bộ rút.
 - **Catomic Bomb**: rút toàn bộ `Exploding` khỏi bộ rút, xáo phần còn lại, đặt tất cả `Exploding` **ngửa** lên đỉnh bộ rút và kết thúc lượt không rút.
+- **Mark (Đánh Dấu)**: chọn 1 đối thủ; lật ngửa ngẫu nhiên 1 lá chưa đánh dấu trên tay họ cho tất cả mọi người cùng thấy cho đến khi lá đó rời tay.
+- **Curse of the Cat Butt (Lời Nguyền Mông Mèo)**: chọn 1 đối thủ; tay bài của họ bị úp và xáo (mù hoàn toàn — server không gửi danh tính lá trên tay họ). Khi bị nguyền, họ chỉ có thể rút bài hoặc đánh mù 1 ô bài úp (`PlayBlind`): nếu là lá hành động đánh lẻ hợp lệ thì kích hoạt bình thường, ngược lại lá đó bị bỏ phí vào chồng bỏ. Lời nguyền tự giải sau khi rút bài thành công.
 - **Imploding Kitten**:
   - Lần đầu rút (úp): không nổ, lật ngửa và chèn vào vị trí bất kỳ `[0, deck_count]` của bộ rút (không thể Nope).
   - Lần sau rút (ngửa): **loại ngay lập tức**, không thể `Defuse`, không được `Streaking` bảo vệ, không thể Nope.
-- **Streaking Kitten**: lá thụ động; khi cầm trên tay cho phép giữ kín tối đa **1 lá `Exploding`** trên tay mà không nổ. Nếu mất `Streaking` hoặc cầm từ 2 `Exploding` trở lên (hoặc nhận `Exploding` mà không có `Streaking`), `Exploding` không được bảo vệ lập tức kích hoạt `Defuse` hoặc loại người đó.
+- **Streaking Kitten**: lá thụ động; khi cầm trên tay cho phép giữ kín tối đa **1 lá `Exploding`** trên tay mà không nổ. Nếu mất `Streaking` hoặc cầm từ 2 `Exploding` trở lên, `Exploding` không được bảo vệ lập tức kích hoạt `Defuse` hoặc loại người đó.
+- **Barking Kitten (Mèo Sủa — luật chính thức mới)**: không thể Nope.
+  - Nếu có người khác đang đặt `BarkingKitten` ngửa trước mặt hoặc đang cầm lá thứ hai trên tay: cả 2 lá vào chồng bỏ và người đó phải tự động bỏ 1 `Defuse` (nếu không có thì nổ và bị loại ngay).
+  - Nếu bạn giữ cả 2 lá `BarkingKitten`: bỏ cả 2 lá và chọn bất kỳ đối thủ nào buộc phải `Defuse` hoặc nổ.
+  - Ngược lại: đặt lá `BarkingKitten` ngửa trước mặt bạn; nếu ai đó đánh lá thứ hai sau này, bạn lập tức thành mục tiêu.
+- **I'll Take That (Tớ Lấy Nhé)**: đặt ngửa trước mặt 1 đối thủ chưa bị đặt bẫy. Lần rút bài tiếp theo của họ, lá vừa rút bị chuyển thẳng cho bạn (nếu đó là `Exploding`/`Imploding`, chính bạn phải Gỡ Bom hoặc nổ!).
+- **Tower of Power (Tháp Quyền Lực)**: nhận vương miện bảo vệ tay bài kèm kho Stash 6 lá úp; mọi hành động cướp bài (`Favour`, Combo 2/3, `IllTakeThat`) nhắm vào bạn đều buộc phải bốc mù 1 lá từ kho Stash thay vì cướp tay bạn chừng nào Stash còn bài.
 
 ## 4. Combo & Feral Cat
 
@@ -54,8 +63,6 @@ Tài liệu này là nguồn luật của game `cats` trong `18h40-games`. Mọi
 
 ## 5. Nope
 
-- Bất kỳ người còn sống nào có lá `Nope` đều có thể phản ứng với `last_action` khi cửa sổ Nope đang mở.
-- Theo luật chính thống: lá hành động bị Nope và mọi lá `Nope` đã đánh **đều nằm lại chồng bỏ** (không trả về tay).
-- Chuỗi Nope chẵn/lẻ đảo hoặc khôi phục hiệu ứng của hành động gốc thông qua cặp snapshot `undo_state`.
-- Cửa sổ Nope tự đóng khi hành động hoàn tất bước chuyển bài hoặc khi có rút bài / Defuse / Imploding.
-- Không bao giờ Nope `Exploding`, `Defuse`, `Imploding`, `Draw`, `DrawBottom`, `Bury`.
+- Bất kỳ người còn sống nào có lá `Nope` (và không bị mù bài) đều có thể phản ứng với `last_action` khi cửa sổ Nope đang mở.
+- Theo luật chính thống: lá hành động bị Nope và mọi lá `Nope` đã đánh **đều nằm lại chồng bỏ**.
+- Không bao giờ Nope `Exploding`, `Defuse`, `Imploding`, `BarkingKitten`, `Draw`, `DrawBottom`, `Bury`.

@@ -13,6 +13,15 @@ pub enum Action {
     PlayCard {
         card: CardId,
     },
+    /// Played while under Curse of the Cat Butt: blindly pick a slot in own hand.
+    PlayBlind {
+        slot: usize,
+    },
+    /// Used while under Curse of the Cat Butt to answer FavourCard or GiveToDeck blindly.
+    ChooseBlindCard {
+        pending_id: PendingId,
+        slot: usize,
+    },
     PlayPair {
         cards: Vec<CardId>,
     },
@@ -73,6 +82,22 @@ pub enum Action {
     PutCardInDeck {
         pending_id: PendingId,
         card: CardId,
+    },
+    MarkTarget {
+        pending_id: PendingId,
+        target: PlayerId,
+    },
+    CurseTarget {
+        pending_id: PendingId,
+        target: PlayerId,
+    },
+    IllTakeThatTarget {
+        pending_id: PendingId,
+        target: PlayerId,
+    },
+    BarkingTarget {
+        pending_id: PendingId,
+        target: PlayerId,
     },
 }
 

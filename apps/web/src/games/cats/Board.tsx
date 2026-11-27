@@ -101,6 +101,22 @@ function decisionSummary(
       return mine
         ? `${current.kind.shuffle_after ? 'Thu Gom Rác' : 'Góp Tiệc'}: chọn 1 lá trên tay để bỏ vào bộ rút.`
         : `${who} đang chọn 1 lá đặt vào bộ rút.`;
+    case 'mark_target':
+      return mine
+        ? 'Đánh Dấu: chọn 1 đối thủ để lật ngửa ngẫu nhiên 1 lá trên tay họ.'
+        : `${who} đang chọn mục tiêu Đánh Dấu.`;
+    case 'curse_target':
+      return mine
+        ? 'Lời Nguyền Mông Mèo: chọn 1 đối thủ để nguyền mù tay bài.'
+        : `${who} đang chọn mục tiêu Lời Nguyền Mông Mèo.`;
+    case 'ill_take_that_target':
+      return mine
+        ? 'Tớ Lấy Nhé: chọn 1 đối thủ chưa bị đặt bẫy để cướp lá rút tiếp theo.'
+        : `${who} đang chọn mục tiêu đặt bẫy Tớ Lấy Nhé.`;
+    case 'barking_target':
+      return mine
+        ? 'Song Mèo Sủa: chọn bất kỳ đối thủ nào buộc họ phải Gỡ Bom hoặc nổ ngay!'
+        : `${who} đang chọn mục tiêu kích nổ Mèo Sủa.`;
   }
 }
 
@@ -201,7 +217,9 @@ export default function Board(props: GameBoardProps) {
     );
   }
 
-  const { table, hand, you, previewCards } = unwrapped;
+  const { table, hand, cursed, you, previewCards } = unwrapped;
+  const ownPublic = you !== null ? table.players.find(player => player.id === you) ?? null : null;
+  const blindHandCount = cursed ? (ownPublic?.hand_count ?? 0) : 0;
   const currentDecision: CatsDecision | null = table.decision;
   const ownsDecision = you !== null && currentDecision?.player === you;
   const isTurn = ownsDecision && currentDecision?.kind.type === 'turn';
@@ -214,8 +232,16 @@ export default function Board(props: GameBoardProps) {
 
   const otherPlayers = table.players.filter(player => !player.eliminated && player.id !== you);
   const lastAction = table.last_action;
-  const hasNope = hand.some(card => card.kind === 'nope');
+  const hasNope = !cursed && hand.some(card => card.kind === 'nope');
   const canNopeNow = !locked && activeSelf && hasNope && !!lastAction?.nopeable && !over;
+  const alterNowCard = !cursed ? hand.find(card => card.kind === 'alter_future_now') ?? null : null;
+  const canAlterFutureNow =
+    !locked &&
+    activeSelf &&
+    !over &&
+    !!alterNowCard &&
+    currentDecision?.kind.type === 'turn' &&
+    currentDecision.pending_id == null;
 
   const selectedCards = hand.filter(card => selected.includes(card.id));
   const selectedKinds = selectedCards.map(card => card.kind);
@@ -223,13 +249,27 @@ export default function Board(props: GameBoardProps) {
   const canTriple = canPlayComboTriple(selectedKinds);
   const canFive = canPlayComboFive(selectedKinds);
 
-  const pickingTargetKind =
+  type TargetActionType =
+    | 'attack_target'
+    | 'favour_target'
+    | 'random_target'
+    | 'steal_target'
+    | 'mark_target'
+    | 'curse_target'
+    | 'ill_take_that_target'
+    | 'barking_target';
+
+  const pickingTargetKind: TargetActionType | null =
     canAct &&
     currentDecision?.pending_id != null &&
     (currentDecision.kind.type === 'attack_target' ||
       currentDecision.kind.type === 'favour_target' ||
       currentDecision.kind.type === 'random_target' ||
-      currentDecision.kind.type === 'steal_target')
+      currentDecision.kind.type === 'steal_target' ||
+      currentDecision.kind.type === 'mark_target' ||
+      currentDecision.kind.type === 'curse_target' ||
+      currentDecision.kind.type === 'ill_take_that_target' ||
+      currentDecision.kind.type === 'barking_target')
       ? currentDecision.kind.type
       : null;
 
@@ -255,21 +295,26 @@ export default function Board(props: GameBoardProps) {
       send({ type: 'nope', pending_id: lastAction.id });
       return;
     }
+    if (card.kind === 'alter_future_now' && canAlterFutureNow) {
+      send({ type: 'play_card', card: card.id });
+      return;
+    }
     if (isTurn && canAct && meta.comboCat) {
       toggleCard(card.id);
       return;
     }
     if (isTurn && canAct && meta.playableSingle) {
+      if (card.kind === 'ill_take_that' && !otherPlayers.some(p => p.ill_take_that_by === null)) {
+        setInspectedKind(card.kind);
+        return;
+      }
       send({ type: 'play_card', card: card.id });
       return;
     }
     setInspectedKind(card.kind);
   }
 
-  function submitTarget(
-    action: 'attack_target' | 'favour_target' | 'random_target' | 'steal_target',
-    target: number,
-  ) {
+  function submitTarget(action: TargetActionType, target: number) {
     if (!currentDecision?.pending_id) return;
     send({ type: action, pending_id: currentDecision.pending_id, target });
   }
@@ -376,7 +421,11 @@ export default function Board(props: GameBoardProps) {
       case 'attack_target':
       case 'favour_target':
       case 'random_target':
-      case 'steal_target': {
+      case 'steal_target':
+      case 'mark_target':
+      case 'curse_target':
+      case 'ill_take_that_target':
+      case 'barking_target': {
         const action = currentDecision.kind.type;
         const prompt =
           action === 'attack_target'
@@ -385,12 +434,24 @@ export default function Board(props: GameBoardProps) {
               ? 'Chọn người để Xin Bài (hoặc chạm trực tiếp vào ghế trên bàn):'
               : action === 'random_target'
                 ? 'Chọn người để cướp ngẫu nhiên 1 lá (hoặc chạm vào ghế):'
-                : 'Chọn người để gọi tên lá bài (hoặc chạm vào ghế):';
+                : action === 'steal_target'
+                  ? 'Chọn người để gọi tên lá bài (hoặc chạm vào ghế):'
+                  : action === 'mark_target'
+                    ? 'Chọn đối thủ để Đánh Dấu 1 lá bài ngẫu nhiên:'
+                    : action === 'curse_target'
+                      ? 'Chọn đối thủ để tung Lời Nguyền Mông Mèo (mù bài):'
+                      : action === 'ill_take_that_target'
+                        ? 'Chọn đối thủ (chưa dính bẫy) để đặt "Tớ Lấy Nhé":'
+                        : 'Song Mèo Sủa: chọn đối thủ buộc phải Gỡ Bom hoặc nổ ngay!';
+        const candidates =
+          action === 'ill_take_that_target'
+            ? otherPlayers.filter(player => player.ill_take_that_by === null)
+            : otherPlayers;
         return (
           <div className="cats-pending-panel" aria-label={prompt}>
             <p className="cats-pending-title">{prompt}</p>
             <div className="cats-choice-row">
-              {otherPlayers.map(player => (
+              {candidates.map(player => (
                 <button
                   key={player.id}
                   type="button"
@@ -398,6 +459,7 @@ export default function Board(props: GameBoardProps) {
                   onClick={() => submitTarget(action, player.id)}
                 >
                   {seatNickname(seats, player.id, you)} ({player.hand_count} lá)
+                  {player.has_tower && table.tower_stash_count > 0 ? ' 👑' : ''}
                 </button>
               ))}
             </div>
@@ -408,20 +470,36 @@ export default function Board(props: GameBoardProps) {
         return (
           <div className="cats-pending-panel">
             <p className="cats-pending-title">
-              Chọn 1 lá bài trên tay để đưa cho {seatNickname(seats, currentDecision.kind.actor, you)}:
+              {cursed
+                ? `Bạn đang bị mù bài! Chọn mù 1 ô bài úp để đưa cho ${seatNickname(seats, currentDecision.kind.actor, you)}:`
+                : `Chọn 1 lá bài trên tay để đưa cho ${seatNickname(seats, currentDecision.kind.actor, you)}:`}
             </p>
             <div className="cats-mini-cards">
-              {hand.map(card => (
-                <button
-                  key={card.id}
-                  type="button"
-                  className="cats-mini-card"
-                  onClick={() => send({ type: 'favour_card', pending_id: id, card: card.id })}
-                >
-                  <CardArtwork kind={card.kind} />
-                  <span>{cardCatalog[card.kind].name}</span>
-                </button>
-              ))}
+              {cursed
+                ? Array.from({ length: blindHandCount }, (_, slot) => (
+                    <button
+                      key={slot}
+                      type="button"
+                      className="cats-mini-card"
+                      onClick={() => send({ type: 'choose_blind_card', pending_id: id, slot })}
+                    >
+                      <span className="cats-art">
+                        <img src={cardBackUrl} alt="Lá úp" draggable={false} />
+                      </span>
+                      <span>Lá úp #{slot + 1}</span>
+                    </button>
+                  ))
+                : hand.map(card => (
+                    <button
+                      key={card.id}
+                      type="button"
+                      className="cats-mini-card"
+                      onClick={() => send({ type: 'favour_card', pending_id: id, card: card.id })}
+                    >
+                      <CardArtwork kind={card.kind} />
+                      <span>{cardCatalog[card.kind].name}</span>
+                    </button>
+                  ))}
             </div>
           </div>
         );
@@ -550,22 +628,38 @@ export default function Board(props: GameBoardProps) {
         return (
           <div className="cats-pending-panel">
             <p className="cats-pending-title">
-              {currentDecision.kind.shuffle_after
-                ? 'Thu Gom Rác: chọn 1 lá trên tay để bỏ lại vào bộ rút (sẽ xáo lại):'
-                : 'Góp Tiệc: chọn 1 lá trên tay để đặt lên đỉnh bộ rút:'}
+              {cursed
+                ? `Bạn đang bị mù bài! Chọn mù 1 ô bài úp để bỏ vào bộ rút:`
+                : currentDecision.kind.shuffle_after
+                  ? 'Thu Gom Rác: chọn 1 lá trên tay để bỏ lại vào bộ rút (sẽ xáo lại):'
+                  : 'Góp Tiệc: chọn 1 lá trên tay để đặt lên đỉnh bộ rút:'}
             </p>
             <div className="cats-mini-cards">
-              {hand.map(card => (
-                <button
-                  key={card.id}
-                  type="button"
-                  className="cats-mini-card"
-                  onClick={() => send({ type: 'put_card_in_deck', pending_id: id, card: card.id })}
-                >
-                  <CardArtwork kind={card.kind} />
-                  <span>{cardCatalog[card.kind].name}</span>
-                </button>
-              ))}
+              {cursed
+                ? Array.from({ length: blindHandCount }, (_, slot) => (
+                    <button
+                      key={slot}
+                      type="button"
+                      className="cats-mini-card"
+                      onClick={() => send({ type: 'choose_blind_card', pending_id: id, slot })}
+                    >
+                      <span className="cats-art">
+                        <img src={cardBackUrl} alt="Lá úp" draggable={false} />
+                      </span>
+                      <span>Lá úp #{slot + 1}</span>
+                    </button>
+                  ))
+                : hand.map(card => (
+                    <button
+                      key={card.id}
+                      type="button"
+                      className="cats-mini-card"
+                      onClick={() => send({ type: 'put_card_in_deck', pending_id: id, card: card.id })}
+                    >
+                      <CardArtwork kind={card.kind} />
+                      <span>{cardCatalog[card.kind].name}</span>
+                    </button>
+                  ))}
             </div>
           </div>
         );
@@ -727,6 +821,14 @@ export default function Board(props: GameBoardProps) {
           {table.imploding_face_up && (
             <p className="cats-imploding-warn">⚠️ Mèo Sập đang nằm NGỬA trong bộ rút!</p>
           )}
+          {table.tower_stash_count > 0 && (
+            <p className="cats-tower-pill">
+              👑 Kho Tháp Quyền Lực: {table.tower_stash_count} lá
+              {table.players.some(p => p.has_tower)
+                ? ` (${seatNickname(seats, table.players.find(p => p.has_tower)!.id, you)})`
+                : ' (chưa có chủ)'}
+            </p>
+          )}
         </section>
 
         <div className="cats-arena" aria-label="Người chơi quanh bàn">
@@ -739,7 +841,11 @@ export default function Board(props: GameBoardProps) {
             const hasTurn = !over && table.turn.player === player.id;
             const isWaiting =
               !over && currentDecision?.player === player.id && currentDecision.kind.type !== 'turn';
-            const canTarget = pickingTargetKind !== null && !player.eliminated && !isOwnSeat;
+            const canTarget =
+              pickingTargetKind !== null &&
+              !player.eliminated &&
+              !isOwnSeat &&
+              !(pickingTargetKind === 'ill_take_that_target' && player.ill_take_that_by !== null);
             const seatStyle = {
               '--seat-x': `${pose.x}%`,
               '--seat-y': `${pose.y}%`,
@@ -803,6 +909,49 @@ export default function Board(props: GameBoardProps) {
                     </span>
                     {canTarget && <span className="cats-target-hint">Chọn mục tiêu</span>}
                   </button>
+                  {!player.eliminated &&
+                    (player.has_tower ||
+                      player.barking_in_front ||
+                      player.ill_take_that_by !== null ||
+                      player.cursed ||
+                      player.marked_cards.length > 0) && (
+                      <div className="cats-seat-badges">
+                        {player.has_tower && (
+                          <span className="cats-badge is-tower" title="Đội vương miện Tháp Quyền Lực">
+                            👑 Tháp ({table.tower_stash_count})
+                          </span>
+                        )}
+                        {player.barking_in_front && (
+                          <span className="cats-badge is-danger" title="Đang đặt ngửa Mèo Sủa trước mặt">
+                            🐶 Mèo Sủa
+                          </span>
+                        )}
+                        {player.ill_take_that_by !== null && (
+                          <span
+                            className="cats-badge is-trap"
+                            title={`Dính bẫy Tớ Lấy Nhé của ${seatNickname(seats, player.ill_take_that_by, you)}`}
+                          >
+                            🎯 Bẫy ({seatNickname(seats, player.ill_take_that_by, you)})
+                          </span>
+                        )}
+                        {player.cursed && (
+                          <span className="cats-badge is-curse" title="Bị nguyền mù bài">
+                            🙈 Mù bài
+                          </span>
+                        )}
+                        {player.marked_cards.map(marked => (
+                          <button
+                            key={marked.id}
+                            type="button"
+                            className="cats-marked-chip"
+                            onClick={() => setInspectedKind(marked.kind)}
+                            title={`Lá bị Đánh Dấu: ${cardCatalog[marked.kind].name}`}
+                          >
+                            👁️ {cardCatalog[marked.kind].name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                 </article>
               </div>
             );
@@ -835,6 +984,19 @@ export default function Board(props: GameBoardProps) {
               onClick={() => send({ type: 'nope', pending_id: lastAction.id })}
             >
               🚫 Dùng Không! (Nope)
+            </button>
+          </div>
+        )}
+
+        {canAlterFutureNow && !isTurn && alterNowCard && (
+          <div className="cats-nope-bar cats-now-bar" role="region" aria-label="Đổi Tương Lai NGAY">
+            <span>Bạn đang có lá <strong>Đổi Tương Lai NGAY</strong> (chơi được ngoài lượt)</span>
+            <button
+              type="button"
+              className="cats-btn primary cats-alter-now"
+              onClick={() => send({ type: 'play_card', card: alterNowCard.id })}
+            >
+              ⚡ Dùng Đổi Tương Lai NGAY
             </button>
           </div>
         )}
@@ -908,11 +1070,17 @@ export default function Board(props: GameBoardProps) {
 
       {you !== null ? (
         <section
-          className={`cats-hand-tray cats-wood-panel${isTurn ? ' is-my-turn' : ''}`}
+          className={`cats-hand-tray cats-wood-panel${isTurn ? ' is-my-turn' : ''}${cursed ? ' is-cursed' : ''}`}
           aria-label="Bài trên tay của bạn"
         >
           <div className="cats-hand-header">
-            <h3>Bài trên tay · {hand.length} lá</h3>
+            <h3>
+              Bài trên tay · {cursed ? blindHandCount : hand.length} lá
+              {ownPublic?.has_tower && ` · 👑 Tháp (${table.tower_stash_count})`}
+              {ownPublic?.barking_in_front && ' · 🐶 Mèo Sủa'}
+              {ownPublic?.ill_take_that_by !== null && ownPublic?.ill_take_that_by !== undefined && ' · 🎯 Đang dính bẫy'}
+              {cursed && ' · 🙈 Bị nguyền mù bài'}
+            </h3>
             <div className="cats-hand-actions">
               {isTurn && (
                 <button
@@ -926,49 +1094,92 @@ export default function Board(props: GameBoardProps) {
               )}
             </div>
           </div>
+          {cursed && (
+            <p className="cats-curse-note">
+              🙈 Bạn đang dính <strong>Lời Nguyền Mông Mèo</strong>! Rút bài để giải nguyền, hoặc chạm 1 ô úp để đánh mù (lá không đánh lẻ được sẽ mất).
+            </p>
+          )}
           <div className="cats-hand-cards">
-            {hand.map(card => {
-              const meta = cardCatalog[card.kind];
-              const isSelected = selected.includes(card.id);
-              const playableNow =
-                (card.kind === 'nope' && canNopeNow) ||
-                (isTurn && canAct && (meta.playableSingle || meta.comboCat));
-              return (
-                <div key={card.id} className="cats-hand-slot">
-                  <button
-                    type="button"
-                    className={`cats-card${isSelected ? ' is-selected' : ''}${playableNow ? ' is-playable' : ''}`}
-                    aria-pressed={meta.comboCat ? isSelected : undefined}
-                    onClick={() => handleHandCardClick(card)}
-                  >
-                    <CardArtwork kind={card.kind} />
-                    <span className="cats-card-caption">
-                      <strong>{meta.name}</strong>
-                      <small>
-                        {card.kind === 'nope' && canNopeNow
-                          ? 'Bấm để Nope!'
-                          : isTurn && meta.comboCat
-                            ? isSelected
-                              ? 'Đã chọn'
-                              : 'Chọn combo'
-                            : isTurn && meta.playableSingle
-                              ? 'Bấm để đánh'
-                              : 'Xem chi tiết'}
-                      </small>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="cats-card-info"
-                    aria-label={`Xem mô tả ${meta.name}`}
-                    onClick={() => setInspectedKind(card.kind)}
-                  >
-                    ?
-                  </button>
-                </div>
-              );
-            })}
-            {hand.length === 0 && <p className="cats-empty-hand">Bạn không còn lá bài nào trên tay.</p>}
+            {cursed ? (
+              blindHandCount > 0 ? (
+                Array.from({ length: blindHandCount }, (_, slot) => (
+                  <div key={slot} className="cats-hand-slot">
+                    <button
+                      type="button"
+                      className={`cats-card cats-blind-card${isTurn && canAct ? ' is-playable' : ''}`}
+                      disabled={!isTurn || !canAct}
+                      onClick={() => isTurn && canAct && send({ type: 'play_blind', slot })}
+                    >
+                      <span className="cats-art">
+                        <img src={cardBackUrl} alt={`Lá úp #${slot + 1}`} draggable={false} />
+                      </span>
+                      <span className="cats-card-caption">
+                        <strong>Lá úp #{slot + 1}</strong>
+                        <small>{isTurn && canAct ? 'Đánh mù' : 'Bị che'}</small>
+                      </span>
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p className="cats-empty-hand">Bạn không còn lá bài nào trên tay.</p>
+              )
+            ) : (
+              <>
+                {hand.map(card => {
+                  const meta = cardCatalog[card.kind];
+                  const isSelected = selected.includes(card.id);
+                  const isMarked = ownPublic?.marked_cards.some(m => m.id === card.id) ?? false;
+                  const playableNow =
+                    (card.kind === 'nope' && canNopeNow) ||
+                    (card.kind === 'alter_future_now' && canAlterFutureNow) ||
+                    (isTurn &&
+                      canAct &&
+                      (meta.comboCat ||
+                        (meta.playableSingle &&
+                          !(card.kind === 'ill_take_that' && !otherPlayers.some(p => p.ill_take_that_by === null)))));
+                  return (
+                    <div key={card.id} className="cats-hand-slot">
+                      <button
+                        type="button"
+                        className={`cats-card${isSelected ? ' is-selected' : ''}${playableNow ? ' is-playable' : ''}${isMarked ? ' is-marked' : ''}`}
+                        aria-pressed={meta.comboCat ? isSelected : undefined}
+                        onClick={() => handleHandCardClick(card)}
+                      >
+                        <CardArtwork kind={card.kind} />
+                        <span className="cats-card-caption">
+                          <strong>
+                            {isMarked ? '👁️ ' : ''}
+                            {meta.name}
+                          </strong>
+                          <small>
+                            {card.kind === 'nope' && canNopeNow
+                              ? 'Bấm để Nope!'
+                              : card.kind === 'alter_future_now' && canAlterFutureNow && !isTurn
+                                ? 'Đánh NGAY!'
+                                : isTurn && meta.comboCat
+                                  ? isSelected
+                                    ? 'Đã chọn'
+                                    : 'Chọn combo'
+                                  : isTurn && meta.playableSingle
+                                    ? 'Bấm để đánh'
+                                    : 'Xem chi tiết'}
+                          </small>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="cats-card-info"
+                        aria-label={`Xem mô tả ${meta.name}`}
+                        onClick={() => setInspectedKind(card.kind)}
+                      >
+                        ?
+                      </button>
+                    </div>
+                  );
+                })}
+                {hand.length === 0 && <p className="cats-empty-hand">Bạn không còn lá bài nào trên tay.</p>}
+              </>
+            )}
           </div>
         </section>
       ) : (

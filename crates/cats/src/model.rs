@@ -18,7 +18,7 @@ pub struct CardId(pub u16);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CardKind {
-    // Base game
+    // Base game (13)
     Exploding,
     Defuse,
     Nope,
@@ -32,30 +32,36 @@ pub enum CardKind {
     CatBeard,
     CatPotato,
     CatCattermelon,
-    // Imploding Kittens expansion
+    // Imploding Kittens expansion (6 new kinds, 20 cards)
     Imploding,
     Reverse,
     DrawBottom,
     FeralCat,
     AlterFuture,
     TargetedAttack,
-    // Streaking Kittens expansion
+    // Streaking Kittens expansion (9 new kinds + 1 extra Exploding = 15 cards)
     Streaking,
     SuperSkip,
     SeeFuture5,
+    AlterFuture5,
     SwapTopBottom,
     GarbageCollection,
     CatomicBomb,
-    // Barking Kittens expansion
-    AlterFuture5,
+    Mark,
+    CurseCatButt,
+    // Barking Kittens expansion (8 new kinds + 1 SuperSkip = 20 cards)
     PersonalAttack,
     ShareFuture,
     Bury,
     Potluck,
+    BarkingKitten,
+    IllTakeThat,
+    TowerOfPower,
+    AlterFutureNow,
 }
 
 impl CardKind {
-    pub const ALL: [Self; 30] = [
+    pub const ALL: [Self; 36] = [
         Self::Exploding,
         Self::Defuse,
         Self::Nope,
@@ -78,14 +84,20 @@ impl CardKind {
         Self::Streaking,
         Self::SuperSkip,
         Self::SeeFuture5,
+        Self::AlterFuture5,
         Self::SwapTopBottom,
         Self::GarbageCollection,
         Self::CatomicBomb,
-        Self::AlterFuture5,
+        Self::Mark,
+        Self::CurseCatButt,
         Self::PersonalAttack,
         Self::ShareFuture,
         Self::Bury,
         Self::Potluck,
+        Self::BarkingKitten,
+        Self::IllTakeThat,
+        Self::TowerOfPower,
+        Self::AlterFutureNow,
     ];
 
     pub const CATS: [Self; 5] = [
@@ -129,14 +141,20 @@ impl CardKind {
                 | Self::TargetedAttack
                 | Self::SuperSkip
                 | Self::SeeFuture5
+                | Self::AlterFuture5
                 | Self::SwapTopBottom
                 | Self::GarbageCollection
                 | Self::CatomicBomb
-                | Self::AlterFuture5
+                | Self::Mark
+                | Self::CurseCatButt
                 | Self::PersonalAttack
                 | Self::ShareFuture
                 | Self::Bury
                 | Self::Potluck
+                | Self::BarkingKitten
+                | Self::IllTakeThat
+                | Self::TowerOfPower
+                | Self::AlterFutureNow
         )
     }
 
@@ -154,10 +172,11 @@ impl CardKind {
         }
     }
 
-    /// Safe cards added by enabled expansion packs.
+    /// Safe cards added by enabled expansion packs (matching official physical boxes).
     pub const fn expansion_count(self, settings: &Settings) -> u16 {
         let mut count = 0;
         if settings.imploding {
+            // 19 safe cards + 1 Imploding = 20 cards total
             count += match self {
                 Self::Reverse | Self::DrawBottom | Self::FeralCat | Self::AlterFuture => 4,
                 Self::TargetedAttack => 3,
@@ -165,20 +184,29 @@ impl CardKind {
             };
         }
         if settings.streaking {
+            // 14 safe cards + 1 extra Exploding = 15 cards total
             count += match self {
+                Self::Mark | Self::SwapTopBottom => 3,
+                Self::CurseCatButt => 2,
                 Self::Streaking
                 | Self::SuperSkip
                 | Self::SeeFuture5
-                | Self::SwapTopBottom
+                | Self::AlterFuture5
                 | Self::GarbageCollection
                 | Self::CatomicBomb => 1,
                 _ => 0,
             };
         }
         if settings.barking {
+            // 20 safe cards total
             count += match self {
-                Self::PersonalAttack => 4,
-                Self::AlterFuture5 | Self::ShareFuture | Self::Bury | Self::Potluck => 2,
+                Self::PersonalAttack | Self::IllTakeThat => 4,
+                Self::BarkingKitten
+                | Self::AlterFutureNow
+                | Self::ShareFuture
+                | Self::Bury
+                | Self::Potluck => 2,
+                Self::TowerOfPower | Self::SuperSkip => 1,
                 _ => 0,
             };
         }

@@ -643,6 +643,7 @@ mod tests {
                 direction: 1,
             },
             deck_count: 0,
+            tower_stash_count: 0,
             top_known: None,
             imploding_face_up: false,
             discard: vec![],

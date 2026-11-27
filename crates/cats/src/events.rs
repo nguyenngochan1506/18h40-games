@@ -90,6 +90,45 @@ pub enum EventKind {
         player: PlayerId,
         exploding_count: usize,
     },
+    CardMarked {
+        actor: PlayerId,
+        target: PlayerId,
+        card: CardView,
+    },
+    PlayerCursed {
+        actor: PlayerId,
+        target: PlayerId,
+    },
+    CurseLifted {
+        player: PlayerId,
+    },
+    BlindCardWasted {
+        player: PlayerId,
+        card: CardView,
+    },
+    BarkingPlaced {
+        player: PlayerId,
+    },
+    BarkingTriggered {
+        actor: PlayerId,
+        target: PlayerId,
+    },
+    IllTakeThatPlaced {
+        actor: PlayerId,
+        target: PlayerId,
+    },
+    IllTakeThatTriggered {
+        owner: PlayerId,
+        victim: PlayerId,
+    },
+    TowerClaimed {
+        player: PlayerId,
+        stash_count: usize,
+    },
+    TowerBlocked {
+        victim: PlayerId,
+        actor: PlayerId,
+    },
     ExplodingDrawn {
         player: PlayerId,
     },

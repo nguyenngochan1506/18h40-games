@@ -17,8 +17,15 @@ fn live_cards(state: &cats::State) -> Vec<CardId> {
     cards.extend(&state.deck);
     cards.extend(&state.discard);
     cards.extend(&state.removed);
+    cards.extend(&state.tower_stash);
     for player in &state.players {
         cards.extend(&player.hand);
+        if let Some(front) = player.barking_front {
+            cards.push(front);
+        }
+        if let Some(trap) = player.ill_take_that {
+            cards.push(trap.card);
+        }
     }
     for frame in &state.pending {
         cards.extend(frame.cards());
@@ -52,6 +59,13 @@ fn extract(state: &mut cats::State, kind: CardKind) -> CardId {
         .position(|card| card.kind() == Some(kind))
     {
         return state.discard.remove(index);
+    }
+    if let Some(index) = state
+        .tower_stash
+        .iter()
+        .position(|card| card.kind() == Some(kind))
+    {
+        return state.tower_stash.remove(index);
     }
     panic!("expected {kind:?} in test deck");
 }
@@ -617,16 +631,30 @@ fn fuzz_bot_finishes_games_for_2_to_8_players_with_all_expansions_and_conserves_
 
                 let (player, action) = if state.pending.is_empty() && rng.random_bool(0.55) {
                     let p = state.turn.player;
-                    let playable: Vec<CardId> = state.players[p.0]
-                        .hand
-                        .iter()
-                        .copied()
-                        .filter(|c| c.kind().is_some_and(CardKind::is_playable_single))
-                        .collect();
-                    if let Some(&card) = playable.first() {
-                        (p, Action::PlayCard { card })
+                    if state.players[p.0].cursed {
+                        if !state.players[p.0].hand.is_empty() && rng.random_bool(0.5) {
+                            (p, Action::PlayBlind { slot: 0 })
+                        } else {
+                            (p, Action::Draw)
+                        }
                     } else {
-                        default_action(&state).unwrap()
+                        let playable: Vec<CardId> = state.players[p.0]
+                            .hand
+                            .iter()
+                            .copied()
+                            .filter(|c| {
+                                c.kind().is_some_and(|kind| {
+                                    kind.is_playable_single()
+                                        && !(kind == CardKind::IllTakeThat
+                                            && state.first_ill_take_that_target(p).is_none())
+                                })
+                            })
+                            .collect();
+                        if let Some(&card) = playable.first() {
+                            (p, Action::PlayCard { card })
+                        } else {
+                            default_action(&state).unwrap()
+                        }
                     }
                 } else {
                     default_action(&state).unwrap()
@@ -643,6 +671,360 @@ fn fuzz_bot_finishes_games_for_2_to_8_players_with_all_expansions_and_conserves_
             assert_eq!(state.active_count(), 1);
         }
     }
+}
+
+#[test]
+fn official_expansion_card_counts_match_20_15_20() {
+    let imploding_only = Settings {
+        imploding: true,
+        streaking: false,
+        barking: false,
+    };
+    let streaking_only = Settings {
+        imploding: false,
+        streaking: true,
+        barking: false,
+    };
+    let barking_only = Settings {
+        imploding: false,
+        streaking: false,
+        barking: true,
+    };
+    let imp_safe: u16 = CardKind::ALL
+        .iter()
+        .map(|k| k.expansion_count(&imploding_only))
+        .sum();
+    let str_safe: u16 = CardKind::ALL
+        .iter()
+        .map(|k| k.expansion_count(&streaking_only))
+        .sum();
+    let brk_safe: u16 = CardKind::ALL
+        .iter()
+        .map(|k| k.expansion_count(&barking_only))
+        .sum();
+    assert_eq!(imp_safe + 1, 20); // +1 Imploding Kitten
+    assert_eq!(str_safe + 1, 15); // +1 extra Exploding Kitten
+    assert_eq!(brk_safe, 20);
+}
+
+#[test]
+fn mark_reveals_card_publicly_and_clears_when_card_leaves_hand() {
+    let mut rng = seeded(801);
+    let (mut state, _) = setup(3, Settings::default(), &mut rng).unwrap();
+    let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+    let (actor, target) = starting_turn(&state);
+    let mark = extract(&mut state, CardKind::Mark);
+    state.players[actor.0].hand.push(mark);
+
+    apply(&mut state, actor, Action::PlayCard { card: mark }, &mut rng).unwrap();
+    let pid = decision(&state).unwrap().pending_id.unwrap();
+    apply(
+        &mut state,
+        actor,
+        Action::MarkTarget {
+            pending_id: pid,
+            target,
+        },
+        &mut rng,
+    )
+    .unwrap();
+
+    let spec = spectator_view(&state);
+    assert_eq!(spec.players[target.0].marked_cards.len(), 1);
+    let marked_id = spec.players[target.0].marked_cards[0].id;
+    assert!(state.players[target.0].hand.contains(&marked_id));
+
+    // When target gives away that marked card, it stops being marked.
+    let favour = extract(&mut state, CardKind::Favour);
+    state.players[actor.0].hand.push(favour);
+    apply(
+        &mut state,
+        actor,
+        Action::PlayCard { card: favour },
+        &mut rng,
+    )
+    .unwrap();
+    let pid = decision(&state).unwrap().pending_id.unwrap();
+    apply(
+        &mut state,
+        actor,
+        Action::FavourTarget {
+            pending_id: pid,
+            target,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    let pid = decision(&state).unwrap().pending_id.unwrap();
+    apply(
+        &mut state,
+        target,
+        Action::FavourCard {
+            pending_id: pid,
+            card: marked_id,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert!(
+        spectator_view(&state).players[target.0]
+            .marked_cards
+            .is_empty()
+    );
+    assert_card_conservation(&state, &initial);
+}
+
+#[test]
+fn curse_of_the_cat_butt_hides_hand_plays_or_wastes_blind_and_lifts_on_draw() {
+    let mut rng = seeded(802);
+    let (mut state, _) = setup(2, Settings::default(), &mut rng).unwrap();
+    let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+    let (actor, target) = starting_turn(&state);
+
+    let curse = extract(&mut state, CardKind::CurseCatButt);
+    let skip = extract(&mut state, CardKind::Skip);
+    state.players[actor.0].hand.push(curse);
+    state.players[actor.0].hand.push(skip);
+
+    apply(
+        &mut state,
+        actor,
+        Action::PlayCard { card: curse },
+        &mut rng,
+    )
+    .unwrap();
+    let pid = decision(&state).unwrap().pending_id.unwrap();
+    apply(
+        &mut state,
+        actor,
+        Action::CurseTarget {
+            pending_id: pid,
+            target,
+        },
+        &mut rng,
+    )
+    .unwrap();
+
+    // Victim's private view must hide their entire hand!
+    let target_view = view(&state, target);
+    assert!(target_view.cursed);
+    assert!(target_view.hand.is_empty());
+    assert!(target_view.table.players[target.0].hand_count > 0);
+
+    // End actor's turn with Skip so target takes their turn cursed.
+    apply(&mut state, actor, Action::PlayCard { card: skip }, &mut rng).unwrap();
+    assert_eq!(state.turn.player, target);
+
+    // Put a non-playable Cat card at slot 0 to verify blind waste.
+    let taco = extract(&mut state, CardKind::CatTaco);
+    state.players[target.0].hand.insert(0, taco);
+    assert!(
+        apply(
+            &mut state,
+            target,
+            Action::PlayCard { card: taco },
+            &mut rng
+        )
+        .is_err()
+    );
+    let events = apply(&mut state, target, Action::PlayBlind { slot: 0 }, &mut rng).unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e.kind, cats::events::EventKind::BlindCardWasted { .. }))
+    );
+    assert!(state.discard.contains(&taco));
+
+    // Put a safe card on top of deck and draw to lift the curse.
+    let safe = extract(&mut state, CardKind::CatPotato);
+    state.deck.push(safe);
+    apply(&mut state, target, Action::Draw, &mut rng).unwrap();
+    assert!(!state.players[target.0].cursed);
+    assert!(!view(&state, target).hand.is_empty());
+    assert_card_conservation(&state, &initial);
+}
+
+#[test]
+fn barking_kitten_places_front_and_blasts_opponent_defuse_or_eliminates() {
+    let mut rng = seeded(803);
+    let (mut state, _) = setup(3, Settings::default(), &mut rng).unwrap();
+    let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+    let (actor, target) = starting_turn(&state);
+
+    let b1 = extract(&mut state, CardKind::BarkingKitten);
+    let b2 = extract(&mut state, CardKind::BarkingKitten);
+    state.players[actor.0].hand.push(b1);
+    state.players[target.0].hand.push(b2);
+
+    // Target has a Defuse, so playing b1 matches b2 in target's hand and forces target to burn Defuse.
+    let defuse_before = state.players[target.0]
+        .hand
+        .iter()
+        .filter(|c| c.kind() == Some(CardKind::Defuse))
+        .count();
+    let events = apply(&mut state, actor, Action::PlayCard { card: b1 }, &mut rng).unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e.kind, cats::events::EventKind::BarkingTriggered { actor: a, target: t } if a == actor && t == target))
+    );
+    let defuse_after = state.players[target.0]
+        .hand
+        .iter()
+        .filter(|c| c.kind() == Some(CardKind::Defuse))
+        .count();
+    assert_eq!(defuse_after, defuse_before - 1);
+    assert!(!state.players[target.0].eliminated);
+    assert!(state.discard.contains(&b1));
+    assert!(state.discard.contains(&b2));
+    assert_card_conservation(&state, &initial);
+}
+
+#[test]
+fn ill_take_that_intercepts_draw_and_transfers_bomb_risk_to_owner() {
+    let mut rng = seeded(804);
+    let (mut state, _) = setup(3, Settings::default(), &mut rng).unwrap();
+    let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+    let (actor, target) = starting_turn(&state);
+
+    let trap = extract(&mut state, CardKind::IllTakeThat);
+    let skip = extract(&mut state, CardKind::Skip);
+    let bomb = extract(&mut state, CardKind::Exploding);
+    state.players[actor.0].hand.push(trap);
+    state.players[actor.0].hand.push(skip);
+    state.deck.push(bomb);
+
+    apply(&mut state, actor, Action::PlayCard { card: trap }, &mut rng).unwrap();
+    let pid = decision(&state).unwrap().pending_id.unwrap();
+    apply(
+        &mut state,
+        actor,
+        Action::IllTakeThatTarget {
+            pending_id: pid,
+            target,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert_eq!(
+        spectator_view(&state).players[target.0].ill_take_that_by,
+        Some(actor)
+    );
+
+    // Actor skips; target draws -> bomb goes to actor (who must Defuse), target survives!
+    apply(&mut state, actor, Action::PlayCard { card: skip }, &mut rng).unwrap();
+    assert_eq!(state.turn.player, target);
+    apply(&mut state, target, Action::Draw, &mut rng).unwrap();
+    let dec = decision(&state).unwrap();
+    assert_eq!(dec.player, actor);
+    assert!(matches!(dec.kind, cats::state::DecisionKind::Defuse { .. }));
+    assert_card_conservation(&state, &initial);
+}
+
+#[test]
+fn tower_of_power_redirects_steals_to_stash() {
+    let mut rng = seeded(805);
+    let (mut state, _) = setup(3, Settings::default(), &mut rng).unwrap();
+    let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+    let (actor, target) = starting_turn(&state);
+    assert_eq!(state.tower_stash.len(), 6);
+
+    let tower = extract(&mut state, CardKind::TowerOfPower);
+    let skip = extract(&mut state, CardKind::Skip);
+    let favour = extract(&mut state, CardKind::Favour);
+    state.players[actor.0].hand.push(tower);
+    state.players[actor.0].hand.push(skip);
+    state.players[target.0].hand.push(favour);
+
+    apply(
+        &mut state,
+        actor,
+        Action::PlayCard { card: tower },
+        &mut rng,
+    )
+    .unwrap();
+    assert_eq!(state.tower_owner, Some(actor));
+    apply(&mut state, actor, Action::PlayCard { card: skip }, &mut rng).unwrap();
+
+    // Target plays Favour on actor -> must blindly draw from Tower Stash, leaving actor's hand untouched!
+    let actor_hand_before = state.players[actor.0].hand.clone();
+    apply(
+        &mut state,
+        target,
+        Action::PlayCard { card: favour },
+        &mut rng,
+    )
+    .unwrap();
+    let pid = decision(&state).unwrap().pending_id.unwrap();
+    let events = apply(
+        &mut state,
+        target,
+        Action::FavourTarget {
+            pending_id: pid,
+            target: actor,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e.kind, cats::events::EventKind::TowerBlocked { victim, actor: a } if victim == actor && a == target))
+    );
+    assert_eq!(state.players[actor.0].hand, actor_hand_before);
+    assert_eq!(state.tower_stash.len(), 5);
+    assert_card_conservation(&state, &initial);
+}
+
+#[test]
+fn alter_future_now_plays_out_of_turn_and_preserves_turn_owner() {
+    let mut rng = seeded(806);
+    let (mut state, _) = setup(3, Settings::default(), &mut rng).unwrap();
+    let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+    let (active, other) = starting_turn(&state);
+
+    let now_card = extract(&mut state, CardKind::AlterFutureNow);
+    state.players[other.0].hand.push(now_card);
+
+    // `other` plays AlterFutureNow during `active`'s turn!
+    apply(
+        &mut state,
+        other,
+        Action::PlayCard { card: now_card },
+        &mut rng,
+    )
+    .unwrap();
+    let dec = decision(&state).unwrap();
+    assert_eq!(dec.player, other);
+    assert!(matches!(
+        dec.kind,
+        cats::state::DecisionKind::AlterFuture {
+            count: 3,
+            share_with_next: false
+        }
+    ));
+
+    let mut order: Vec<CardId> = view(&state, other)
+        .preview_cards
+        .iter()
+        .map(|c| c.id)
+        .collect();
+    order.reverse();
+    apply(
+        &mut state,
+        other,
+        Action::ReorderFuture {
+            pending_id: dec.pending_id.unwrap(),
+            order,
+        },
+        &mut rng,
+    )
+    .unwrap();
+
+    // Turn stays with `active`!
+    assert_eq!(state.turn.player, active);
+    assert_eq!(decision(&state).unwrap().player, active);
+    assert_card_conservation(&state, &initial);
 }
 
 #[test]

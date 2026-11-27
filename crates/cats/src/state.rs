@@ -2,9 +2,19 @@ use crate::model::{CardId, CardKind, PlayerId, Settings};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IllTakeThatTrap {
+    pub owner: PlayerId,
+    pub card: CardId,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Player {
     pub hand: Vec<CardId>,
+    pub marked_cards: Vec<CardId>,
+    pub cursed: bool,
+    pub barking_front: Option<CardId>,
+    pub ill_take_that: Option<IllTakeThatTrap>,
     pub eliminated: bool,
 }
 
@@ -33,6 +43,7 @@ pub enum PendingKind {
     InsertImploding {
         player: PlayerId,
         card: CardId,
+        end_turn: bool,
     },
     BuryCard {
         player: PlayerId,
@@ -70,6 +81,19 @@ pub enum PendingKind {
         queue: Vec<PlayerId>,
         shuffle_after: bool,
     },
+    MarkTarget {
+        actor: PlayerId,
+    },
+    CurseTarget {
+        actor: PlayerId,
+    },
+    IllTakeThatTarget {
+        actor: PlayerId,
+        card: CardId,
+    },
+    BarkingTarget {
+        actor: PlayerId,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,7 +113,11 @@ impl Pending {
             | PendingKind::RandomTarget { actor }
             | PendingKind::StealTarget { actor }
             | PendingKind::TakeDiscard { actor }
-            | PendingKind::AlterFuture { actor, .. } => Some(*actor),
+            | PendingKind::AlterFuture { actor, .. }
+            | PendingKind::MarkTarget { actor }
+            | PendingKind::CurseTarget { actor }
+            | PendingKind::IllTakeThatTarget { actor, .. }
+            | PendingKind::BarkingTarget { actor } => Some(*actor),
             PendingKind::FavourCard { target, .. } => Some(*target),
             PendingKind::StealKind { actor, .. } => Some(*actor),
             PendingKind::GiveToDeck { queue, .. } => queue.first().copied(),
@@ -129,6 +157,10 @@ pub enum DecisionKind {
     TakeDiscard,
     AlterFuture { count: usize, share_with_next: bool },
     GiveToDeck { shuffle_after: bool },
+    MarkTarget,
+    CurseTarget,
+    IllTakeThatTarget,
+    BarkingTarget,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -168,6 +200,8 @@ pub struct History {
     pub deck: Vec<CardId>,
     pub discard: Vec<CardId>,
     pub removed: Vec<CardId>,
+    pub tower_stash: Vec<CardId>,
+    pub tower_owner: Option<PlayerId>,
     pub face_up: BTreeSet<CardId>,
     pub imploding_face_up: bool,
     pub turn: TurnState,
@@ -192,9 +226,12 @@ pub struct State {
     /// The last element is the top of the deck.
     pub deck: Vec<CardId>,
     pub discard: Vec<CardId>,
-    /// Exploding/Imploding cards that eliminated a player. Kept for CardId accounting
-    /// and never offered to five-cat combos.
+    /// Exploding/Imploding/Barking lethal cards that eliminated a player. Kept for
+    /// CardId accounting and never offered to five-cat combos.
     pub removed: Vec<CardId>,
+    /// Face-down Tower of Power stash cards (6 cards dealt at setup when barking is enabled).
+    pub tower_stash: Vec<CardId>,
+    pub tower_owner: Option<PlayerId>,
     /// Cards currently face-up in the draw pile (e.g. flipped Imploding Kitten or Catomic Bomb).
     pub face_up: BTreeSet<CardId>,
     pub imploding_face_up: bool,
@@ -262,6 +299,12 @@ impl State {
         self.active_players().find(|candidate| *candidate != player)
     }
 
+    pub fn first_ill_take_that_target(&self, player: PlayerId) -> Option<PlayerId> {
+        self.active_players().find(|candidate| {
+            *candidate != player && self.players[candidate.0].ill_take_that.is_none()
+        })
+    }
+
     pub fn top_known_card(&self) -> Option<CardKind> {
         let top = self.deck.last()?;
         self.face_up.contains(top).then(|| top.kind()).flatten()
@@ -301,6 +344,10 @@ impl State {
                 PendingKind::GiveToDeck { shuffle_after, .. } => {
                     DecisionKind::GiveToDeck { shuffle_after }
                 }
+                PendingKind::MarkTarget { .. } => DecisionKind::MarkTarget,
+                PendingKind::CurseTarget { .. } => DecisionKind::CurseTarget,
+                PendingKind::IllTakeThatTarget { .. } => DecisionKind::IllTakeThatTarget,
+                PendingKind::BarkingTarget { .. } => DecisionKind::BarkingTarget,
             };
             return Some(Decision {
                 player,
@@ -330,6 +377,8 @@ impl State {
             deck: self.deck.clone(),
             discard: self.discard.clone(),
             removed: self.removed.clone(),
+            tower_stash: self.tower_stash.clone(),
+            tower_owner: self.tower_owner,
             face_up: self.face_up.clone(),
             imploding_face_up: self.imploding_face_up,
             turn: self.turn,
@@ -343,6 +392,8 @@ impl State {
         self.deck = history.deck;
         self.discard = history.discard;
         self.removed = history.removed;
+        self.tower_stash = history.tower_stash;
+        self.tower_owner = history.tower_owner;
         self.face_up = history.face_up;
         self.imploding_face_up = history.imploding_face_up;
         self.turn = history.turn;
@@ -363,11 +414,12 @@ impl State {
     }
 
     pub(crate) fn remove_from_hand(&mut self, player: PlayerId, card: CardId) -> bool {
-        let hand = &mut self.players[player.0].hand;
-        let Some(index) = hand.iter().position(|held| *held == card) else {
+        let entry = &mut self.players[player.0];
+        let Some(index) = entry.hand.iter().position(|held| *held == card) else {
             return false;
         };
-        hand.remove(index);
+        entry.hand.remove(index);
+        entry.marked_cards.retain(|marked| *marked != card);
         true
     }
 

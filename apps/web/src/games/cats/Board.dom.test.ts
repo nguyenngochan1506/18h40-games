@@ -88,19 +88,40 @@ function playerView(
   current: CatsDecision = { player: 0, pending_id: null, kind: { type: 'turn' } },
   previewCards: CatsCardView[] = [],
   winner: number | null = null,
+  cursed = false,
 ): GameView {
   const view: CatsPlayerView = {
     you: 0,
-    hand,
+    hand: cursed ? [] : hand,
+    cursed,
     preview_cards: previewCards,
     table: {
       settings: defaultSettings,
       players: [
-        { id: 0, hand_count: hand.length, eliminated: false },
-        { id: 1, hand_count: 8, eliminated: winner !== null },
+        {
+          id: 0,
+          hand_count: hand.length,
+          marked_cards: [],
+          cursed,
+          barking_in_front: false,
+          ill_take_that_by: null,
+          has_tower: false,
+          eliminated: false,
+        },
+        {
+          id: 1,
+          hand_count: 8,
+          marked_cards: [],
+          cursed: false,
+          barking_in_front: false,
+          ill_take_that_by: null,
+          has_tower: false,
+          eliminated: winner !== null,
+        },
       ],
       turn: { player: 0, turns_left: 1, direction: 1 },
       deck_count: 20,
+      tower_stash_count: 6,
       top_known: null,
       imploding_face_up: false,
       discard: [],
@@ -287,4 +308,38 @@ test('Nope works outside own turn, Future stays private, and Settings toggles ex
     game: 'cats',
     payload: { imploding: false, streaking: true, barking: true },
   });
+});
+
+test('cursed blind hand emits play_blind and Alter Future NOW works outside own turn', async t => {
+  const { container, root } = await mount(t);
+  const sent: GameAction[] = [];
+
+  // Cursed player sees face-down slots and clicks slot 0 -> play_blind
+  await act(async () => root.render(createElement(Board, propsFor(
+    playerView(
+      [{ id: 1, kind: 'skip' }, { id: 2, kind: 'cat_taco' }],
+      { player: 0, pending_id: null, kind: { type: 'turn' } },
+      [],
+      null,
+      true,
+    ),
+    sent,
+  ))));
+  const blindCards = container.querySelectorAll<HTMLButtonElement>('.cats-blind-card');
+  assert.equal(blindCards.length, 2);
+  await act(() => blindCards[0].click());
+  assert.deepEqual(sent.pop(), { game: 'cats', payload: { type: 'play_blind', slot: 0 } });
+
+  // Alter Future NOW works during opponent's turn
+  await act(async () => root.render(createElement(Board, propsFor(
+    playerView(
+      [{ id: 99, kind: 'alter_future_now' }],
+      { player: 1, pending_id: null, kind: { type: 'turn' } },
+    ),
+    sent,
+  ))));
+  const nowBtn = container.querySelector<HTMLButtonElement>('.cats-alter-now');
+  assert.ok(nowBtn);
+  await act(() => nowBtn.click());
+  assert.deepEqual(sent.pop(), { game: 'cats', payload: { type: 'play_card', card: 99 } });
 });

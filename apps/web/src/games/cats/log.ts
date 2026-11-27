@@ -34,6 +34,7 @@ export const initialCatsState: CatsClientState = {
 export type UnwrappedCatsView = {
   you: number | null;
   hand: CatsCardView[];
+  cursed: boolean;
   previewCards: CatsCardView[];
   table: CatsSpectatorView;
 };
@@ -45,6 +46,7 @@ export function selectCatsView(view: GameView): UnwrappedCatsView | null {
     return {
       you: own.you,
       hand: own.hand,
+      cursed: own.cursed,
       previewCards: own.preview_cards,
       table: own.table,
     };
@@ -52,6 +54,7 @@ export function selectCatsView(view: GameView): UnwrappedCatsView | null {
   return {
     you: null,
     hand: [],
+    cursed: false,
     previewCards: [],
     table: view.payload.view,
   };
@@ -143,6 +146,56 @@ export function formatCatsEvent(
       return {
         text: `${who(event.player)} kích hoạt Bom Nguyên Tử Mèo! ${event.exploding_count} Mèo Nổ lên đỉnh bộ rút!`,
         tone: 'danger',
+      };
+    case 'card_marked':
+      return {
+        text: `👁️ ${who(event.actor)} đánh dấu lá ${cardCatalog[event.card.kind].name} trên tay ${who(event.target)}.`,
+        tone: 'normal',
+      };
+    case 'player_cursed':
+      return {
+        text: `🙈 ${who(event.actor)} tung Lời Nguyền Mông Mèo lên ${who(event.target)} — tay bài bị úp mù!`,
+        tone: 'danger',
+      };
+    case 'curse_lifted':
+      return {
+        text: `✨ ${who(event.player)} rút bài thành công và giải được Lời Nguyền Mông Mèo.`,
+        tone: 'normal',
+      };
+    case 'blind_card_wasted':
+      return {
+        text: `💨 ${who(event.player)} đánh mù trúng ${cardCatalog[event.card.kind].name} (không dùng lẻ được, bị bỏ phí).`,
+        tone: 'normal',
+      };
+    case 'barking_placed':
+      return {
+        text: `🐶 ${who(event.player)} đặt ngửa Mèo Sủa trước mặt, chờ lá thứ hai xuất hiện!`,
+        tone: 'danger',
+      };
+    case 'barking_triggered':
+      return {
+        text: `🐶💥 Mèo Sủa của ${who(event.actor)} kích nổ nhắm thẳng vào ${who(event.target)}!`,
+        tone: 'danger',
+      };
+    case 'ill_take_that_placed':
+      return {
+        text: `🎯 ${who(event.actor)} đặt bẫy "Tớ Lấy Nhé" trước mặt ${who(event.target)}.`,
+        tone: 'normal',
+      };
+    case 'ill_take_that_triggered':
+      return {
+        text: `🎯 Bẫy "Tớ Lấy Nhé" kích hoạt! Lá bài ${who(event.victim)} vừa rút thuộc về ${who(event.owner)}.`,
+        tone: 'danger',
+      };
+    case 'tower_claimed':
+      return {
+        text: `👑 ${who(event.player)} đội vương miện Tháp Quyền Lực (${event.stash_count} lá Stash bảo vệ tay bài)!`,
+        tone: 'normal',
+      };
+    case 'tower_blocked':
+      return {
+        text: `👑 Tháp Quyền Lực bảo vệ ${who(event.victim)} — ${who(event.actor)} phải bốc mù 1 lá từ kho Stash!`,
+        tone: 'normal',
       };
     case 'exploding_drawn':
       return { text: `💣 ${who(event.player)} rút phải Mèo Nổ!`, tone: 'danger' };

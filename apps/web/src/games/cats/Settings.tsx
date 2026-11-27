@@ -9,18 +9,18 @@ const packs: Array<{
 }> = [
   {
     key: 'imploding',
-    title: 'Imploding Kittens',
-    summary: 'Thêm Mèo Sập (không thể Gỡ Bom khi ngửa), Đảo Chiều, Rút Đáy, Mèo Hoang (Wild), Đổi Tương Lai 3x, Tấn Công Chỉ Định.',
+    title: 'Imploding Kittens (20 lá)',
+    summary: 'Mèo Sập (không thể Gỡ Bom khi ngửa), Đảo Chiều, Rút Đáy, Mèo Hoang (Wild), Đổi Tương Lai 3x, Tấn Công Chỉ Định.',
   },
   {
     key: 'streaking',
-    title: 'Streaking Kittens',
-    summary: 'Thêm Mèo Chạy Rông (ôm kín 1 Mèo Nổ), Siêu Bỏ Lượt, Nhìn Tương Lai 5x, Đổi Đầu Đuôi, Thu Gom Rác, Bom Nguyên Tử Mèo.',
+    title: 'Streaking Kittens (15 lá)',
+    summary: 'Mèo Chạy Rông (ôm kín 1 Mèo Nổ), Đánh Dấu, Lời Nguyền Mông Mèo (mù bài), Siêu Bỏ Lượt, Nhìn/Đổi Tương Lai 5x, Đổi Đầu Đuôi, Thu Gom Rác, Bom Nguyên Tử Mèo.',
   },
   {
     key: 'barking',
-    title: 'Barking Kittens',
-    summary: 'Thêm Đổi Tương Lai 5x, Tự Tấn Công (3 lượt), Chia Sẻ Tương Lai, Chôn Bài, Góp Tiệc.',
+    title: 'Barking Kittens (20 lá)',
+    summary: 'Mèo Sủa, Tớ Lấy Nhé, Tháp Quyền Lực (kho Stash 6 lá), Đổi Tương Lai 3x NGAY, Tự Tấn Công, Chia Sẻ Tương Lai, Chôn Bài, Góp Tiệc, Siêu Bỏ Lượt.',
   },
 ];
 

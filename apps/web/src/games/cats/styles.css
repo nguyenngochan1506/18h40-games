@@ -1086,6 +1086,78 @@
   font-size: 12px;
 }
 
+.game-cats .cats-tower-pill {
+  margin: 6px 0 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #3d2814e0;
+  border: 1px solid #d4a653;
+  color: #ffe59e;
+  font: 600 11px system-ui, sans-serif;
+}
+
+.game-cats .cats-seat-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.game-cats .cats-badge,
+.game-cats .cats-marked-chip {
+  padding: 2px 6px;
+  border-radius: 999px;
+  font: 700 10px/1.2 system-ui, sans-serif;
+  box-shadow: 0 2px 6px #0f0704b3;
+}
+
+.game-cats .cats-badge.is-tower {
+  background: #6c4610;
+  color: #ffe89e;
+  border: 1px solid #e6b85c;
+}
+
+.game-cats .cats-badge.is-danger {
+  background: #8e1e15;
+  color: #ffe8dc;
+}
+
+.game-cats .cats-badge.is-trap {
+  background: #532c75;
+  color: #f3e2ff;
+}
+
+.game-cats .cats-badge.is-curse {
+  background: #463a2a;
+  color: #f4d8a8;
+}
+
+.game-cats .cats-marked-chip {
+  border: 1px solid #8bd4ff;
+  background: #133b56;
+  color: #dff4ff;
+  cursor: pointer;
+}
+
+.game-cats .cats-curse-note {
+  margin: 0 0 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #5a2717;
+  color: #ffdfbe;
+  font: 600 11px/1.3 system-ui, sans-serif;
+}
+
+.game-cats .cats-card.is-marked {
+  box-shadow: 0 0 0 2px #78ccff;
+}
+
+.game-cats .cats-now-bar {
+  border-color: #7c59c7;
+  background: #231538eb;
+}
+
 @keyframes cats-danger-pulse {
   0%,
   100% {

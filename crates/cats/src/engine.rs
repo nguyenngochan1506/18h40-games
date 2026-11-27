@@ -3,9 +3,12 @@ use crate::{
     deck,
     events::{Event, EventKind},
     model::{CardId, CardKind, CardView, PlayerId, Settings},
-    state::{LastAction, PendingKind, PlayedAction, State, TurnState},
+    state::{IllTakeThatTrap, LastAction, PendingKind, PlayedAction, State, TurnState},
 };
-use rand::{Rng, seq::SliceRandom};
+use rand::{
+    Rng,
+    seq::{IndexedRandom, SliceRandom},
+};
 use std::collections::BTreeSet;
 
 const MIN_PLAYERS: usize = 2;
@@ -19,11 +22,15 @@ pub fn setup<R: Rng + ?Sized>(
     if !(MIN_PLAYERS..=MAX_PLAYERS).contains(&player_count) {
         return Err(ActionError::InvalidPlayerCount);
     }
-    let (hands, deck) = deck::deal(player_count, &settings, rng);
+    let (hands, deck, tower_stash) = deck::deal(player_count, &settings, rng);
     let players = hands
         .into_iter()
         .map(|hand| crate::state::Player {
             hand,
+            marked_cards: Vec::new(),
+            cursed: false,
+            barking_front: None,
+            ill_take_that: None,
             eliminated: false,
         })
         .collect();
@@ -34,6 +41,8 @@ pub fn setup<R: Rng + ?Sized>(
         deck,
         discard: Vec::new(),
         removed: Vec::new(),
+        tower_stash,
+        tower_owner: None,
         face_up: BTreeSet::new(),
         imploding_face_up: false,
         turn: TurnState {
@@ -74,6 +83,10 @@ pub fn apply<R: Rng + ?Sized>(
     match action {
         Action::Draw => draw_from_deck(state, player, false, rng, &mut events),
         Action::PlayCard { card } => play_card(state, player, card, rng, &mut events),
+        Action::PlayBlind { slot } => play_blind(state, player, slot, rng, &mut events),
+        Action::ChooseBlindCard { slot, .. } => {
+            choose_blind_card(state, player, slot, rng, &mut events)
+        }
         Action::PlayPair { cards } => play_pair(state, player, &cards, &mut events),
         Action::PlayTriple { cards } => play_triple(state, player, &cards, &mut events),
         Action::PlayFive { cards } => play_five(state, player, &cards, &mut events),
@@ -84,18 +97,26 @@ pub fn apply<R: Rng + ?Sized>(
         }
         Action::BuryCard { position, .. } => bury_card(state, player, position, &mut events),
         Action::AttackTarget { target, .. } => attack_target(state, player, target, &mut events),
-        Action::FavourTarget { target, .. } => favour_target(state, player, target, &mut events),
+        Action::FavourTarget { target, .. } => {
+            favour_target(state, player, target, rng, &mut events)
+        }
         Action::FavourCard { card, .. } => favour_card(state, player, card, &mut events),
         Action::RandomTarget { target, .. } => {
             random_target(state, player, target, rng, &mut events)
         }
-        Action::StealTarget { target, .. } => steal_target(state, player, target, &mut events),
+        Action::StealTarget { target, .. } => steal_target(state, player, target, rng, &mut events),
         Action::StealKind { kind, .. } => steal_kind(state, kind, &mut events),
         Action::TakeDiscard { card, .. } => take_discard(state, player, card, &mut events),
         Action::ReorderFuture { order, .. } => reorder_future(state, player, &order, &mut events),
         Action::PutCardInDeck { card, .. } => {
             put_card_in_deck(state, player, card, rng, &mut events)
         }
+        Action::MarkTarget { target, .. } => mark_target(state, player, target, rng, &mut events),
+        Action::CurseTarget { target, .. } => curse_target(state, player, target, rng, &mut events),
+        Action::IllTakeThatTarget { target, .. } => {
+            ill_take_that_target(state, player, target, &mut events)
+        }
+        Action::BarkingTarget { target, .. } => barking_target(state, player, target, &mut events),
     }
     events.push(Event::public(EventKind::DecisionChanged {
         decision: state.decision(),
@@ -166,6 +187,9 @@ fn validate(state: &State, player: PlayerId, action: &Action) -> Result<(), Acti
     }
 
     if let Action::Nope { pending_id } = action {
+        if own.cursed {
+            return Err(ActionError::WrongAction);
+        }
         let last = state
             .last_action
             .as_ref()
@@ -192,6 +216,24 @@ fn validate(state: &State, player: PlayerId, action: &Action) -> Result<(), Acti
             return Err(ActionError::NotYourDecision);
         }
         return match action {
+            Action::ChooseBlindCard { pending_id, slot } => {
+                if *pending_id != frame.id {
+                    return Err(ActionError::StalePending);
+                }
+                if !own.cursed {
+                    return Err(ActionError::WrongAction);
+                }
+                if *slot >= own.hand.len() {
+                    return Err(ActionError::OutOfRange);
+                }
+                match &frame.kind {
+                    PendingKind::FavourCard { target, .. } if *target == player => Ok(()),
+                    PendingKind::GiveToDeck { queue, .. } if queue.first() == Some(&player) => {
+                        Ok(())
+                    }
+                    _ => Err(ActionError::WrongAction),
+                }
+            }
             Action::Defuse {
                 pending_id,
                 position,
@@ -271,6 +313,9 @@ fn validate(state: &State, player: PlayerId, action: &Action) -> Result<(), Acti
             Action::FavourCard { pending_id, card } => {
                 if *pending_id != frame.id {
                     return Err(ActionError::StalePending);
+                }
+                if own.cursed {
+                    return Err(ActionError::WrongAction);
                 }
                 match frame.kind {
                     PendingKind::FavourCard { target, .. } if target == player => {
@@ -359,6 +404,9 @@ fn validate(state: &State, player: PlayerId, action: &Action) -> Result<(), Acti
                 if *pending_id != frame.id {
                     return Err(ActionError::StalePending);
                 }
+                if own.cursed {
+                    return Err(ActionError::WrongAction);
+                }
                 match &frame.kind {
                     PendingKind::GiveToDeck { queue, .. } if queue.first() == Some(&player) => {
                         if own.hand.contains(card) {
@@ -370,17 +418,92 @@ fn validate(state: &State, player: PlayerId, action: &Action) -> Result<(), Acti
                     _ => Err(ActionError::WrongAction),
                 }
             }
+            Action::MarkTarget { pending_id, target } => {
+                if *pending_id != frame.id {
+                    return Err(ActionError::StalePending);
+                }
+                match frame.kind {
+                    PendingKind::MarkTarget { actor } if actor == player => {
+                        other_active(state, player, *target)
+                    }
+                    _ => Err(ActionError::WrongAction),
+                }
+            }
+            Action::CurseTarget { pending_id, target } => {
+                if *pending_id != frame.id {
+                    return Err(ActionError::StalePending);
+                }
+                match frame.kind {
+                    PendingKind::CurseTarget { actor } if actor == player => {
+                        other_active(state, player, *target)
+                    }
+                    _ => Err(ActionError::WrongAction),
+                }
+            }
+            Action::IllTakeThatTarget { pending_id, target } => {
+                if *pending_id != frame.id {
+                    return Err(ActionError::StalePending);
+                }
+                match frame.kind {
+                    PendingKind::IllTakeThatTarget { actor, .. } if actor == player => {
+                        other_active(state, player, *target)?;
+                        if state.players[target.0].ill_take_that.is_some() {
+                            Err(ActionError::InvalidTarget)
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    _ => Err(ActionError::WrongAction),
+                }
+            }
+            Action::BarkingTarget { pending_id, target } => {
+                if *pending_id != frame.id {
+                    return Err(ActionError::StalePending);
+                }
+                match frame.kind {
+                    PendingKind::BarkingTarget { actor } if actor == player => {
+                        other_active(state, player, *target)
+                    }
+                    _ => Err(ActionError::WrongAction),
+                }
+            }
             _ => Err(ActionError::WrongAction),
         };
+    }
+
+    // Alter the Future (3x) NOW can be played by any active uncursed player during a turn!
+    if let Action::PlayCard { card } = action
+        && !own.cursed
+        && held_kind(state, player, *card) == Ok(CardKind::AlterFutureNow)
+    {
+        return Ok(());
     }
 
     if state.turn.player != player {
         return Err(ActionError::NotYourDecision);
     }
+
+    if own.cursed {
+        return match action {
+            Action::Draw => Ok(()),
+            Action::PlayBlind { slot } => {
+                if *slot < own.hand.len() {
+                    Ok(())
+                } else {
+                    Err(ActionError::OutOfRange)
+                }
+            }
+            _ => Err(ActionError::WrongAction),
+        };
+    }
+
     match action {
         Action::Draw => Ok(()),
         Action::PlayCard { card } => {
             let kind = held_kind(state, player, *card)?;
+            if kind == CardKind::IllTakeThat && state.first_ill_take_that_target(player).is_none() {
+                return Err(ActionError::InvalidTarget);
+            }
             if kind.is_playable_single() {
                 Ok(())
             } else {
@@ -390,6 +513,7 @@ fn validate(state: &State, player: PlayerId, action: &Action) -> Result<(), Acti
         Action::PlayPair { cards } => validate_combo_cards(&own.hand, cards, 2).map(|_| ()),
         Action::PlayTriple { cards } => validate_combo_cards(&own.hand, cards, 3).map(|_| ()),
         Action::PlayFive { cards } => validate_combo_cards(&own.hand, cards, 5).map(|_| ()),
+        Action::PlayBlind { .. } | Action::ChooseBlindCard { .. } => Err(ActionError::WrongAction),
         Action::Nope { .. } => unreachable!("handled above"),
         Action::Defuse { .. }
         | Action::InsertImploding { .. }
@@ -402,7 +526,11 @@ fn validate(state: &State, player: PlayerId, action: &Action) -> Result<(), Acti
         | Action::StealKind { .. }
         | Action::TakeDiscard { .. }
         | Action::ReorderFuture { .. }
-        | Action::PutCardInDeck { .. } => Err(ActionError::StalePending),
+        | Action::PutCardInDeck { .. }
+        | Action::MarkTarget { .. }
+        | Action::CurseTarget { .. }
+        | Action::IllTakeThatTarget { .. }
+        | Action::BarkingTarget { .. } => Err(ActionError::StalePending),
     }
 }
 
@@ -426,6 +554,44 @@ fn begin_action(state: &mut State, actor: PlayerId, played: PlayedAction) {
         nopeable: true,
         history,
     });
+}
+
+fn lift_curse(state: &mut State, player: PlayerId, events: &mut Vec<Event>) {
+    if state.players[player.0].cursed {
+        state.players[player.0].cursed = false;
+        events.push(Event::public(EventKind::CurseLifted { player }));
+    }
+}
+
+/// If `victim` wears the Tower of Power crown and still has Stash cards,
+/// redirects any steal attempt to draw blindly from the Stash instead of `victim`'s hand.
+fn steal_from_tower_stash<R: Rng + ?Sized>(
+    state: &mut State,
+    victim: PlayerId,
+    actor: PlayerId,
+    rng: &mut R,
+    events: &mut Vec<Event>,
+) -> bool {
+    if state.tower_owner != Some(victim) || state.tower_stash.is_empty() {
+        return false;
+    }
+    let Some(card) = deck::take_random(&mut state.tower_stash, rng) else {
+        return false;
+    };
+    state.players[actor.0].hand.push(card);
+    events.push(Event::public(EventKind::TowerBlocked { victim, actor }));
+    if let Some(view) = CardView::new(card) {
+        events.push(Event::private(
+            actor,
+            EventKind::CardReceived {
+                player: actor,
+                from: victim,
+                card: view,
+            },
+        ));
+    }
+    check_unprotected_exploding(state, actor, events);
+    true
 }
 
 fn pop_deck_card<R: Rng + ?Sized>(
@@ -498,6 +664,41 @@ fn trigger_exploding(
     }
 }
 
+/// Resolves a Barking Kitten blast on `target`: they must discard a Defuse or explode.
+/// `lethal_card` is currently in `state.discard`; if they explode, it is moved to `removed`.
+fn resolve_barking_blast(
+    state: &mut State,
+    actor: PlayerId,
+    target: PlayerId,
+    lethal_card: CardId,
+    events: &mut Vec<Event>,
+) {
+    state.last_action = None;
+    events.push(Event::public(EventKind::BarkingTriggered { actor, target }));
+    let defuse = state.players[target.0]
+        .hand
+        .iter()
+        .copied()
+        .find(|held| held.kind() == Some(CardKind::Defuse));
+    if let Some(defuse) = defuse {
+        state.remove_from_hand(target, defuse);
+        state.discard(defuse);
+        events.push(Event::public(EventKind::CardPlayed {
+            player: target,
+            kind: CardKind::Defuse,
+        }));
+        events.push(Event::public(EventKind::Defused {
+            player: target,
+            position: 0,
+        }));
+    } else {
+        if let Some(pos) = state.discard.iter().position(|c| *c == lethal_card) {
+            state.discard.remove(pos);
+        }
+        eliminate(state, target, lethal_card, events);
+    }
+}
+
 /// Checks if a player holds an Exploding Kitten without Streaking protection
 /// (e.g., after losing Streaking or receiving an Exploding via Favour/Steal).
 fn check_unprotected_exploding(state: &mut State, player: PlayerId, events: &mut Vec<Event>) {
@@ -520,6 +721,9 @@ fn check_unprotected_exploding(state: &mut State, player: PlayerId, events: &mut
             .position(|card| card.kind() == Some(CardKind::Exploding))
             .expect("excess exploding card exists");
         let card = state.players[player.0].hand.remove(index);
+        state.players[player.0]
+            .marked_cards
+            .retain(|marked| *marked != card);
         trigger_exploding(state, player, card, false, events);
     }
 }
@@ -532,8 +736,99 @@ fn draw_from_deck<R: Rng + ?Sized>(
     events: &mut Vec<Event>,
 ) {
     state.last_action = None;
+
+    // Check if an opponent placed "I'll Take That" in front of `player`.
+    if let Some(trap) = state.players[player.0].ill_take_that.take() {
+        state.discard(trap.card);
+        if state.is_active(trap.owner) {
+            if steal_from_tower_stash(state, player, trap.owner, rng, events) {
+                // Tower of Power redirected the trap to Stash; victim still draws normally below!
+            } else {
+                let Some(card) = pop_deck_card(state, from_bottom, rng, events) else {
+                    events.push(Event::public(EventKind::DeckEmpty));
+                    lift_curse(state, player, events);
+                    finish_turn(state, events);
+                    return;
+                };
+                events.push(Event::public(EventKind::IllTakeThatTriggered {
+                    owner: trap.owner,
+                    victim: player,
+                }));
+                lift_curse(state, player, events);
+                let kind = card.kind().expect("deck only holds valid cards");
+                if kind == CardKind::Imploding {
+                    if state.imploding_face_up {
+                        events.push(Event::public(EventKind::ImplodingDrawn {
+                            player: trap.owner,
+                            face_up: true,
+                        }));
+                        state.face_up.remove(&card);
+                        finish_turn(state, events);
+                        eliminate(state, trap.owner, card, events);
+                    } else {
+                        state.imploding_face_up = true;
+                        state.face_up.insert(card);
+                        events.push(Event::public(EventKind::ImplodingDrawn {
+                            player: trap.owner,
+                            face_up: false,
+                        }));
+                        finish_turn(state, events);
+                        state.push_pending(PendingKind::InsertImploding {
+                            player: trap.owner,
+                            card,
+                            end_turn: false,
+                        });
+                    }
+                    return;
+                }
+                if kind == CardKind::Exploding {
+                    if can_streak_protect(state, trap.owner) {
+                        state.players[trap.owner.0].hand.push(card);
+                        if let Some(view) = CardView::new(card) {
+                            events.push(Event::private(
+                                trap.owner,
+                                EventKind::CardReceived {
+                                    player: trap.owner,
+                                    from: player,
+                                    card: view,
+                                },
+                            ));
+                        }
+                        finish_turn(state, events);
+                    } else {
+                        finish_turn(state, events);
+                        trigger_exploding(state, trap.owner, card, false, events);
+                    }
+                    return;
+                }
+                state.players[trap.owner.0].hand.push(card);
+                if let Some(view) = CardView::new(card) {
+                    events.push(Event::private(
+                        trap.owner,
+                        EventKind::CardReceived {
+                            player: trap.owner,
+                            from: player,
+                            card: view,
+                        },
+                    ));
+                    events.push(Event::private(
+                        player,
+                        EventKind::CardGiven {
+                            player,
+                            to: trap.owner,
+                            card: view,
+                        },
+                    ));
+                }
+                finish_turn(state, events);
+                return;
+            }
+        }
+    }
+
     let Some(card) = pop_deck_card(state, from_bottom, rng, events) else {
         events.push(Event::public(EventKind::DeckEmpty));
+        lift_curse(state, player, events);
         finish_turn(state, events);
         return;
     };
@@ -553,7 +848,11 @@ fn draw_from_deck<R: Rng + ?Sized>(
                 player,
                 face_up: false,
             }));
-            state.push_pending(PendingKind::InsertImploding { player, card });
+            state.push_pending(PendingKind::InsertImploding {
+                player,
+                card,
+                end_turn: true,
+            });
         }
         return;
     }
@@ -568,6 +867,7 @@ fn draw_from_deck<R: Rng + ?Sized>(
                     card: CardView::new(card).expect("valid card"),
                 },
             ));
+            lift_curse(state, player, events);
             finish_turn(state, events);
         } else {
             trigger_exploding(state, player, card, true, events);
@@ -583,11 +883,42 @@ fn draw_from_deck<R: Rng + ?Sized>(
             card: CardView::new(card).expect("valid card"),
         },
     ));
+    lift_curse(state, player, events);
     finish_turn(state, events);
 }
 
 fn eliminate(state: &mut State, player: PlayerId, lethal_card: CardId, events: &mut Vec<Event>) {
     let hand = std::mem::take(&mut state.players[player.0].hand);
+    state.players[player.0].marked_cards.clear();
+    state.players[player.0].cursed = false;
+    if let Some(front) = state.players[player.0].barking_front.take() {
+        state.discard(front);
+    }
+    if let Some(trap) = state.players[player.0].ill_take_that.take() {
+        state.discard(trap.card);
+    }
+    // Remove any I'll Take That traps that the eliminated player placed on others.
+    let mut owned_traps = Vec::new();
+    for entry in &mut state.players {
+        if let Some(trap) = entry.ill_take_that
+            && trap.owner == player
+        {
+            owned_traps.push(trap.card);
+            entry.ill_take_that = None;
+        }
+    }
+    for card in owned_traps {
+        state.discard(card);
+    }
+    // Release Tower of Power stash if the eliminated player wore the crown.
+    if state.tower_owner == Some(player) {
+        state.tower_owner = None;
+        let stash = std::mem::take(&mut state.tower_stash);
+        for card in stash {
+            state.discard(card);
+        }
+    }
+
     for card in hand {
         if matches!(card.kind(), Some(CardKind::Exploding | CardKind::Imploding)) {
             state.removed.push(card);
@@ -666,6 +997,53 @@ fn advance_to_next_player(state: &mut State, events: &mut Vec<Event>) {
     }
 }
 
+fn play_blind<R: Rng + ?Sized>(
+    state: &mut State,
+    player: PlayerId,
+    slot: usize,
+    rng: &mut R,
+    events: &mut Vec<Event>,
+) {
+    let card = state.players[player.0].hand[slot];
+    let kind = card.kind().expect("valid card in hand");
+    let can_play = kind.is_playable_single()
+        && !(kind == CardKind::IllTakeThat && state.first_ill_take_that_target(player).is_none());
+    if can_play {
+        play_card(state, player, card, rng, events);
+        return;
+    }
+    // Official Curse of the Cat Butt rule: non-playable card played blind is wasted.
+    state.last_action = None;
+    state.remove_from_hand(player, card);
+    if kind == CardKind::Exploding {
+        trigger_exploding(state, player, card, false, events);
+        return;
+    }
+    state.discard(card);
+    if let Some(view) = CardView::new(card) {
+        events.push(Event::public(EventKind::BlindCardWasted {
+            player,
+            card: view,
+        }));
+    }
+    check_unprotected_exploding(state, player, events);
+}
+
+fn choose_blind_card<R: Rng + ?Sized>(
+    state: &mut State,
+    player: PlayerId,
+    slot: usize,
+    rng: &mut R,
+    events: &mut Vec<Event>,
+) {
+    let card = state.players[player.0].hand[slot];
+    match state.pending.last().map(|frame| &frame.kind) {
+        Some(PendingKind::FavourCard { .. }) => favour_card(state, player, card, events),
+        Some(PendingKind::GiveToDeck { .. }) => put_card_in_deck(state, player, card, rng, events),
+        _ => unreachable!("validated blind choice pending"),
+    }
+}
+
 fn play_card<R: Rng + ?Sized>(
     state: &mut State,
     player: PlayerId,
@@ -674,6 +1052,11 @@ fn play_card<R: Rng + ?Sized>(
     events: &mut Vec<Event>,
 ) {
     let kind = held_kind(state, player, card).expect("validated card");
+    if kind == CardKind::BarkingKitten {
+        play_barking_kitten(state, player, card, events);
+        return;
+    }
+
     state.remove_from_hand(player, card);
     state.discard(card);
     let nopeable = !matches!(kind, CardKind::DrawBottom | CardKind::Bury);
@@ -747,7 +1130,10 @@ fn play_card<R: Rng + ?Sized>(
                 EventKind::FutureSeen { player, cards },
             ));
         }
-        CardKind::AlterFuture | CardKind::AlterFuture5 | CardKind::ShareFuture => {
+        CardKind::AlterFuture
+        | CardKind::AlterFuture5
+        | CardKind::AlterFutureNow
+        | CardKind::ShareFuture => {
             let max_count = if kind == CardKind::AlterFuture5 { 5 } else { 3 };
             let share_with_next = kind == CardKind::ShareFuture;
             let count = state.deck.len().min(max_count);
@@ -790,6 +1176,25 @@ fn play_card<R: Rng + ?Sized>(
         }
         CardKind::Favour => {
             state.push_pending(PendingKind::FavourTarget { actor: player });
+        }
+        CardKind::Mark => {
+            state.push_pending(PendingKind::MarkTarget { actor: player });
+        }
+        CardKind::CurseCatButt => {
+            state.push_pending(PendingKind::CurseTarget { actor: player });
+        }
+        CardKind::IllTakeThat => {
+            state.push_pending(PendingKind::IllTakeThatTarget {
+                actor: player,
+                card,
+            });
+        }
+        CardKind::TowerOfPower => {
+            state.tower_owner = Some(player);
+            events.push(Event::public(EventKind::TowerClaimed {
+                player,
+                stash_count: state.tower_stash.len(),
+            }));
         }
         CardKind::GarbageCollection | CardKind::Potluck => {
             let shuffle_after = kind == CardKind::GarbageCollection;
@@ -838,6 +1243,7 @@ fn play_card<R: Rng + ?Sized>(
         CardKind::Bury => {
             let Some(drawn) = pop_deck_card(state, false, rng, events) else {
                 events.push(Event::public(EventKind::DeckEmpty));
+                lift_curse(state, player, events);
                 finish_turn(state, events);
                 return;
             };
@@ -859,6 +1265,7 @@ fn play_card<R: Rng + ?Sized>(
                     state.push_pending(PendingKind::InsertImploding {
                         player,
                         card: drawn,
+                        end_turn: true,
                     });
                 }
                 return;
@@ -876,6 +1283,87 @@ fn play_card<R: Rng + ?Sized>(
         }
         _ => unreachable!("validated single-card action"),
     }
+}
+
+fn play_barking_kitten(state: &mut State, player: PlayerId, card: CardId, events: &mut Vec<Event>) {
+    state.last_action = None;
+    state.remove_from_hand(player, card);
+    events.push(Event::public(EventKind::CardPlayed {
+        player,
+        kind: CardKind::BarkingKitten,
+    }));
+
+    // Case A: Another active player already has a face-up Barking Kitten in front of them.
+    if let Some((other_idx, front_card)) = state.players.iter().enumerate().find_map(|(idx, p)| {
+        (idx != player.0 && !p.eliminated)
+            .then_some(p.barking_front.map(|front| (idx, front)))
+            .flatten()
+    }) {
+        state.players[other_idx].barking_front = None;
+        state.discard(front_card);
+        state.discard(card);
+        resolve_barking_blast(state, player, PlayerId(other_idx), card, events);
+        return;
+    }
+
+    // Case B: Another active player holds the other Barking Kitten in their hand.
+    if let Some((other_idx, other_card)) = state.players.iter().enumerate().find_map(|(idx, p)| {
+        (idx != player.0 && !p.eliminated)
+            .then(|| {
+                p.hand
+                    .iter()
+                    .copied()
+                    .find(|c| c.kind() == Some(CardKind::BarkingKitten))
+                    .map(|c| (idx, c))
+            })
+            .flatten()
+    }) {
+        state.remove_from_hand(PlayerId(other_idx), other_card);
+        state.discard(other_card);
+        state.discard(card);
+        resolve_barking_blast(state, player, PlayerId(other_idx), card, events);
+        return;
+    }
+
+    // Case C: Actor also holds the second Barking Kitten (in hand or already face-up in front).
+    if let Some(own_front) = state.players[player.0].barking_front.take() {
+        state.discard(own_front);
+        state.discard(card);
+        state.push_pending(PendingKind::BarkingTarget { actor: player });
+        return;
+    }
+    if let Some(second_in_hand) = state.players[player.0]
+        .hand
+        .iter()
+        .copied()
+        .find(|c| c.kind() == Some(CardKind::BarkingKitten))
+    {
+        state.remove_from_hand(player, second_in_hand);
+        state.discard(second_in_hand);
+        state.discard(card);
+        state.push_pending(PendingKind::BarkingTarget { actor: player });
+        return;
+    }
+
+    // Case D: Place face-up in front of actor, awaiting the second Barking Kitten.
+    state.players[player.0].barking_front = Some(card);
+    events.push(Event::public(EventKind::BarkingPlaced { player }));
+}
+
+fn barking_target(state: &mut State, player: PlayerId, target: PlayerId, events: &mut Vec<Event>) {
+    state.pending.pop();
+    events.push(Event::public(EventKind::TargetChosen {
+        actor: player,
+        target,
+    }));
+    let lethal = state
+        .discard
+        .iter()
+        .rev()
+        .copied()
+        .find(|c| c.kind() == Some(CardKind::BarkingKitten))
+        .expect("barking card in discard");
+    resolve_barking_blast(state, player, target, lethal, events);
 }
 
 fn play_pair(state: &mut State, player: PlayerId, cards: &[CardId], events: &mut Vec<Event>) {
@@ -939,12 +1427,22 @@ fn attack_target(state: &mut State, player: PlayerId, target: PlayerId, events: 
     }));
 }
 
-fn favour_target(state: &mut State, player: PlayerId, target: PlayerId, events: &mut Vec<Event>) {
+fn favour_target<R: Rng + ?Sized>(
+    state: &mut State,
+    player: PlayerId,
+    target: PlayerId,
+    rng: &mut R,
+    events: &mut Vec<Event>,
+) {
     state.pending.pop();
     events.push(Event::public(EventKind::TargetChosen {
         actor: player,
         target,
     }));
+    if steal_from_tower_stash(state, target, player, rng, events) {
+        state.last_action = None;
+        return;
+    }
     if state.players[target.0].hand.is_empty() {
         state.last_action = None;
         events.push(Event::public(EventKind::FavourSkipped {
@@ -1007,6 +1505,9 @@ fn random_target<R: Rng + ?Sized>(
         actor: player,
         target,
     }));
+    if steal_from_tower_stash(state, target, player, rng, events) {
+        return;
+    }
     let card = deck::take_random(&mut state.players[target.0].hand, rng);
     events.push(Event::public(EventKind::RandomSteal {
         actor: player,
@@ -1014,6 +1515,9 @@ fn random_target<R: Rng + ?Sized>(
         found: card.is_some(),
     }));
     if let Some(card) = card {
+        state.players[target.0]
+            .marked_cards
+            .retain(|marked| *marked != card);
         state.players[player.0].hand.push(card);
         if let Some(view) = CardView::new(card) {
             events.push(Event::private(
@@ -1038,12 +1542,22 @@ fn random_target<R: Rng + ?Sized>(
     }
 }
 
-fn steal_target(state: &mut State, player: PlayerId, target: PlayerId, events: &mut Vec<Event>) {
+fn steal_target<R: Rng + ?Sized>(
+    state: &mut State,
+    player: PlayerId,
+    target: PlayerId,
+    rng: &mut R,
+    events: &mut Vec<Event>,
+) {
     state.pending.pop();
     events.push(Event::public(EventKind::TargetChosen {
         actor: player,
         target,
     }));
+    if steal_from_tower_stash(state, target, player, rng, events) {
+        state.last_action = None;
+        return;
+    }
     state.push_pending(PendingKind::StealKind {
         actor: player,
         target,
@@ -1068,6 +1582,9 @@ fn steal_kind(state: &mut State, kind: CardKind, events: &mut Vec<Event>) {
     }));
     if let Some(index) = found {
         let card = state.players[target.0].hand.remove(index);
+        state.players[target.0]
+            .marked_cards
+            .retain(|marked| *marked != card);
         state.players[actor.0].hand.push(card);
         if let Some(view) = CardView::new(card) {
             events.push(Event::private(
@@ -1090,6 +1607,83 @@ fn steal_kind(state: &mut State, kind: CardKind, events: &mut Vec<Event>) {
         check_unprotected_exploding(state, actor, events);
         check_unprotected_exploding(state, target, events);
     }
+}
+
+fn mark_target<R: Rng + ?Sized>(
+    state: &mut State,
+    player: PlayerId,
+    target: PlayerId,
+    rng: &mut R,
+    events: &mut Vec<Event>,
+) {
+    state.pending.pop();
+    state.last_action = None;
+    events.push(Event::public(EventKind::TargetChosen {
+        actor: player,
+        target,
+    }));
+    let unmarked: Vec<CardId> = state.players[target.0]
+        .hand
+        .iter()
+        .copied()
+        .filter(|card| !state.players[target.0].marked_cards.contains(card))
+        .collect();
+    if let Some(&chosen) = unmarked.choose(rng) {
+        state.players[target.0].marked_cards.push(chosen);
+        if let Some(view) = CardView::new(chosen) {
+            events.push(Event::public(EventKind::CardMarked {
+                actor: player,
+                target,
+                card: view,
+            }));
+        }
+    }
+}
+
+fn curse_target<R: Rng + ?Sized>(
+    state: &mut State,
+    player: PlayerId,
+    target: PlayerId,
+    rng: &mut R,
+    events: &mut Vec<Event>,
+) {
+    state.pending.pop();
+    state.last_action = None;
+    events.push(Event::public(EventKind::TargetChosen {
+        actor: player,
+        target,
+    }));
+    state.players[target.0].cursed = true;
+    state.players[target.0].hand.shuffle(rng);
+    events.push(Event::public(EventKind::PlayerCursed {
+        actor: player,
+        target,
+    }));
+}
+
+fn ill_take_that_target(
+    state: &mut State,
+    player: PlayerId,
+    target: PlayerId,
+    events: &mut Vec<Event>,
+) {
+    let frame = state.pending.pop().expect("validated pending");
+    let PendingKind::IllTakeThatTarget { actor, card } = frame.kind else {
+        unreachable!()
+    };
+    debug_assert_eq!(actor, player);
+    state.last_action = None;
+    if let Some(pos) = state.discard.iter().position(|c| *c == card) {
+        state.discard.remove(pos);
+    }
+    state.players[target.0].ill_take_that = Some(IllTakeThatTrap {
+        owner: player,
+        card,
+    });
+    events.push(Event::public(EventKind::IllTakeThatPlaced {
+        actor: player,
+        target,
+    }));
 }
 
 fn take_discard(
@@ -1253,6 +1847,7 @@ fn defuse(state: &mut State, player: PlayerId, position: usize, events: &mut Vec
     deck::insert_from_top(&mut state.deck, exploding, position);
     events.push(Event::public(EventKind::Defused { player, position }));
     if end_turn {
+        lift_curse(state, player, events);
         finish_turn(state, events);
     }
 }
@@ -1262,6 +1857,7 @@ fn insert_imploding(state: &mut State, player: PlayerId, position: usize, events
     let PendingKind::InsertImploding {
         player: owner,
         card,
+        end_turn,
     } = frame.kind
     else {
         unreachable!()
@@ -1274,7 +1870,10 @@ fn insert_imploding(state: &mut State, player: PlayerId, position: usize, events
         player,
         position,
     }));
-    finish_turn(state, events);
+    if end_turn {
+        lift_curse(state, player, events);
+        finish_turn(state, events);
+    }
 }
 
 fn bury_card(state: &mut State, player: PlayerId, position: usize, events: &mut Vec<Event>) {
@@ -1290,6 +1889,7 @@ fn bury_card(state: &mut State, player: PlayerId, position: usize, events: &mut 
     state.last_action = None;
     deck::insert_from_top(&mut state.deck, card, position);
     events.push(Event::public(EventKind::CardBuried { player, position }));
+    lift_curse(state, player, events);
     finish_turn(state, events);
 }
 
@@ -1320,10 +1920,19 @@ pub fn default_action(state: &State) -> Option<(PlayerId, Action)> {
                 pending_id: frame.id,
                 target: state.first_other_active(player)?,
             },
-            PendingKind::FavourCard { target, .. } => Action::FavourCard {
-                pending_id: frame.id,
-                card: *state.players[target.0].hand.first()?,
-            },
+            PendingKind::FavourCard { target, .. } => {
+                if state.players[target.0].cursed {
+                    Action::ChooseBlindCard {
+                        pending_id: frame.id,
+                        slot: 0,
+                    }
+                } else {
+                    Action::FavourCard {
+                        pending_id: frame.id,
+                        card: *state.players[target.0].hand.first()?,
+                    }
+                }
+            }
             PendingKind::RandomTarget { .. } => Action::RandomTarget {
                 pending_id: frame.id,
                 target: state.first_other_active(player)?,
@@ -1351,11 +1960,34 @@ pub fn default_action(state: &State) -> Option<(PlayerId, Action)> {
             },
             PendingKind::GiveToDeck { queue, .. } => {
                 let first = *queue.first()?;
-                Action::PutCardInDeck {
-                    pending_id: frame.id,
-                    card: *state.players[first.0].hand.first()?,
+                if state.players[first.0].cursed {
+                    Action::ChooseBlindCard {
+                        pending_id: frame.id,
+                        slot: 0,
+                    }
+                } else {
+                    Action::PutCardInDeck {
+                        pending_id: frame.id,
+                        card: *state.players[first.0].hand.first()?,
+                    }
                 }
             }
+            PendingKind::MarkTarget { .. } => Action::MarkTarget {
+                pending_id: frame.id,
+                target: state.first_other_active(player)?,
+            },
+            PendingKind::CurseTarget { .. } => Action::CurseTarget {
+                pending_id: frame.id,
+                target: state.first_other_active(player)?,
+            },
+            PendingKind::IllTakeThatTarget { .. } => Action::IllTakeThatTarget {
+                pending_id: frame.id,
+                target: state.first_ill_take_that_target(player)?,
+            },
+            PendingKind::BarkingTarget { .. } => Action::BarkingTarget {
+                pending_id: frame.id,
+                target: state.first_other_active(player)?,
+            },
         };
         return Some((player, action));
     }
