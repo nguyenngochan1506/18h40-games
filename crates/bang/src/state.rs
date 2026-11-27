@@ -25,6 +25,7 @@ pub struct Player {
 }
 
 /// Once-per-turn skill usage, reset when a turn starts.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SkillUses {
     pub doc_holyday: bool,

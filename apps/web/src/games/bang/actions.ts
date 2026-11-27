@@ -3,10 +3,10 @@ import type { BangSnapshot as GameSnapshot } from './types.ts';
 import { cardFace } from './cardCatalog.ts';
 import { selectGameView } from './state.ts';
 
-export type ActionDraft = { storeSlot: number | null; handSlot: number | null; card: CardId | null; target: number | null; selection: CardSelection | null; discarding: boolean; discard: CardId[]; healing: boolean; source: DrawSource; kept: CardId[]; extra: CardId | null; brawl: Record<number, CardSelection> };
-export const emptyDraft: ActionDraft = { storeSlot: null, handSlot: null, card: null, target: null, selection: null, discarding: false, discard: [], healing: false, source: 'deck', kept: [], extra: null, brawl: {} };
+export type ActionDraft = { storeSlot: number | null; handSlot: number | null; card: CardId | null; target: number | null; selection: CardSelection | null; discarding: boolean; discard: CardId[]; healing: boolean; source: DrawSource; kept: CardId[]; extra: CardId | null; brawl: Record<number, CardSelection>; green: CardId | null; doc: boolean; panel: 'green' | 'skills' | null };
+export const emptyDraft: ActionDraft = { storeSlot: null, handSlot: null, card: null, target: null, selection: null, discarding: false, discard: [], healing: false, source: 'deck', kept: [], extra: null, brawl: {}, green: null, doc: false, panel: null };
 
-export function actionMode(game: GameSnapshot): 'view' | 'waiting' | 'turn' | 'response' | 'check' | 'pick_hand_slot' | 'general_store' | 'draw_choice' | 'keep_cards' | 'choose_draw_result' {
+export function actionMode(game: GameSnapshot): 'view' | 'waiting' | 'turn' | 'response' | 'check' | 'pick_hand_slot' | 'general_store' | 'draw_choice' | 'keep_cards' | 'choose_draw_result' | 'choose_copy' | 'vulture_split' {
   const { table, you } = selectGameView(game.view);
   if (you === null || table.winner) return 'view';
   if (!table.waiting || table.waiting.player !== you) return 'waiting';
@@ -14,8 +14,7 @@ export function actionMode(game: GameSnapshot): 'view' | 'waiting' | 'turn' | 'r
     case 'turn': return 'turn';
     case 'attack_response': case 'duel': case 'dying': return 'response';
     case 'pick_hand_slot': case 'check': case 'general_store': case 'draw_choice': case 'keep_cards': case 'choose_draw_result': return table.waiting.kind.type;
-    // Dodge City is not offered in rooms yet; its choice has no UI until that stage.
-    case 'choose_copy': case 'vulture_split': return 'waiting';
+    case 'choose_copy': case 'vulture_split': return table.waiting.kind.type;
   }
 }
 
@@ -141,7 +140,12 @@ export function responseCard(game: GameSnapshot, card: CardId): boolean {
   const { table, hand, you } = selectGameView(game.view);
   const required = responseKind(game);
   const actual = cardFace(card)?.kind;
+  const ownPlayer = table.players.find((player) => player.id === you);
+  // A ready green Missed! card in front of you answers a Missed! request (the view already applies Belle Star).
+  if (required === 'missed' && ownPlayer?.green_answers?.includes(card)) return true;
   if (!required || !actual || !hand.includes(card)) return false;
+  // Elena Fuente (or Vera copying her): any hand card is a Missed!.
+  if (required === 'missed' && ownPlayer && has(ownPlayer, 'elena_fuente')) return true;
   return actual === required || (required === 'missed' && actual === 'dodge') || (has(table.players.find((player) => player.id === you)!, 'calamity_janet')
     && ((required === 'bang' && (actual === 'missed' || actual === 'dodge')) || (required === 'missed' && actual === 'bang')));
 }
@@ -181,10 +185,15 @@ export function respondAction(game: GameSnapshot, card: CardId | null, locked: b
   return { type: 'respond', pending_id: pending, card };
 }
 
+/** Hand size kept at the end of the turn: Sean Mallory (or Vera copying him) keeps 10 whatever his health. */
+export function handLimit(player: PublicPlayer): number {
+  return has(player, 'sean_mallory') ? 10 : Math.max(0, player.health);
+}
+
 export function discardCount(game: GameSnapshot): number {
   const { table, you, hand } = selectGameView(game.view);
   const own = table.players.find((player) => player.id === you);
-  return own ? Math.max(0, hand.length - Math.max(0, own.health)) : 0;
+  return own ? Math.max(0, hand.length - handLimit(own)) : 0;
 }
 
 export function endTurnAction(game: GameSnapshot, discard: CardId[], locked: boolean): Action | null {
@@ -212,6 +221,11 @@ export function chooseDrawSourceAction(game: GameSnapshot, source: DrawSource, l
   if (locked || actionMode(game) !== 'draw_choice' || table.waiting?.pending_id == null) return null;
   const own = table.players.find((player) => player.id === you)!;
   if (source === 'discard' && (!has(own, 'pedro_ramirez') || table.discard_count === 0)) return null;
+  if (typeof source === 'object' && 'in_play' in source) {
+    const from = table.players.find((player) => player.id === source.in_play.player);
+    if (!has(own, 'pat_brennan') || !from?.alive || !from.in_play.includes(source.in_play.card)) return null;
+    return { type: 'choose_draw_source', pending_id: table.waiting.pending_id, source };
+  }
   if (typeof source === 'object' && (!('player' in source) || !has(own, 'jesse_jones') || source.player === you || !table.players.some((player) => player.id === source.player && player.alive && player.hand_count > 0))) return null;
   return { type: 'choose_draw_source', pending_id: table.waiting.pending_id, source };
 }
@@ -239,10 +253,119 @@ export function isSid(game: GameSnapshot): boolean {
   return !table.winner && you !== null && table.players.some((player) => player.id === you && has(player, 'sid_ketchum'));
 }
 
+/** Sid's heal needs a wound: the engine answers `WrongAction` at full health (a dying player is at 0 or less). */
+export function canSidHeal(game: GameSnapshot): boolean {
+  const { table, you } = selectGameView(game.view);
+  return isSid(game) && table.players.some((player) => player.id === you && player.health < player.max_health);
+}
+
 export function sidHealAction(game: GameSnapshot, discard: CardId[], locked: boolean): Action | null {
   const { table, you, hand } = selectGameView(game.view);
-  if (locked || !isSid(game) || discard.length !== 2 || discard[0] === discard[1] || !discard.every((card) => hand.includes(card))) return null;
+  if (locked || !canSidHeal(game) || discard.length !== 2 || discard[0] === discard[1] || !discard.every((card) => hand.includes(card))) return null;
   const ownDying = table.waiting?.player === you && table.waiting.kind.type === 'dying';
   if (ownDying && table.waiting!.pending_id === null) return null;
   return { type: 'sid_heal', pending_id: ownDying ? table.waiting!.pending_id : null, discard: [discard[0], discard[1]] };
+}
+
+// ---- Dodge City: green-bordered cards -------------------------------------------------------------
+
+/** The 13 green-bordered Dodge City cards. */
+export const greenKinds: CardKind[] = ['bible', 'canteen', 'can_can', 'ten_gallon_hat', 'conestoga', 'derringer', 'buffalo_rifle', 'howitzer', 'pepperbox', 'iron_plate', 'pony_express', 'knife', 'sombrero'];
+const greenNoTarget: CardKind[] = ['bible', 'canteen', 'pony_express', 'howitzer'];
+const greenPicks: CardKind[] = ['can_can', 'conestoga'];
+const greenShots: CardKind[] = ['derringer', 'knife', 'pepperbox', 'buffalo_rifle'];
+/** Green cards with an active effect (Ten Gallon Hat, Iron Plate and Sombrero only answer as Missed!). */
+export function greenActive(kind: CardKind | undefined): boolean {
+  return !!kind && (greenNoTarget.includes(kind) || greenPicks.includes(kind) || greenShots.includes(kind));
+}
+
+function ownPlayer(game: GameSnapshot) {
+  const { table, you } = selectGameView(game.view);
+  return table.players.find((player) => player.id === you);
+}
+
+/** Players a green card can be aimed at; same distance, range and Apache Kid rules as the engine. */
+export function greenTargets(game: GameSnapshot, card: CardId): PublicPlayer[] {
+  const { table, you } = selectGameView(game.view);
+  const own = ownPlayer(game), face = cardFace(card);
+  if (!own || !face) return [];
+  const isPick = greenPicks.includes(face.kind), isShot = greenShots.includes(face.kind);
+  if (!isPick && !isShot) return [];
+  return table.players.filter((player) => {
+    if (!player.alive) return false;
+    if (player.id !== you && has(player, 'apache_kid') && face.suit === '♦') return false;
+    if (isPick) return true;
+    if (player.id === you) return false;
+    if (face.kind === 'derringer' || face.kind === 'knife') return effectiveDistance(game, own.id, player.id) <= 1;
+    if (face.kind === 'pepperbox') return effectiveDistance(game, own.id, player.id) <= own.weapon_range;
+    return true;
+  });
+}
+
+/** Cards the player can take from `target` with Can Can / Conestoga (the spent green card cannot be picked). */
+export function greenPickable(game: GameSnapshot, card: CardId, target: PublicPlayer) {
+  const { you, hand } = selectGameView(game.view);
+  return { hand: target.id === you ? hand.length : target.hand_count, table: target.in_play.filter((id) => !(target.id === you && id === card)) };
+}
+
+export function activateGreenAction(game: GameSnapshot, draft: ActionDraft, locked: boolean): Action | null {
+  const own = ownPlayer(game);
+  if (locked || actionMode(game) !== 'turn' || draft.green === null || !own?.green_ready?.includes(draft.green)) return null;
+  const card = draft.green, kind = cardFace(card)?.kind;
+  if (!kind || !greenActive(kind)) return null;
+  if (greenNoTarget.includes(kind)) return { type: 'activate_green', card, target: null, selection: null };
+  const target = greenTargets(game, card).find((player) => player.id === draft.target);
+  if (!target) return null;
+  if (greenShots.includes(kind)) return { type: 'activate_green', card, target: target.id, selection: null };
+  const selection = draft.selection, can = greenPickable(game, card, target);
+  if (!selection || (selection === 'hand' ? can.hand === 0 : !can.table.includes(selection.in_play))) return null;
+  return { type: 'activate_green', card, target: target.id, selection };
+}
+
+// ---- Dodge City: character skills -----------------------------------------------------------------
+
+export function chuckAction(game: GameSnapshot, locked: boolean): Action | null {
+  const own = ownPlayer(game);
+  return !locked && actionMode(game) === 'turn' && own && has(own, 'chuck_wengam') && own.health > 1 ? { type: 'chuck_draw' } : null;
+}
+
+const blueKinds: CardKind[] = ['volcanic', 'schofield', 'remington', 'rev_carabine', 'winchester', 'barrel', 'dynamite', 'jail', 'scope', 'mustang', 'binocular', 'hideout'];
+/** Hand cards José Delgado may discard (blue equipment, not green); the two-per-turn cap is the server's. */
+export function joseCards(game: GameSnapshot): CardId[] {
+  const { hand } = selectGameView(game.view);
+  const own = ownPlayer(game);
+  const { skillUses } = selectGameView(game.view);
+  return own && has(own, 'jose_delgado') && (skillUses?.jose_delgado ?? 0) < 2 ? hand.filter((card) => blueKinds.includes(cardFace(card)?.kind as CardKind)) : [];
+}
+export function joseAction(game: GameSnapshot, card: CardId | null, locked: boolean): Action | null {
+  return !locked && actionMode(game) === 'turn' && card !== null && joseCards(game).includes(card) ? { type: 'jose_delgado', card } : null;
+}
+
+export function docTargets(game: GameSnapshot, cards: CardId[]): PublicPlayer[] {
+  const { table, you } = selectGameView(game.view);
+  const own = ownPlayer(game);
+  if (!own || !has(own, 'doc_holyday') || selectGameView(game.view).skillUses?.doc_holyday) return [];
+  const allDiamonds = cards.length === 2 && cards.every((card) => cardFace(card)?.suit === '♦');
+  return table.players.filter((player) => player.alive && player.id !== you && !(allDiamonds && has(player, 'apache_kid')) && effectiveDistance(game, own.id, player.id) <= own.weapon_range);
+}
+export function docAction(game: GameSnapshot, cards: CardId[], target: number | null, locked: boolean): Action | null {
+  const { hand } = selectGameView(game.view);
+  if (locked || actionMode(game) !== 'turn' || cards.length !== 2 || cards[0] === cards[1] || !cards.every((card) => hand.includes(card))) return null;
+  return docTargets(game, cards).some((player) => player.id === target) ? { type: 'doc_holyday', cards: [cards[0], cards[1]], target: target! } : null;
+}
+
+// ---- Dodge City: Vera Custer and Vulture Sam decisions ---------------------------------------------
+
+export function chooseCopyAction(game: GameSnapshot, target: number | null, locked: boolean): Action | null {
+  const { table, you } = selectGameView(game.view);
+  if (locked || actionMode(game) !== 'choose_copy' || table.waiting?.pending_id == null || target === null || target === you || !table.players.some((player) => player.id === target && player.alive)) return null;
+  return { type: 'choose_copy', pending_id: table.waiting.pending_id, target };
+}
+
+export function vultureTakeAction(game: GameSnapshot, selection: CardSelection | null, locked: boolean): Action | null {
+  const { table } = selectGameView(game.view);
+  const waiting = table.waiting;
+  if (locked || actionMode(game) !== 'vulture_split' || waiting?.pending_id == null || waiting.kind.type !== 'vulture_split' || selection === null) return null;
+  if (selection === 'hand' ? waiting.kind.hand_count === 0 : !table.loot_table?.includes(selection.in_play)) return null;
+  return { type: 'vulture_take', pending_id: waiting.pending_id, selection };
 }

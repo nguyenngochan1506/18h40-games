@@ -192,3 +192,161 @@ async fn dodge_city_room_seats_eight_and_plays_through_the_server() {
         "spectator view leaked a hand: {text}"
     );
 }
+
+fn config8() -> GameConfig {
+    GameConfig {
+        expansions: [Expansion::DodgeCity].into(),
+        roles: RoleCounts::standard(8),
+        ..Default::default()
+    }
+}
+
+// The server seeds the game from `game_seed` exactly like this, so a seed found here reproduces there.
+fn seeded(accept: impl Fn(&GameState) -> bool) -> u64 {
+    (0..5000)
+        .find(|seed| {
+            let mut rng = ChaCha8Rng::seed_from_u64(*seed);
+            bang::setup(8, config8(), &mut rng).is_ok_and(|(state, _)| accept(&state))
+        })
+        .expect("no seed produces the wanted opening")
+}
+
+fn brawl_action(state: &GameState) -> Option<(PlayerId, Action)> {
+    let (player, _) = bang::default_action(state)?;
+    let hand = &state.players[player.0].hand;
+    let card = *hand
+        .iter()
+        .find(|c| c.card().is_some_and(|c| c.kind == CardKind::Brawl))?;
+    let discard = *hand.iter().find(|c| **c != card)?;
+    let picks = (0..state.players.len())
+        .filter(|i| *i != player.0 && state.players[*i].alive)
+        .map(|i| bang::BrawlPick {
+            target: PlayerId(i),
+            selection: bang::CardSelection::Hand,
+        })
+        .collect();
+    let action = Action::Brawl {
+        card,
+        discard,
+        picks,
+    };
+    bang::apply(
+        &mut state.clone(),
+        player,
+        action.clone(),
+        &mut ChaCha8Rng::seed_from_u64(0),
+    )
+    .ok()?;
+    Some((player, action))
+}
+
+async fn started(seed: u64) -> (TestServer, Vec<Client>, GameState, ChaCha8Rng) {
+    let server = TestServer::new(Config {
+        game_seed: Some(seed),
+        ..Config::default()
+    })
+    .await;
+    let (mut host, first) = server.create("Host").await;
+    let mut guests = Vec::new();
+    for i in 1..8 {
+        guests.push(server.join(code(&first), &format!("P{i}")).await.0);
+    }
+    host.send(json!({"type":"take_seat"})).await;
+    host.send(json!({"type":"update_settings","settings":dodge(7)}))
+        .await;
+    host.state(|r| r["max_players"] == 8).await;
+    guests[6].send(json!({"type":"take_seat"})).await;
+    host.state(|r| r["settings"] == dodge(8) && r["members"][7]["role"] == "player")
+        .await;
+    let mut clients = vec![host];
+    clients.extend(guests);
+    clients[0].send(json!({"type":"start_game"})).await;
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    let (state, _) = bang::setup(8, config8(), &mut rng).unwrap();
+    for (i, client) in clients.iter_mut().enumerate() {
+        let start = client.until("game_started").await;
+        assert_eq!(start["view"], view_of(&state, Some(i)));
+        client.until("game_update").await;
+    }
+    (server, clients, state, rng)
+}
+
+#[tokio::test(start_paused = true)]
+async fn brawl_goes_through_the_socket_with_one_pick_per_other_player() {
+    let seed = seeded(|state| brawl_action(state).is_some());
+    let (_server, mut clients, mut state, mut rng) = started(seed).await;
+    let (player, action) = brawl_action(&state).unwrap();
+    // One pick missing is refused first and leaves the sequence number alone...
+    let Action::Brawl {
+        card,
+        discard,
+        picks,
+    } = action.clone()
+    else {
+        unreachable!()
+    };
+    let short = Action::Brawl {
+        card,
+        discard,
+        picks: picks[1..].to_vec(),
+    };
+    clients[player.0]
+        .send(json!({"type":"game_action","action":{"game":"bang","payload":short}}))
+        .await;
+    clients[player.0].error("illegal_action").await;
+    // ...then the complete Brawl still goes through as sequence 1.
+    clients[player.0]
+        .send(json!({"type":"game_action","action":{"game":"bang","payload":action}}))
+        .await;
+    bang::apply(&mut state, player, action, &mut rng).unwrap();
+    for (i, client) in clients.iter_mut().enumerate() {
+        expect(client, &state, Some(i), 1).await;
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn vera_choose_copy_goes_through_the_socket() {
+    let seed = seeded(|state| {
+        state
+            .decision()
+            .is_some_and(|d| matches!(d.kind, bang::DecisionKind::ChooseCopy))
+    });
+    let (_server, mut clients, mut state, mut rng) = started(seed).await;
+    let decision = state.decision().unwrap();
+    let (vera, target) = (decision.player, PlayerId((decision.player.0 + 1) % 8));
+    // Somebody else cannot answer Vera's decision.
+    let intruder = (vera.0 + 2) % 8;
+    let action = Action::ChooseCopy {
+        pending_id: decision.pending_id.unwrap(),
+        target,
+    };
+    clients[intruder]
+        .send(json!({"type":"game_action","action":{"game":"bang","payload":action}}))
+        .await;
+    clients[intruder].error("illegal_action").await;
+    clients[vera.0]
+        .send(json!({"type":"game_action","action":{"game":"bang","payload":action}}))
+        .await;
+    bang::apply(&mut state, vera, action, &mut rng).unwrap();
+    for (i, client) in clients.iter_mut().enumerate() {
+        expect(client, &state, Some(i), 1).await;
+    }
+    assert!(state.players[vera.0].copied.is_some());
+}
+
+#[tokio::test(start_paused = true)]
+async fn vulture_take_is_parsed_and_refused_without_a_vulture_split() {
+    let (_server, mut clients, state, _rng) = started(7).await;
+    let (owner, _) = bang::default_action(&state).unwrap();
+    for selection in [json!("hand"), json!({"in_play": 100})] {
+        clients[owner.0]
+            .send(json!({"type":"game_action","action":{"game":"bang","payload":{"type":"vulture_take","pending_id":999,"selection":selection}}}))
+            .await;
+        clients[owner.0].error("illegal_action").await;
+    }
+    // A malformed selection is a protocol error, not an illegal move.
+    clients[owner.0]
+        .send(json!({"type":"game_action","action":{"game":"bang","payload":{"type":"vulture_take","pending_id":999,"selection":"table"}}}))
+        .await;
+    clients[owner.0].error("invalid_message").await;
+}

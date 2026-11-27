@@ -27,8 +27,21 @@ export function jailTurnsLabel(player: Pick<PublicPlayer, 'jail_turns_left'>, ca
   return player.jail_turns_left === 0 ? 'Jail: đã chờ đủ 3 lượt, bỏ ở đầu lượt tiếp theo' : `Jail: còn ${player.jail_turns_left} lượt`;
 }
 
-export function equipmentStatus(player: Pick<PublicPlayer, 'weapon_range' | 'jail_turns_left'>, card: CardId) {
-  return jailTurnsLabel(player, card) ?? (groups[cardFace(card)?.kind as CardKind] === 0 ? equipmentLabel(player) : undefined);
+const greenKinds: CardKind[] = ['bible', 'canteen', 'can_can', 'ten_gallon_hat', 'conestoga', 'derringer', 'buffalo_rifle', 'howitzer', 'pepperbox', 'iron_plate', 'pony_express', 'knife', 'sombrero'];
+const missedOnly: CardKind[] = ['ten_gallon_hat', 'iron_plate', 'sombrero'];
+/** Dodge City green cards: waiting since this or the last turn, ready to use, or able to answer a shot. */
+export function greenStatus(player: Pick<PublicPlayer, 'green_ready' | 'green_answers'>, card: CardId) {
+  if (!greenKinds.includes(cardFace(card)?.kind as CardKind)) return undefined;
+  const answers = !!player.green_answers?.includes(card);
+  // Cards that only answer shots follow `green_answers` (Belle Star can switch them off while they are ready).
+  if (missedOnly.includes(cardFace(card)?.kind as CardKind)) return answers ? 'Đỡ được Missed! ngoài lượt' : 'Chưa đỡ được Missed!: vừa đặt hoặc đang bị vô hiệu';
+  const parts = [player.green_ready?.includes(card) ? 'Sẵn sàng dùng hiệu ứng' : 'Vừa đặt: hiệu ứng dùng được từ lượt sau của chủ bài'];
+  if (answers) parts.push('đỡ được Missed! ngoài lượt');
+  return parts.join(' · ');
+}
+
+export function equipmentStatus(player: Pick<PublicPlayer, 'weapon_range' | 'jail_turns_left' | 'green_ready' | 'green_answers'>, card: CardId) {
+  return jailTurnsLabel(player, card) ?? greenStatus(player, card) ?? (groups[cardFace(card)?.kind as CardKind] === 0 ? equipmentLabel(player) : undefined);
 }
 
 export type EquipmentPose = { rotate: number; curve: number; lift: number; own: boolean };

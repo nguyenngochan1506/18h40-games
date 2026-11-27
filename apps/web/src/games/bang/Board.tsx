@@ -19,7 +19,7 @@ import { assetUrl, sceneFiles, landscapeScenes, seatActorFile, backFiles, cardFi
 import { cardFace } from './cardCatalog';
 import { cards, characters, roles } from './i18n';
 import { selectGameView } from './state';
-import { actionMode, emptyDraft, needsTarget, isAffect, has, playKind, responseCard, playTargets } from './actions';
+import { actionMode, greenActive, emptyDraft, needsTarget, isAffect, has, playKind, responseCard, playTargets } from './actions';
 import type { ActionDraft } from './actions';
 import { dragDestination } from './drag/cardDrag';
 import { useCardDrag } from './drag/useCardDrag';
@@ -131,9 +131,9 @@ function Bullets({ player, focusable = true }: { player: PublicPlayer; focusable
   </div>;
 }
 
-function EquipmentRack({ player, nickname, inspect, sceneWidth, depth = 1, own = false, selected, pick, heading, cardWidth }: {
+function EquipmentRack({ player, nickname, inspect, sceneWidth, depth = 1, own = false, selected, pick, pickable, heading, cardWidth }: {
   player: PublicPlayer; nickname: string; inspect: Inspect; sceneWidth?: number; depth?: number; own?: boolean;
-  selected?: CardId | null; pick?: (card: CardId) => void; heading?: ReactNode; cardWidth?: number;
+  selected?: CardId | null; pick?: (card: CardId) => void; pickable?: (card: CardId) => boolean; heading?: ReactNode; cardWidth?: number;
 }) {
   const width = cardWidth ?? (sceneWidth ? Math.max(44, sceneWidth * .032 * depth) : 44);
   const fan = equipmentFan(player.in_play, width, sceneWidth ? own ? sceneWidth * .34 - 12 : sceneWidth * .12 * depth : 160, sceneWidth ?? 0, own);
@@ -143,7 +143,7 @@ function EquipmentRack({ player, nickname, inspect, sceneWidth, depth = 1, own =
     return <Card key={slot.card} id={slot.card} inspect={inspect} equipment={sceneWidth ? slot : { rotate: 0, curve: 0, lift: 0, own }}
       style={sceneWidth ? { left: slot.left, width, zIndex: index + 1 } : undefined}
       tipStatus={equipmentStatus(player, slot.card)} jail={label ? { remaining: player.jail_turns_left!, label } : undefined}
-      pick={pick ? () => pick(slot.card) : undefined} picked={selected === slot.card} />;
+      pick={pick && (!pickable || pickable(slot.card)) ? () => pick(slot.card) : undefined} picked={selected === slot.card} />;
   };
   const contents = <AnimatePresence initial={false} mode="popLayout">{fan.slots.map(renderCard)}</AnimatePresence>;
   if (!sceneWidth) return <div className="in-play" data-animation-region={`equipment-${player.id}`} aria-label={`Bài trước mặt ${nickname}`}>{contents}</div>;
@@ -169,7 +169,7 @@ function Seat({ player, nickname, own, turn, waiting, presence, inspect, inspect
         <span data-tip={`role:${player.role ?? 'hidden'}`} className={`role-tile${player.role ? ' revealed' : ' concealed'}`}><Artwork key={player.role ?? 'hidden'} file={player.role ? roleFiles[player.role] : backFiles.role} label={player.role ? roles[player.role].name : 'Vai chưa lộ'} />{!player.role && <span className="role-question" aria-hidden="true"><Icon name="star" /><b>?</b></span>}{player.role === 'sheriff' && <span className="sheriff-stamp">CẢNH SÁT</span>}</span>
       </span>
       <span className="hand-count" aria-label={`${player.hand_count} lá trên tay`}><i aria-hidden="true" /><MotionCount value={player.hand_count} /></span>
-      <span className="name-ribbon" title={`${characters[player.character].name} · ${nickname}`}><strong>{characters[player.character].name}</strong><small>{nickname}{own ? ' (bạn)' : ''}</small></span>
+      <span className="name-ribbon" title={`${characters[player.character].name} · ${nickname}`}><strong>{characters[player.character].name}</strong><small>{nickname}{own ? ' (bạn)' : ''}{player.copied ? ` · đang có khả năng ${characters[player.copied].name}` : ''}</small></span>
       <Bullets player={player} focusable={false} />
       <span className="seat-presence">{!player.alive ? 'Hồn ma' : turn ? 'Đang có lượt' : presence}</span>
       <span className="range-hint" title={`Tầm vũ khí của ${nickname}`}>Tầm bắn: {player.weapon_range}</span>
@@ -268,14 +268,33 @@ function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch
   const distanceEffects = own ? [own.in_play.some((id) => cardFace(id)?.kind === 'mustang') && 'Mustang +1', own.in_play.some((id) => cardFace(id)?.kind === 'scope') && 'Scope −1', own.in_play.some((id) => cardFace(id)?.kind === 'binocular') && 'Binocular −1', own.in_play.some((id) => cardFace(id)?.kind === 'hideout') && 'Hideout +1', has(own, 'paul_regret') && 'Paul Regret +1', has(own, 'rose_doolan') && 'Rose Doolan −1'].filter(Boolean).join(' · ') : '';
   const pickingEquipment = !locked && mode === 'turn' && !draft.healing && !draft.discarding && draft.card !== null && isAffect(game, draft.card);
   const pickEquipment = (player: number, card: CardId) => { setSelected(null); setSelectedPlayer(null); setDraft({ ...draft, target: player, selection: { in_play: card } }); };
+  const openedFromCard = useRef<CardId | null>(null);
+  // Clicking a ready green card in your own rack opens the green panel with that card already selected.
+  const openGreen = (card: CardId) => { openedFromCard.current = card; setSelected(null); setSelectedPlayer(null); setDraft({ ...emptyDraft, panel: 'green', green: card }); };
+  const canOpenGreen = !locked && mode === 'turn' && !draft.healing && !draft.discarding && !pickingEquipment;
+  const ownPickable = (card: CardId) => pickingEquipment || (canOpenGreen && !!own?.green_ready?.includes(card) && greenActive(cardFace(card)?.kind));
   const ownTargetMode = !!own && targetMode && targetIds.includes(own.id);
   const ownNickname = game.seats.find(seat => seat.player_id === you)?.nickname ?? 'bạn';
   const name = (id: number) => `${game.seats.find((seat) => seat.player_id === id)?.nickname ?? `Ghế ${id + 1}`}${id === you ? ' (bạn)' : ''}`;
   const status = waitText(table, name);
+  // Opening the panel moves focus into it; closing returns focus to the button that opened it.
+  const openPanel = useRef<ActionDraft['panel']>(null);
+  useEffect(() => {
+    const previous = openPanel.current;
+    openPanel.current = draft.panel;
+    if (draft.panel) [...document.querySelectorAll('.bang-board .game-controls')].at(-1)?.querySelector<HTMLElement>('input:not(:disabled), button:not(:disabled)')?.focus({ preventScroll: true });
+    else if (previous) {
+      // Prefer the equipment card that opened the panel while it is still on the table, else the generic opener button.
+      const card = openedFromCard.current;
+      openedFromCard.current = null;
+      const target = (card === null ? null : document.querySelector<HTMLElement>(`.bang-board .own-equipment [data-card-id="${card}"]`)) ?? document.querySelector<HTMLElement>(`.bang-board [data-open-panel="${previous}"]`);
+      target?.focus({ preventScroll: true });
+    }
+  }, [draft.panel]);
   useEffect(() => { if (stage) sceneRef.current?.querySelector<HTMLElement>('[data-scene-title]')?.focus({ preventScroll: true }); }, []);
 
   const ownJail = own?.in_play.find(id => cardFace(id)?.kind === 'jail');
-  const quietControls = mode === 'turn' && draft.card === null && !draft.discarding && !draft.healing;
+  const quietControls = mode === 'turn' && draft.card === null && !draft.discarding && !draft.healing && draft.panel === null;
   const controls = you !== null && <MotionPanel key={`${mode}:${draft.discarding}:${draft.healing}:${mode === 'turn' && draft.card === null}`} className={`decision-overlay${quietControls ? ' quiet-controls' : ''}${mode === 'waiting' && !draft.healing ? ' waiting-controls' : ''}`}>
       {!!choices.length && <section className="decision-pool" aria-label="Bài đang xem riêng"><h3>Bài đang xem riêng</h3><p>Chỉ bạn thấy các lá này. Chạm để chọn rồi xác nhận.</p><div className="hand-cards">{choices.map((id) => <Card key={id} id={id} inspect={inspect} picked={mode === 'keep_cards' ? draft.kept.includes(id) : draft.card === id} pick={!locked && !draft.healing && (mode === 'keep_cards' || mode === 'choose_draw_result') ? () => choosePool(id) : undefined} />)}</div></section>}
       {you !== null && <div className="game-input"><GameControls game={game} draft={draft} disabled={locked} setDraft={setDraft} sendAction={(action) => { setSelected(null); setSelectedPlayer(null); sendAction?.(action); }} /></div>}
@@ -284,6 +303,8 @@ function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch
   return <GameMotion enabled={!!stage}><section className={`bang-board saloon-board seats-${table.players.length}${stage ? ' cinematic ui-motion' : ''}${journalOpen ? ' journal-open' : ''}${drag.dragging !== null ? ' is-dragging' : ''}${you === null ? ' spectator-board' : ''}`} tabIndex={-1} aria-label="Bàn chơi BANG!" data-drag-card={drag.dragging ?? undefined} aria-busy={pending} onKeyDown={event => {
       const target = event.target as HTMLElement;
       const overlay = !!document.querySelector(':popover-open,dialog[open],[aria-modal="true"]');
+      // Escape closes the green-card / skill panel even from its radios and checkboxes.
+      if (event.key === 'Escape' && draft.panel !== null && !overlay && !selected && !inspectingPlayer) { event.preventDefault(); setDraft(emptyDraft); return; }
       const shortcut = tableShortcut(event.key, { desktop: !!stage, editing: target.isContentEditable || !!target.closest('input,textarea,select'), overlay: overlay || (event.key !== 'Escape' && !!(selected || inspectingPlayer)), nativeControl: !!target.closest('button,a,summary,[role="button"]') && !target.closest('.game-card[aria-pressed="true"],.store-slot[aria-pressed="true"],.scene-actor[aria-pressed="true"],.seat-target[aria-pressed="true"]'), modified: event.altKey || event.ctrlKey || event.metaKey, repeat: event.repeat, locked: locked || !fxEnabled || !!table.winner, dragging: drag.dragging !== null });
       if (shortcut === 'cancel') {
         event.preventDefault();
@@ -339,13 +360,13 @@ function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch
         })}
       </div>
     </div>
-    {own && <aside className="own-identity wood-panel" aria-label="Vai và nhân vật của bạn"><div className="role-medallion" role="img" aria-label={own.role ? roles[own.role].name : 'Vai chưa lộ'} tabIndex={0} data-tip={`role:${own.role ?? 'hidden'}`}><Icon name="star" /><strong>{own.role ? roles[own.role].name : 'Vai chưa lộ'}</strong></div><div className="identity-copy"><span className={`own-character-tip${ownJail !== undefined ? ' is-jailed' : ''}`} role="img" tabIndex={0} data-tip={`character:${own.character}`} aria-label={`Kỹ năng ${characters[own.character].name}`}><Artwork file={characterFiles[own.character]} label={characters[own.character].name} />{stage && <span className="seat-anchor" data-animation-anchor={own.id} aria-hidden="true" />}{stage && ownJail !== undefined && fxEnabled && effectsEnabled && <img className="own-jail-cage" src={fxFiles.jail} alt="" aria-hidden="true" />}</span><small>BẠN</small><h3>{characters[own.character].name}</h3><Bullets player={own} />{!own.alive && <span>Hồn ma</span>}</div></aside>}
+    {own && <aside className="own-identity wood-panel" aria-label="Vai và nhân vật của bạn"><div className="role-medallion" role="img" aria-label={own.role ? roles[own.role].name : 'Vai chưa lộ'} tabIndex={0} data-tip={`role:${own.role ?? 'hidden'}`}><Icon name="star" /><strong>{own.role ? roles[own.role].name : 'Vai chưa lộ'}</strong></div><div className="identity-copy"><span className={`own-character-tip${ownJail !== undefined ? ' is-jailed' : ''}`} role="img" tabIndex={0} data-tip={`character:${own.character}`} aria-label={`Kỹ năng ${characters[own.character].name}${own.copied ? `, đang sao chép ${characters[own.copied].name}` : ''}`}><Artwork file={characterFiles[own.character]} label={characters[own.character].name} />{stage && <span className="seat-anchor" data-animation-anchor={own.id} aria-hidden="true" />}{stage && ownJail !== undefined && fxEnabled && effectsEnabled && <img className="own-jail-cage" src={fxFiles.jail} alt="" aria-hidden="true" />}</span><small>BẠN</small><h3>{characters[own.character].name}</h3>{own.copied && <p className="copied-ability" data-tip={`character:${own.copied}`} tabIndex={0}>Đang có khả năng {characters[own.copied].name}: {characters[own.copied].ability}</p>}<Bullets player={own} />{!own.alive && <span>Hồn ma</span>}</div></aside>}
     {you === null && !own && <p className="spectator-plaque wood-panel">Bạn đang xem ván chơi</p>}
     {you !== null && <section className={`own-hand hand-tray wood-panel${!table.winner && table.turn.player === viewer ? ' is-my-turn' : ''}`} aria-label="Bài trên tay của bạn">
       {stage && own && <div data-player-id={own.id} style={{ '--depth': 1.12 } as CSSProperties}>
         <EquipmentRack player={own} nickname={ownNickname} inspect={inspect} sceneWidth={stage.width} cardWidth={ownEquipmentWidth(viewport.width, viewport.height)} depth={1.12} own
-          selected={draft.target === own.id && typeof draft.selection === 'object' ? draft.selection?.in_play : null}
-          pick={pickingEquipment ? card => pickEquipment(own.id, card) : undefined}
+          selected={draft.panel === 'green' ? draft.green : draft.target === own.id && typeof draft.selection === 'object' ? draft.selection?.in_play : null}
+          pick={card => pickingEquipment ? pickEquipment(own.id, card) : openGreen(card)} pickable={ownPickable}
           heading={<button type="button" className={`equipment-heading${ownTargetMode && draft.target === own.id ? ' is-targeted' : ''}`} data-tip={`character:${own.character}`} aria-label={ownTargetMode ? `Nhắm tới ${ownNickname}` : `Xem nhân vật ${ownNickname}`} aria-pressed={ownTargetMode ? draft.target === own.id : undefined} onClick={event => ownTargetMode ? setDraft({ ...draft, target: own.id, selection: null }) : inspectPlayer(own, event.currentTarget)}>{equipmentLabel(own, true)}</button>} />
       </div>}
       <div className="section-heading"><h3>Bài trên tay của bạn</h3><span><MotionCount value={hand.length} /> lá</span></div><m.div className="hand-cards" data-animation-region="hand" style={{ '--hand-count': hand.length } as CSSProperties} data-ui-motion="hand-layout" layoutScroll><AnimatePresence initial={false} mode="popLayout">{hand.map((id, index) => <Card key={id} id={id} inspect={inspect} handIndex={index} handCount={hand.length} managed={!!stage && fxEnabled && effectsEnabled} hidden={drag.flight?.card === id} dragCard={stage && dragDestination(game, draft, id, locked) ? drag.props(id) : undefined} style={{ '--fan-angle': '0deg' } as CSSProperties} picked={draft.discarding || draft.healing ? draft.discard.includes(id) : draft.card === id} pick={!locked && (draft.healing || (mode === 'turn' && (draft.discarding || playKind(game, id))) || (mode === 'response' && responseCard(game, id))) ? () => chooseHand(id) : undefined} />)}</AnimatePresence>{!hand.length && <p>Bạn chưa có bài trên tay.</p>}</m.div>{stage && <span className="own-hand-label">Bài trên tay · {hand.length} lá</span>}<AnimatePresence initial={false}>{stage && quietControls && controls}</AnimatePresence></section>}

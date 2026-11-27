@@ -3362,3 +3362,39 @@ fn belle_star_hides_other_players_green_answers_from_the_snapshot_during_her_tur
         Some(vec![hat])
     );
 }
+
+#[test]
+fn the_player_view_exposes_skill_uses_only_to_the_turn_player_with_doc_or_jose() {
+    let mut game = Scenario::dodge(4);
+    game.character(0, Character::JoseDelgado);
+    game.character(1, Character::DocHolyday);
+    let blues: Vec<_> = [Mustang, Barrel]
+        .into_iter()
+        .map(|k| game.give(0, k))
+        .collect();
+    let uses = |game: &Scenario, player| view(&game.state, PlayerId(player)).unwrap().skill_uses;
+    assert_eq!(uses(&game, 0), Some(SkillUses::default()));
+    assert_eq!(uses(&game, 1), None, "Doc is not the turn player");
+    assert_eq!(uses(&game, 2), None, "Nobody else holds either ability");
+    game.act(0, Action::JoseDelgado { card: blues[0] });
+    assert_eq!(uses(&game, 0).unwrap().jose_delgado, 1);
+    // A snapshot taken on re-entry is built from the same state, so the count survives it.
+    let value = serde_json::to_value(view(&game.state, PlayerId(0)).unwrap()).unwrap();
+    assert_eq!(value["skill_uses"]["jose_delgado"], 1);
+    assert!(
+        serde_json::to_value(view(&game.state, PlayerId(2)).unwrap())
+            .unwrap()
+            .get("skill_uses")
+            .is_none(),
+        "Absent for everyone else (no schema change for old clients)"
+    );
+    game.act(0, Action::JoseDelgado { card: blues[1] });
+    assert_eq!(uses(&game, 0).unwrap().jose_delgado, 2);
+    game.act(0, Action::EndTurn { discard: vec![] });
+    assert_eq!(uses(&game, 0), None, "Not her turn any more");
+    assert_eq!(
+        uses(&game, 1),
+        Some(SkillUses::default()),
+        "A new turn resets the count"
+    );
+}

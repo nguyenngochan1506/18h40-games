@@ -23,6 +23,7 @@ fn main() -> std::io::Result<()> {
         bang::Character::decl(&config),
         bang::CardSelection::decl(&config),
         bang::BrawlPick::decl(&config),
+        bang::SkillUses::decl(&config),
         bang::DrawSource::decl(&config),
         bang::Action::decl(&config),
         bang::TurnStep::decl(&config),

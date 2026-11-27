@@ -127,5 +127,6 @@ test('Dodge City regular cards read naturally in Vietnamese', async () => {
   assert.deepEqual(log({ type: 'card_discarded', player: 0, card: id('whisky') }), ['Hân (bạn) bỏ Whisky (Q♦).']);
   assert.deepEqual(log({ type: 'hand_card_affected', source: 0, target: 1, kind: 'rag_time', card: 1 }), ['Hân (bạn) dùng Rag Time lấy BANG! (2♦) từ tay Minh.']);
   assert.deepEqual(log({ type: 'in_play_card_affected', source: 0, target: 1, kind: 'brawl', card: 63 }), ['Hân (bạn) dùng Brawl bỏ Barrel (Q♠) trước mặt Minh.']);
+  assert.deepEqual(log({ type: 'hand_card_affected', source: 0, target: 1, kind: 'conestoga', card: 1 }), ['Hân (bạn) dùng Conestoga lấy BANG! (2♦) từ tay Minh.']);
   assert.deepEqual(log({ type: 'hand_affected', source: 0, target: 1, kind: 'brawl', count: 1 }), ['Hân (bạn) dùng Brawl buộc bỏ 1 lá từ tay Minh.']);
 });

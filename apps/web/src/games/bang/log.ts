@@ -24,7 +24,7 @@ export function winnerName(winner: Winner): string {
 export function eventsToLog(events: EventKind[], ctx: LogContext): string[] {
   const name = (id: number) => playerName(id, ctx);
   // Panic! and Rag Time take the card for themselves; the other effects make the target discard it.
-  const takes = (kind: string) => kind === 'panic' || kind === 'rag_time';
+  const takes = (kind: string) => kind === 'panic' || kind === 'rag_time' || kind === 'conestoga';
   const list = (ids: CardId[]) => ids.length ? ids.map(cardName).join(', ') : 'không có lá nào';
   let waiting = ctx.waiting;
   return events.map((event): string => {

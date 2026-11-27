@@ -4,7 +4,7 @@ import type { DecisionKind } from '../../generated/protocol.ts';
 import type { BangSnapshot as GameSnapshot } from './types.ts';
 import { demoGame } from './demo/demo.ts';
 import { storeOwners } from './choiceFan.ts';
-import { actionMode, chooseHandSlotAction, chooseStoreSlotAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, sidHealAction, isSid } from './actions.ts';
+import { actionMode, chooseHandSlotAction, chooseStoreSlotAction, chooseDrawSourceAction, keepCardsAction, keepCount, chooseDrawResultAction, sidHealAction, isSid, canSidHeal } from './actions.ts';
 
 function fixture(kind: DecisionKind) {
   const game = structuredClone(demoGame);
@@ -142,5 +142,20 @@ test('blind hand choices use only the current nonce and an opaque bounded slot f
     assert.deepEqual(game, before);
     table.waiting!.pending_id = 102;
     assert.deepEqual(chooseHandSlotAction(game, 1, false), { type: 'choose_hand_slot', pending_id: 102, slot: 1 });
+  }
+});
+
+test('Sid and Vera copying Sid cannot heal at full health, but can when wounded, off turn and while dying', () => {
+  for (const [character, copied] of [['sid_ketchum', undefined], ['vera_custer', 'sid_ketchum']] as const) {
+    for (const kind of [{ type: 'turn' }, { type: 'attack_response', kind: 'bang', remaining: 1, checks_left: 0 }, { type: 'dying', needed: 1 }] as const) {
+      const { game, table } = fixture(kind);
+      Object.assign(table.players[0], { character, copied });
+      table.players[0].health = table.players[0].max_health;
+      assert.equal(canSidHeal(game), false);
+      assert.equal(sidHealAction(game, [1, 26], false), null, `${character} at full health is locked`);
+      table.players[0].health = kind.type === 'dying' ? 0 : table.players[0].max_health - 1;
+      assert.equal(canSidHeal(game), true);
+      assert.ok(sidHealAction(game, [1, 26], false), `${character} wounded can heal during ${kind.type}`);
+    }
   }
 });

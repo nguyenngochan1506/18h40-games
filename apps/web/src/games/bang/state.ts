@@ -8,7 +8,7 @@ import type { BangSnapshot } from './types.ts';
 export function selectGameView(view: BangView) {
   const table = view.perspective === 'player' ? view.view.table : view.view;
   const own = view.perspective === 'player' && table.players.find(player => player.id === view.view.you && player.alive);
-  return { table, you: own && view.perspective === 'player' ? view.view.you : null, hand: own && view.perspective === 'player' ? view.view.hand : [], choices: own && view.perspective === 'player' ? view.view.choices : [] };
+  return { table, you: own && view.perspective === 'player' ? view.view.you : null, hand: own && view.perspective === 'player' ? view.view.hand : [], choices: own && view.perspective === 'player' ? view.view.choices : [], skillUses: own && view.perspective === 'player' ? view.view.skill_uses : undefined };
 }
 export type BangState = { game: BangSnapshot | null; log: LogEntry[]; nextLogId: number; fxBatch: FxBatch | null; soundBatch: FxBatch | null };
 export const initialBangState: BangState = { game: null, log: [], nextLogId: 0, fxBatch: null, soundBatch: null };

@@ -97,3 +97,8 @@
  .game-bang .cinematic .table-center:not(.has-store) .pile-row strong { font-size: 13px; }
  .game-bang .cinematic .table-center:not(.has-store) .pile-row > div > span { font-size: 12px; }
 }
+.game-bang .skill-status { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+/* Green-card and skills panels list one option per target: use two compact columns in the docked cinematic panel. */
+.game-bang .affect-options.green-cards, .game-bang .affect-options.skills { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); column-gap: 4px; }
+.game-bang .affect-options.green-cards > :is(legend, p, button, ul), .game-bang .affect-options.skills > :is(legend, p, button, ul) { grid-column: 1 / -1; }
+.game-bang .affect-options.green-cards label, .game-bang .affect-options.skills label { min-height: 36px; padding: 4px; overflow-wrap: anywhere; }

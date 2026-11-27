@@ -153,4 +153,13 @@ Nguồn: `bang_dodge_city_faq_eng.pdf` của dV Giochi (Q13–Q16 thuộc High N
 ## Ghi chú D3a (web)
 
 - Web hiển thị đủ 120 mặt lá, chọn bản mở rộng ở phòng chờ và bàn 8 ghế. Lá thường mới có luồng chơi: lá phụ → mục tiêu/lựa chọn (Springfield, Tequila, Whisky, Rag Time, Brawl), Punch như BANG! tầm 1, Dodge đáp như Missed!.
-- Lá viền xanh lá, kỹ năng nhân vật cần giao diện riêng, `VultureTake`/`ChooseCopy` và ảnh `03_*` thuộc D3b.
+- Lá viền xanh lá, kỹ năng nhân vật, `VultureTake`/`ChooseCopy`: xem D3b.
+
+## Ghi chú D3b (web)
+
+- **Làm xong:** lá xanh lá (đặt, trạng thái chờ/sẵn sàng/đỡ Missed!, dùng chủ động bằng bấm lá ở khu trang bị hoặc bảng điều khiển, đáp ngoài lượt), kỹ năng Chuck/José/Doc/Pat, `ChooseCopy` và `VultureTake` (`VultureSplit`), hiển thị khả năng Vera đang sao chép, mô tả tiếng Việt cho 15 nhân vật/13 lá xanh lá/9 lá thường, nhật ký cho event mới, trạng thái chờ người khác.
+- **View:** `PlayerView.skill_uses` (optional, `skip_serializing_if`) chỉ gửi cho người chơi đang có lượt với Doc Holyday/José Delgado (kể cả do Vera sao chép), để client khóa lần dùng thứ ba của José và lần thứ hai của Doc. Không đổi `PROTOCOL_VERSION`.
+- **Đối chiếu luật khi viết mô tả:** Bible chủ động (từ lượt sau của chủ) chỉ rút 1 lá, khi đỡ thì như Missed! rồi rút 1 lá (từ lượt người kế tiếp); Ten Gallon Hat/Iron Plate/Sombrero không dùng chủ động; Howitzer như Gatling; Pepperbox theo tầm vũ khí; Punch/Knife/Derringer/Buffalo Rifle/Howitzer/Pepperbox/Doc không tính giới hạn BANG!; Apache Kid không chặn Missed! ♦ của người khác (FAQ Q10).
+- **Kiểm thử:** DOM (`interactions.dom.test.ts`) cho từng luồng; `dodgeCityActions.test.ts`/`dodgeCityGreen.test.ts` cho hành động; `apps/server/tests/dodge_city.rs` cho Brawl và ChooseCopy qua socket (seed tìm sẵn nên ván khởi đầu có tình huống đó). `VultureTake` chỉ kiểm được hình dạng thông điệp và việc server từ chối khi không có `VultureSplit` (server không cho dựng trạng thái tùy ý; luồng chia bài đầy đủ do test engine bao phủ).
+- **Đã xem bằng trình duyệt** (1920×1080 và 1280×720): phòng chờ + 8 ghế, ván 8 người có ảnh Dodge City, đặt lá xanh lá, chờ, bấm lá để mở bảng. Sửa được lỗi bố cục: bảng lá xanh lá cao hơn viewport ở 1280×720 → mục tiêu xếp hai cột.
+- **Chưa làm / không chắc:** UI riêng cho kỹ năng bị động; xem bằng mắt `VultureSplit`, `ChooseCopy`, Brawl và kỹ năng chủ động; chế độ 3 người.

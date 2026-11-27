@@ -31,6 +31,7 @@ pub enum GameAction {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "game", content = "payload", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
 pub enum GameView {
     Bang(bang::BangView),
     Uno(uno::View),
@@ -459,6 +460,7 @@ mod tests {
             you: ::bang::PlayerId(0),
             hand: vec![::bang::CardId(0)],
             choices: vec![],
+            skill_uses: None,
             table: table.clone(),
         });
         let public = BangView::Spectator(table);

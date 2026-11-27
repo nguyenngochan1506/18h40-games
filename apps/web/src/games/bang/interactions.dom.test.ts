@@ -728,3 +728,172 @@ test('card detail shows the pack picture for a Dodge City card that shares its n
   await settle();
   assert.ok(container.querySelector('.card-detail img')?.getAttribute('src')?.includes('03_mancato'));
 });
+
+type Table = import('../../generated/protocol.ts').SpectatorView;
+const neutralTable = (table: Table) => { table.players[0].character = 'bart_cassidy'; table.players[0].weapon_range = 1; table.players[0].health = 3; for (const player of table.players) player.in_play = []; table.turn.bangs_played = 0; };
+const pick = (container: HTMLElement, name: string, label: RegExp) => act(() => [...container.querySelectorAll<HTMLInputElement>(`input[name="${name}"]`)].find(input => label.test(input.parentElement!.textContent!))!.click());
+const lastPanel = (container: HTMLElement) => [...container.querySelectorAll('.game-controls')].at(-1)!;
+
+const openPanel = (container: HTMLElement, label: RegExp) => act(() => [...container.querySelectorAll<HTMLButtonElement>('.game-controls button')].find(button => label.test(button.textContent!))!.click());
+const overlay = (container: HTMLElement) => container.querySelector('.decision-overlay')!;
+
+test('green cards and skills open an interactive panel: the quiet overlay (pointer-events none) only holds buttons', async t => {
+  const id = await dodgeCity();
+  const { container, sent, settle } = await dodgeBoard(t, [1], { type: 'turn' }, table => { neutralTable(table); table.players[0].character = 'chuck_wengam'; table.players[0].in_play = [id('derringer'), id('bible')]; table.players[0].green_ready = [id('derringer')]; });
+  // Quiet state: the overlay ignores the mouse except for buttons, so it must hold no radio or checkbox.
+  assert.ok(overlay(container).classList.contains('quiet-controls'));
+  assert.equal(overlay(container).querySelectorAll('input').length, 0);
+  await openPanel(container, /Lá xanh lá \(2\)/); await settle();
+  assert.equal(overlay(container).classList.contains('quiet-controls'), false, 'The panel is interactive while a green card is being chosen');
+  const text = lastPanel(container).textContent!;
+  assert.match(text, /Derringer.*sẵn sàng dùng/);
+  assert.match(text, /Bible.*vừa đặt, dùng hiệu ứng từ lượt sau/);
+  const bible = [...container.querySelectorAll<HTMLInputElement>('input[name="green-card"]')].find(input => /Bible/.test(input.parentElement!.textContent!))!;
+  assert.equal(bible.disabled, true);
+  await pick(container, 'green-card', /Derringer/); await settle();
+  const activate = () => lastPanel(container).querySelector<HTMLButtonElement>('.green-cards > button')!;
+  assert.equal(activate().disabled, true, 'A target is still missing');
+  await pick(container, 'green-target', /Minh/); await settle();
+  assert.equal(activate().getAttribute('data-primary-action'), 'true', 'Enter goes to the selected action, not to End turn');
+  assert.equal([...lastPanel(container).querySelectorAll('[data-primary-action="true"]')].some(button => /Kết thúc lượt/.test(button.textContent!)), false);
+  await act(() => activate().click());
+  assert.deepEqual(sent, [{ type: 'activate_green', card: id('derringer'), target: 1, selection: null }]);
+});
+
+test('Chuck Wengam, José Delgado and Doc Holyday act from the skills panel', async t => {
+  const id = await dodgeCity();
+  const skills = (character: 'chuck_wengam' | 'jose_delgado' | 'doc_holyday', hand: number[], extra?: (table: Table) => void) => dodgeBoard(t, hand, { type: 'turn' }, table => { neutralTable(table); table.players[0].character = character; extra?.(table); });
+  const chuck = await skills('chuck_wengam', [1]);
+  await openPanel(chuck.container, /Kỹ năng nhân vật/); await chuck.settle();
+  await act(() => [...lastPanel(chuck.container).querySelectorAll<HTMLButtonElement>('button')].find(b => /Chuck Wengam/.test(b.textContent!))!.click());
+  assert.deepEqual(chuck.sent, [{ type: 'chuck_draw' }]);
+});
+
+test('José discards a chosen blue card and the button counts the uses left', async t => {
+  const id = await dodgeCity();
+  const { container, sent, settle } = await dodgeBoard(t, [id('barrel'), 1], { type: 'turn' }, table => { neutralTable(table); table.players[0].character = 'jose_delgado'; });
+  await openPanel(container, /Kỹ năng nhân vật/); await settle();
+  await pick(container, 'jose-card', /Barrel/); await settle();
+  const button = lastPanel(container).querySelector<HTMLButtonElement>('.skills button[data-primary-action="true"]')!;
+  assert.match(button.textContent!, /còn 2 lần/);
+  await act(() => button.click());
+  assert.deepEqual(sent, [{ type: 'jose_delgado', card: id('barrel') }]);
+});
+
+test('Doc Holyday picks two cards and a target in range', async t => {
+  const { container, sent, settle } = await dodgeBoard(t, [1, 26, 37], { type: 'turn' }, table => { neutralTable(table); table.players[0].character = 'doc_holyday'; });
+  await openPanel(container, /Kỹ năng nhân vật/); await settle();
+  for (const label of [/BANG!/, /Missed!/]) await act(() => [...container.querySelectorAll<HTMLInputElement>('.skills input[type="checkbox"]')].find(input => label.test(input.parentElement!.textContent!))!.click());
+  await settle();
+  await pick(container, 'doc-target', /Minh/); await settle();
+  await act(() => lastPanel(container).querySelector<HTMLButtonElement>('.skills button[data-primary-action="true"]')!.click());
+  assert.deepEqual(sent, [{ type: 'doc_holyday', cards: [1, 26], target: 1 }]);
+});
+
+test('a ready green Missed! card answers a BANG! from the response controls', async t => {
+  const id = await dodgeCity();
+  const { container, sent, settle } = await dodgeBoard(t, [1], { type: 'attack_response', kind: 'bang', remaining: 1, checks_left: 0 }, table => { neutralTable(table); table.players[0].in_play = [id('sombrero')]; table.players[0].green_answers = [id('sombrero')]; });
+  await pick(container, 'green-answer', /Sombrero/); await settle();
+  assert.match(lastPanel(container).textContent!, /Đỡ bằng Sombrero/);
+  await act(() => lastPanel(container).querySelector<HTMLButtonElement>('[data-primary-action="true"]:not(:disabled)')!.click());
+  assert.deepEqual(sent, [{ type: 'respond', pending_id: 70, card: id('sombrero') }]);
+});
+
+test('Vera chooses a character to copy and Vulture Sam players take from the loot', async t => {
+  const id = await dodgeCity();
+  const copy = await dodgeBoard(t, [1], { type: 'choose_copy' }, neutralTable);
+  await pick(copy.container, 'copy-target', /Lucky Duke/); await copy.settle();
+  await act(() => lastPanel(copy.container).querySelector<HTMLButtonElement>('[data-primary-action="true"]:not(:disabled)')!.click());
+  assert.deepEqual(copy.sent, [{ type: 'choose_copy', pending_id: 70, target: 2 }]);
+});
+
+test('Vulture split lists the face-up loot and a random hand card', async t => {
+  const id = await dodgeCity();
+  const { container, sent, settle } = await dodgeBoard(t, [1], { type: 'vulture_split', victim: 1, hand_count: 2, table_count: 1 }, table => { neutralTable(table); table.loot_table = [id('barrel')]; });
+  assert.match(lastPanel(container).textContent!, /ngẫu nhiên \(2 lá\)/);
+  await pick(container, 'vulture-take', /Lá ngửa: Barrel/); await settle();
+  await act(() => lastPanel(container).querySelector<HTMLButtonElement>('[data-primary-action="true"]:not(:disabled)')!.click());
+  assert.deepEqual(sent, [{ type: 'vulture_take', pending_id: 70, selection: { in_play: id('barrel') } }]);
+});
+
+test('Pat Brennan sees both outcomes before confirming: two cards from the deck or one table card', async t => {
+  const id = await dodgeCity();
+  const { container, sent, settle } = await dodgeBoard(t, [], { type: 'draw_choice' }, table => { neutralTable(table); table.players[0].character = 'pat_brennan'; table.players[2].in_play = [id('barrel')]; });
+  assert.match(lastPanel(container).textContent!, /rút 2 lá từ bộ rút, hoặc lấy đúng 1 lá trước mặt/);
+  assert.match(lastPanel(container).querySelector('[data-primary-action="true"]')!.textContent!, /Rút 2 lá từ bộ rút/);
+  await pick(container, 'draw-source', /Barrel/); await settle();
+  assert.match(lastPanel(container).querySelector('[data-primary-action="true"]')!.textContent!, /Lấy 1 lá, không rút thêm/);
+  await act(() => lastPanel(container).querySelector<HTMLButtonElement>('[data-primary-action="true"]:not(:disabled)')!.click());
+  assert.deepEqual(sent, [{ type: 'choose_draw_source', pending_id: 70, source: { in_play: { player: 2, card: id('barrel') } } }]);
+});
+
+test('Escape closes the green-card and skills panels from the first focus and from a chosen radio, returning focus to the opener', async t => {
+  const id = await dodgeCity();
+  const { container, settle } = await dodgeBoard(t, [id('barrel'), 1], { type: 'turn' }, table => { neutralTable(table); table.players[0].character = 'jose_delgado'; table.players[0].in_play = [id('canteen')]; table.players[0].green_ready = [id('canteen')]; });
+  const escape = () => act(() => { (document.activeElement ?? container).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  for (const [label, panel, radio] of [[/Lá xanh lá/, 'green', 'green-card'], [/Kỹ năng nhân vật/, 'skills', 'jose-card']] as const) {
+    await openPanel(container, label); await settle();
+    assert.ok(lastPanel(container).contains(document.activeElement), `${panel}: focus moves into the opened panel without a manual focus`);
+    await escape(); await settle();
+    assert.ok(overlay(container).classList.contains('quiet-controls'), `${panel}: Escape from the first focus closes it`);
+    assert.equal((document.activeElement as HTMLElement | null)?.getAttribute('data-open-panel'), panel, 'Focus returns to the opening button');
+    await openPanel(container, label); await settle();
+    const input = container.querySelector<HTMLInputElement>(`input[name="${radio}"]:not(:disabled)`)!;
+    await act(() => { input.click(); input.focus(); }); await settle();
+    assert.equal(document.activeElement?.tagName, 'INPUT');
+    await escape(); await settle();
+    assert.ok(overlay(container).classList.contains('quiet-controls'), `${panel}: Escape from a chosen radio closes it`);
+    assert.equal((document.activeElement as HTMLElement | null)?.getAttribute('data-open-panel'), panel);
+  }
+});
+
+test('clicking a ready green card in your own rack opens the panel with it chosen; waiting cards stay inert', async t => {
+  const width = Object.getOwnPropertyDescriptor(window, 'innerWidth'), height = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });
+  t.after(() => { if (width) Object.defineProperty(window, 'innerWidth', width); else Reflect.deleteProperty(window, 'innerWidth'); if (height) Object.defineProperty(window, 'innerHeight', height); else Reflect.deleteProperty(window, 'innerHeight'); });
+  const id = await dodgeCity();
+  const { container, sent, settle } = await dodgeBoard(t, [id('barrel'), 1], { type: 'turn' }, table => { neutralTable(table); table.players[0].in_play = [id('knife'), id('canteen')]; table.players[0].green_ready = [id('knife')]; });
+  const card = (kind: string) => container.querySelector<HTMLButtonElement>(`.own-equipment [data-card-id="${id(kind)}"]`);
+  assert.ok(card('knife'), 'The own rack is drawn on the scene stage');
+  assert.equal(card('canteen')!.hasAttribute('aria-pressed'), false, 'A card that is still waiting cannot be chosen');
+  await act(() => card('knife')!.click()); await settle();
+  assert.equal([...container.querySelectorAll('.decision-overlay')].at(-1)!.classList.contains('quiet-controls'), false, 'The panel is open');
+  assert.equal(lastPanel(container).querySelector<HTMLInputElement>('input[name="green-card"]:checked')?.parentElement?.textContent?.includes('Knife'), true);
+  await pick(container, 'green-target', /Minh/); await settle();
+  await act(() => lastPanel(container).querySelector<HTMLButtonElement>('.green-cards > button')!.click());
+  assert.deepEqual(sent, [{ type: 'activate_green', card: id('knife'), target: 1, selection: null }]);
+});
+
+test('Escape after opening the panel from a green card returns focus to that card', async t => {
+  const width = Object.getOwnPropertyDescriptor(window, 'innerWidth'), height = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });
+  t.after(() => { if (width) Object.defineProperty(window, 'innerWidth', width); else Reflect.deleteProperty(window, 'innerWidth'); if (height) Object.defineProperty(window, 'innerHeight', height); else Reflect.deleteProperty(window, 'innerHeight'); });
+  const id = await dodgeCity();
+  const { container, settle } = await dodgeBoard(t, [id('barrel'), 1], { type: 'turn' }, table => { neutralTable(table); table.players[0].in_play = [id('knife')]; table.players[0].green_ready = [id('knife')]; });
+  await act(() => container.querySelector<HTMLButtonElement>(`.own-equipment [data-card-id="${id('knife')}"]`)!.click()); await settle();
+  await act(() => { (document.activeElement ?? container).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }); await settle();
+  assert.equal((document.activeElement as HTMLElement | null)?.getAttribute('data-card-id'), String(id('knife')));
+});
+
+test('Can Can opening a hidden slot says the card is discarded, like Cat Balou and Brawl', async t => {
+  const id = await dodgeCity();
+  const { container } = await dodgeBoard(t, [id('brawl')], { type: 'pick_hand_slot', target: 1, kind: 'can_can', count: 3 });
+  assert.match(container.querySelector('.game-controls [data-primary-action="true"]')!.textContent!, /Buộc bỏ lá đã chọn/);
+});
+
+test('Vera copying Janet answers a Duel with Dodge from the real controls', async t => {
+  const id = await dodgeCity();
+  const janet = await dodgeBoard(t, [id('dodge')], { type: 'duel' }, table => { table.players[0].character = 'vera_custer'; table.players[0].copied = 'calamity_janet'; });
+  await janet.hold(id('dodge')); await janet.play();
+  assert.deepEqual(janet.sent, [{ type: 'respond', pending_id: 70, card: id('dodge') }]);
+});
+
+test('Vera copying Elena answers a BANG! with any hand card from the real controls', async t => {
+  const id = await dodgeCity();
+  const beer = id('beer');
+  const elena = await dodgeBoard(t, [beer], { type: 'attack_response', kind: 'bang', remaining: 1, checks_left: 0 }, table => { table.players[0].character = 'vera_custer'; table.players[0].copied = 'elena_fuente'; });
+  await elena.hold(beer); await elena.play();
+  assert.deepEqual(elena.sent, [{ type: 'respond', pending_id: 70, card: beer }]);
+});

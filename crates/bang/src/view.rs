@@ -59,6 +59,11 @@ pub struct PlayerView {
     pub hand: Vec<CardId>,
     /// The top private Kit/Lucky pool, visible only to its owner.
     pub choices: Vec<CardId>,
+    /// This turn's Doc Holyday / José Delgado uses, only for the turn player holding either ability
+    /// (Vera's copy included), so the client can lock a skill the engine would refuse.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub skill_uses: Option<crate::state::SkillUses>,
     pub table: SpectatorView,
 }
 
@@ -140,6 +145,9 @@ pub fn view(state: &GameState, player: PlayerId) -> Result<PlayerView, ActionErr
                 _ => Vec::new(),
             })
             .unwrap_or_default(),
+        skill_uses: (state.turn.player == player
+            && (own.has(crate::Character::DocHolyday) || own.has(crate::Character::JoseDelgado)))
+        .then_some(state.skill_uses),
         table,
     })
 }
