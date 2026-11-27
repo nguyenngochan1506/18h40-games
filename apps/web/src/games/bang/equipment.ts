@@ -3,7 +3,7 @@ import { cardFace } from './cardCatalog.ts';
 
 const groups: Partial<Record<CardKind, number>> = {
   volcanic: 0, schofield: 0, remington: 0, rev_carabine: 0, winchester: 0,
-  barrel: 1, scope: 2, mustang: 2, dynamite: 3, jail: 4,
+  barrel: 1, scope: 2, mustang: 2, binocular: 2, hideout: 2, dynamite: 3, jail: 4,
 };
 
 export function orderedEquipment(cards: CardId[]) {

@@ -48,11 +48,11 @@ for (const [id, name] of [['uno', 'UNO'], ['werewolf', 'Ma Sói']] as const) tes
   assert.equal(leave.type, 'button'); assert.equal(leave.disabled, false); assert.equal(leave.textContent, 'Rời phòng');
   await act(() => leave.click()); assert.equal(leaveRoom.mock.callCount(), 1);
   const onChange = t.mock.fn();
-  await act(async () => root.render(createElement(client.Settings, { settings, players: room.min_players, editable: true, onChange })));
+  await act(async () => root.render(createElement(client.Settings, { settings, players: room.min_players, maxPlayers: room.max_players, editable: true, onChange })));
   assert.ok(container.querySelector(`section.game-${id}[aria-label="Cài đặt ${name}"]`));
   assert.match(container.querySelector('[role="status"]')!.textContent!, /Game đang được xây dựng/);
   assert.equal(container.querySelector('[role="alert"]'), null); assert.equal(onChange.mock.callCount(), 0);
-  await act(async () => root.render(createElement(client.Settings, { settings: { game: 'bang', payload: { mode: 'classic', roles: { deputy: 0, outlaw: 2, renegade: 1 }, expansions: [] } }, players: room.min_players, editable: false, onChange })));
+  await act(async () => root.render(createElement(client.Settings, { settings: { game: 'bang', payload: { mode: 'classic', roles: { deputy: 0, outlaw: 2, renegade: 1 }, expansions: [] } }, players: room.min_players, maxPlayers: room.max_players, editable: false, onChange })));
   assert.match(container.querySelector('[role="alert"]')!.textContent!, new RegExp(`không thuộc ${name}`));
   await assert.rejects(loadGame(id), /chưa được hỗ trợ/, 'Direct preview must not enable room loading');
 });

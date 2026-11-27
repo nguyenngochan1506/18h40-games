@@ -116,3 +116,16 @@ test('four-player custom roles show a Deputy and distinguish multiple Renegades 
 test('third failed Jail turn says release is next turn, without adding a fourth draw', () => {
   assert.deepEqual(eventsToLog([{ type: 'jail_held', player: 1, turns_left: 0 }], ctx), ['Minh đã mất 3 lượt vì Jail; Jail tự bỏ ở đầu lượt kế tiếp.']);
 });
+
+test('Dodge City regular cards read naturally in Vietnamese', async () => {
+  const { cardCatalog } = await import('./cardCatalog.ts');
+  const id = (kind: string) => cardCatalog.findIndex((card, index) => card.kind === kind && index >= 80);
+  const log = (...events: EventKind[]) => eventsToLog(events, ctx);
+  assert.deepEqual(log({ type: 'card_played', player: 0, card: id('punch'), target: 1 }), ['Hân (bạn) bắn Minh bằng Punch (10♠).']);
+  assert.deepEqual(log({ type: 'card_played', player: 0, card: id('springfield'), target: 2 }), ['Hân (bạn) bắn Linh bằng Springfield (K♠).']);
+  assert.deepEqual(log({ type: 'card_played', player: 0, card: id('tequila'), target: 1 }), ['Hân (bạn) chơi Tequila (9♣) nhắm tới Minh.']);
+  assert.deepEqual(log({ type: 'card_discarded', player: 0, card: id('whisky') }), ['Hân (bạn) bỏ Whisky (Q♦).']);
+  assert.deepEqual(log({ type: 'hand_card_affected', source: 0, target: 1, kind: 'rag_time', card: 1 }), ['Hân (bạn) dùng Rag Time lấy BANG! (2♦) từ tay Minh.']);
+  assert.deepEqual(log({ type: 'in_play_card_affected', source: 0, target: 1, kind: 'brawl', card: 63 }), ['Hân (bạn) dùng Brawl bỏ Barrel (Q♠) trước mặt Minh.']);
+  assert.deepEqual(log({ type: 'hand_affected', source: 0, target: 1, kind: 'brawl', count: 1 }), ['Hân (bạn) dùng Brawl buộc bỏ 1 lá từ tay Minh.']);
+});

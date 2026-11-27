@@ -89,8 +89,8 @@
 .game-bang .cinematic .table-center:not(.has-store) :is(.draw-pile,.discard-pile) { gap: 2px; }
 .game-bang .cinematic .table-center:not(.has-store) .pile-row strong { line-height: 1.1; }
 .game-bang .cinematic .table-center:not(.has-store) .pile-row > div > span { line-height: 1.1; }
-.game-bang .cinematic:is(.seats-4,.seats-6) .turn-banner-slot { left: 68%; max-width: 24%; }
-.game-bang .cinematic:is(.seats-4,.seats-6) .turn-banner { max-width: 100%; white-space: normal; text-align: center; }
+.game-bang .cinematic:is(.seats-4,.seats-6,.seats-8) .turn-banner-slot { left: 68%; max-width: 24%; }
+.game-bang .cinematic:is(.seats-4,.seats-6,.seats-8) .turn-banner { max-width: 100%; white-space: normal; text-align: center; }
 @media (max-height: 650px) {
  .game-bang .cinematic .table-center:not(.has-store) { padding-block: 0; }
  .game-bang .cinematic .table-center:not(.has-store) :is(.draw-pile,.discard-pile) { gap: 0; }

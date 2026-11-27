@@ -508,3 +508,223 @@ test('BANG member list rotates from the viewer seat, keeping offline members and
   await render();
   assert.deepEqual(names(), ['Hân', 'Linh', 'Nam', 'An']);
 });
+
+// Dodge City regular cards: the UI collects the extra discard, target and blind/table choices.
+const dodgeCity = (() => {
+  const first = 80;
+  return async () => {
+    const { cardCatalog } = await import('./cardCatalog.ts');
+    return (kind: string, nth = 0) => cardCatalog.map((card, index) => ({ card, index })).filter(({ card, index }) => card.kind === kind && index >= first)[nth].index;
+  };
+})();
+
+async function dodgeBoard(t: TestContext, hand: number[], waiting: DecisionKind, tweak?: (table: import('../../generated/protocol.ts').SpectatorView) => void) {
+  const { container, root, settle } = await host(t);
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Player fixture required');
+  const table = game.view.view.table;
+  game.view.view.hand = hand;
+  table.turn.player = 0;
+  table.waiting = { player: 0, pending_id: waiting.type === 'turn' ? null : 70, kind: waiting };
+  tweak?.(table);
+  const sent: Action[] = [];
+  await act(async () => root.render(createElement(GameBoard, { game, room: demoRoom, sendAction: action => sent.push(action) })));
+  await settle();
+  const hold = async (card: number) => { await act(() => container.querySelector<HTMLButtonElement>(`.own-hand .hand-cards [data-card-id="${card}"]`)!.click()); await settle(); };
+  const radio = async (name: string, label: RegExp) => { await act(() => [...container.querySelectorAll<HTMLInputElement>(`input[name="${name}"]`)].find(input => label.test(input.parentElement!.textContent!))!.click()); await settle(); };
+  const aim = async (player: number) => { await act(() => container.querySelector<HTMLButtonElement>(`[data-player-id="${player}"] button[aria-label^="Nhắm tới"]`)!.click()); await settle(); };
+  const play = async () => { const panel = [...container.querySelectorAll('.game-controls')].at(-1)!; await act(() => panel.querySelector<HTMLButtonElement>('[data-primary-action="true"]:not(:disabled)')!.click()); await settle(); };
+  const playDisabled = () => [...container.querySelectorAll('.game-controls')].at(-1)!.querySelector<HTMLButtonElement>('button.action:not(.secondary)')!.disabled;
+  return { container, sent, hold, radio, aim, play, playDisabled, settle };
+}
+
+for (const [kind, target] of [['punch', 1], ['springfield', 2]] as const) test(`${kind} needs a target${kind === 'springfield' ? ' and an extra discard' : ''} and sends the right action`, async t => {
+  const id = await dodgeCity();
+  const { container, sent, hold, radio, aim, play, playDisabled } = await dodgeBoard(t, [id(kind), 1, 26], { type: 'turn' });
+  await hold(id(kind));
+  if (kind === 'springfield') {
+    assert.match([...container.querySelectorAll('.game-controls [role="status"]')].at(-1)!.textContent!, /Chọn thêm 1 lá trên tay để bỏ/);
+    await aim(target);
+    assert.equal(playDisabled(), true, 'The extra discard is still missing');
+    await radio('extra-discard', /Missed/);
+  } else assert.equal(container.querySelector('input[name="extra-discard"]'), null, 'Punch costs nothing extra');
+  await aim(target);
+  await play();
+  assert.deepEqual(sent, [kind === 'springfield' ? { type: 'play_with_discard', card: id(kind), discard: 26, target } : { type: 'play', card: id(kind), target }]);
+});
+
+test('tequila can target yourself and needs an extra discard', async t => {
+  const id = await dodgeCity();
+  const tequila = await dodgeBoard(t, [id('tequila'), 1, 26], { type: 'turn' });
+  await tequila.hold(id('tequila'));
+  await tequila.aim(0);
+  await tequila.radio('extra-discard', /BANG!/);
+  await tequila.play();
+  assert.deepEqual(tequila.sent, [{ type: 'play_with_discard', card: id('tequila'), discard: 1, target: 0 }]);
+});
+
+test('whisky has no target and needs an extra discard', async t => {
+  const id = await dodgeCity();
+  const whisky = await dodgeBoard(t, [id('whisky'), 1, 26], { type: 'turn' });
+  await whisky.hold(id('whisky'));
+  assert.equal(whisky.container.querySelector('button[aria-label^="Nhắm tới"]'), null, 'Whisky heals its player and has no target');
+  assert.equal(whisky.playDisabled(), true);
+  await whisky.radio('extra-discard', /Missed/);
+  await whisky.play();
+  assert.deepEqual(whisky.sent, [{ type: 'play_with_discard', card: id('whisky'), discard: 26, target: null }]);
+});
+
+test('a lone Dodge City extra-cost card says it needs another card', async t => {
+  const id = await dodgeCity();
+  const { container, hold, playDisabled } = await dodgeBoard(t, [id('whisky')], { type: 'turn' });
+  await hold(id('whisky'));
+  assert.match([...container.querySelectorAll('.game-controls')].at(-1)!.textContent!, /Cần thêm một lá khác/);
+  assert.equal(playDisabled(), true);
+});
+
+test('rag time takes a blind hand card from another player', async t => {
+  const id = await dodgeCity();
+  const hand = await dodgeBoard(t, [id('rag_time'), 1], { type: 'turn' });
+  await hand.hold(id('rag_time'));
+  await hand.aim(1);
+  await hand.radio('extra-discard', /BANG!/);
+  assert.equal(hand.playDisabled(), true, 'The taken card is still missing');
+  await hand.radio('affect-card', /Chọn mù/);
+  await hand.play();
+  assert.deepEqual(hand.sent, [{ type: 'affect_with_discard', card: id('rag_time'), discard: 1, target: 1, selection: 'hand' }]);
+});
+
+test('rag time takes a table card, including from yourself', async t => {
+  const id = await dodgeCity();
+  const table = await dodgeBoard(t, [id('rag_time'), 1], { type: 'turn' });
+  await table.hold(id('rag_time'));
+  await table.aim(0);
+  await table.radio('extra-discard', /BANG!/);
+  await table.radio('affect-card', /Bài trước mặt/);
+  await table.play();
+  assert.deepEqual(table.sent, [{ type: 'affect_with_discard', card: id('rag_time'), discard: 1, target: 0, selection: { in_play: 78 } }]);
+});
+
+test('brawl asks for one choice per other living player who still has a card', async t => {
+  const id = await dodgeCity();
+  const { container, sent, hold, radio, play, playDisabled } = await dodgeBoard(t, [id('brawl'), 1], { type: 'turn' }, table => { table.players[2].hand_count = 0; table.players[2].in_play = []; });
+  await hold(id('brawl'));
+  const groups = [...container.querySelectorAll('fieldset legend')].map(legend => legend.textContent);
+  assert.deepEqual(groups.filter(text => text!.startsWith('Brawl:')).length, 2, 'Players 1 and 4 are asked; 2 is empty and 3 is dead');
+  await radio('extra-discard', /BANG!/);
+  await radio('brawl-1', /Chọn mù/);
+  assert.equal(playDisabled(), true, 'One player is still missing');
+  await radio('brawl-4', /Bài trước mặt/);
+  await play();
+  assert.deepEqual(sent, [{ type: 'brawl', card: id('brawl'), discard: 1, picks: [{ target: 1, selection: 'hand' }, { target: 4, selection: { in_play: 65 } }] }]);
+});
+
+test('dodge cannot be played on your turn', async t => {
+  const id = await dodgeCity();
+  const turn = await dodgeBoard(t, [id('dodge')], { type: 'turn' });
+  assert.equal(turn.container.querySelector(`.own-hand [data-card-id="${id('dodge')}"]`)!.getAttribute('aria-pressed'), null);
+});
+
+test('dodge answers BANG! like Missed', async t => {
+  const id = await dodgeCity();
+  const response = await dodgeBoard(t, [id('dodge'), 1], { type: 'attack_response', kind: 'bang', remaining: 1, checks_left: 0 });
+  await response.hold(id('dodge'));
+  assert.match(response.container.querySelector('.game-controls')!.textContent!, /Đỡ bằng Dodge/);
+  await response.play();
+  assert.deepEqual(response.sent, [{ type: 'respond', pending_id: 70, card: id('dodge') }]);
+});
+
+test('calamity janet answers a Duel with dodge as a BANG!', async t => {
+  const id = await dodgeCity();
+  const duel = await dodgeBoard(t, [id('dodge')], { type: 'duel' }, table => { table.players[0].character = 'calamity_janet'; });
+  await duel.hold(id('dodge'));
+  await duel.play();
+  assert.deepEqual(duel.sent, [{ type: 'respond', pending_id: 70, card: id('dodge') }]);
+});
+
+test('binocular and hideout are placed without a target and show their distance chips', async t => {
+  const id = await dodgeCity();
+  const { container, sent, hold, play } = await dodgeBoard(t, [id('binocular'), id('hideout')], { type: 'turn' }, table => { table.players[0].in_play = [id('binocular'), id('hideout')]; });
+  assert.match(container.querySelector('.player-hud')!.textContent!, /Binocular −1/);
+  assert.match(container.querySelector('.player-hud')!.textContent!, /Hideout \+1/);
+  await hold(id('binocular'));
+  await play();
+  assert.deepEqual(sent, [{ type: 'play', card: id('binocular'), target: null }]);
+});
+
+test('without expansions the board and controls look like the base game', async t => {
+  const id = await dodgeCity();
+  const { container } = await dodgeBoard(t, [1, 26, 43], { type: 'turn' });
+  assert.equal(container.querySelector('input[name="extra-discard"]'), null);
+  assert.ok(!container.querySelector('.bang-board')!.className.includes('seats-8'));
+  assert.equal(id('punch') >= 80, true);
+});
+
+function eightPlayerGame() {
+  const game = structuredClone(demoGame);
+  if (game.view.perspective !== 'player') throw Error('Player fixture required');
+  const table = game.view.view.table;
+  for (let id = 5; id < 8; id++) {
+    game.seats.push({ player_id: id, member_id: String(id + 1), nickname: `Khách ${id}` });
+    table.players.push({ id, character: 'willy_the_kid', health: 4, max_health: 4, alive: true, hand_count: 3, in_play: [66], weapon_range: 1, role: null });
+  }
+  table.turn.player = 0; table.waiting = { player: 0, pending_id: null, kind: { type: 'turn' } };
+  return game;
+}
+const eightRoom = { ...demoRoom, max_players: 8, members: Array.from({ length: 8 }, (_, id) => ({ id: String(id + 1), nickname: id < 5 ? ['Hân', 'Minh', 'Linh', 'Bảo', 'Vy'][id] : `Khách ${id}`, role: 'player' as const, online: true })) };
+
+test('an eight-player table places eight distinct seats, with the viewer at the bottom', async t => {
+  const { container, root, settle } = await host(t);
+  await act(async () => root.render(createElement(GameBoard, { game: eightPlayerGame(), room: eightRoom, sendAction() {} })));
+  await settle();
+  assert.ok(container.querySelector('.bang-board')!.classList.contains('seats-8'));
+  const seats = [...container.querySelectorAll<HTMLElement>('[data-player-id]')];
+  assert.equal(seats.length, 8);
+  assert.equal(new Set(seats.map(seat => `${seat.style.getPropertyValue('--seat-x')},${seat.style.getPropertyValue('--seat-y')}`)).size, 8);
+  assert.match(container.querySelector('.board-heading')!.textContent!, /8 người/);
+});
+
+test('the painted desktop scene seats eight with the spectator-facing order and no overlapping actors', async t => {
+  const width = Object.getOwnPropertyDescriptor(window, 'innerWidth'), height = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });
+  t.after(() => { if (width) Object.defineProperty(window, 'innerWidth', width); else Reflect.deleteProperty(window, 'innerWidth'); if (height) Object.defineProperty(window, 'innerHeight', height); else Reflect.deleteProperty(window, 'innerHeight'); });
+  const { container, root, settle } = await host(t);
+  await act(async () => root.render(createElement(GameBoard, { game: eightPlayerGame(), room: eightRoom, sendAction() {} })));
+  await settle();
+  const actors = [...container.querySelectorAll<HTMLElement>('.scene-actor')];
+  assert.equal(actors.length, 7, 'Every opponent has a painted actor; the viewer is drawn as the hand tray');
+  assert.deepEqual(actors.map(actor => actor.dataset.sceneSlot).sort(), ['1', '2', '3', '4', '5', '6', '7']);
+  const boxes = actors.map(actor => ({ left: parseFloat(actor.style.left), width: parseFloat(actor.style.width) / 1280 * 100 }));
+  for (const [i, a] of boxes.entries()) for (const b of boxes.slice(i + 1)) {
+    const near = Math.abs(a.left - b.left) < (a.width + b.width) / 2 - 1e-6;
+    const sameRow = Math.abs(parseFloat(actors[i].style.top) - parseFloat(actors[boxes.indexOf(b)].style.top)) < 50;
+    assert.ok(!(near && sameRow), 'Actors on the same row never overlap horizontally');
+  }
+});
+
+test('punch offers only distance-1 targets on the table, even with a long gun', async t => {
+  const id = await dodgeCity();
+  const neutral = (table: import('../../generated/protocol.ts').SpectatorView) => { table.players[0].character = 'bart_cassidy'; table.players[0].in_play = [id('rev_carabine')]; table.players[0].weapon_range = 4; for (const player of table.players.slice(1)) player.in_play = []; };
+  const { container, hold, sent, aim, play } = await dodgeBoard(t, [id('punch'), 1], { type: 'turn' }, neutral);
+  await hold(id('punch'));
+  assert.equal(container.querySelector('[data-player-id="2"] button[aria-label^="Nhắm tới"]'), null, 'Player 2 is two seats away');
+  assert.ok(container.querySelector('[data-player-id="1"] button[aria-label^="Nhắm tới"]'));
+  await aim(1);
+  await play();
+  assert.deepEqual(sent, [{ type: 'play', card: id('punch'), target: 1 }]);
+});
+
+test('brawl hand-slot confirmation says the card is discarded, not taken', async t => {
+  const id = await dodgeCity();
+  const { container } = await dodgeBoard(t, [id('brawl')], { type: 'pick_hand_slot', target: 1, kind: 'brawl', count: 3 });
+  assert.match(container.querySelector('.game-controls [data-primary-action="true"]')!.textContent!, /Buộc bỏ lá đã chọn/);
+});
+
+test('card detail shows the pack picture for a Dodge City card that shares its name with a base card', async t => {
+  const id = await dodgeCity();
+  const { container, settle } = await dodgeBoard(t, [id('missed')], { type: 'turn' });
+  await act(async () => { container.querySelector<HTMLButtonElement>(`.own-hand [data-card-id="${id('missed')}"]`)!.click(); });
+  await settle();
+  assert.ok(container.querySelector('.card-detail img')?.getAttribute('src')?.includes('03_mancato'));
+});

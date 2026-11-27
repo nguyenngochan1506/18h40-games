@@ -16,7 +16,7 @@ test('desktop scene letterboxes a 16:9 stage and leaves narrow layouts unchanged
   for (const dimensions of [[0, 720], [1280, -1], [NaN, 720], [Infinity, 720]]) assert.throws(() => sceneStage(...dimensions as [number, number]), RangeError);
 });
 
-for (const count of [4, 5, 6, 7] as const) {
+for (const count of [4, 5, 6, 7, 8] as const) {
   test(`painted scene ${count}: measured chairs, symmetric cards, clockwise order and depth`, () => {
     const seats = sceneSeats[count];
     assert.equal(seats.length, count);
@@ -61,7 +61,7 @@ for (const count of [4, 5, 6, 7] as const) {
 }
 
 test('painted scene rejects unsupported counts and viewer indices', () => {
-  for (const count of [3, 8, 4.5]) assert.throws(() => sceneSeatLayout(count, null), RangeError);
+  for (const count of [3, 9, 4.5]) assert.throws(() => sceneSeatLayout(count, null), RangeError);
   for (const viewer of [-1, 4, .5]) assert.throws(() => sceneSeatLayout(4, viewer), RangeError);
 });
 
@@ -72,8 +72,9 @@ test('each painted chair uses an inward view, including side chairs in four and 
     5: ['q3back', 'side', 'q3front', 'q3front', 'side'],
     6: ['q3back', 'q3back', 'side', 'front', 'side', 'q3back'],
     7: ['q3back', 'q3back', 'side', 'q3front', 'q3front', 'side', 'q3back'],
+    8: ['q3back', 'q3back', 'side', 'q3front', 'front', 'q3front', 'side', 'q3back'],
   };
-  for (const count of [4, 5, 6, 7] as const) {
+  for (const count of [4, 5, 6, 7, 8] as const) {
     assert.deepEqual(sceneSeats[count].map(seat => seat.view), expected[count]);
     for (const seat of sceneSeats[count]) {
       assert.ok(seat.faceY < seat.handY && seat.handY < 1);
@@ -83,8 +84,8 @@ test('each painted chair uses an inward view, including side chairs in four and 
 });
 
 
-test('near-side ribbons in six and seven seats leave the central hand tray clear', () => {
-  for (const count of [6, 7] as const) {
+test('near-side ribbons in six to eight seats leave the central hand tray clear', () => {
+  for (const count of [6, 7, 8] as const) {
     for (const seat of sceneSeats[count].filter(seat => seat.near)) {
       const halfWidth = 12 * seat.depth / 2;
       assert.ok(seat.cardsX + halfWidth < 33 || seat.cardsX - halfWidth > 67);
@@ -106,7 +107,7 @@ test('draw/discard center follows the free space between upper racks and the own
 });
 
 test('opponent badges stay on the torso below the face at every supported scene height', () => {
-  for (const count of [4, 5, 6, 7] as const) for (const height of [635, 657, 685, 720, 1080]) {
+  for (const count of [4, 5, 6, 7, 8] as const) for (const height of [635, 657, 685, 720, 1080]) {
     for (const seat of sceneSeats[count].slice(1)) {
       const geometry = sceneSeatGeometry(seat, height);
       const lift = height * seat.y / 100 - geometry.actorY;

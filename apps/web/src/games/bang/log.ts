@@ -23,6 +23,8 @@ export function winnerName(winner: Winner): string {
 // Only format the recipient-filtered events; never fill missing details from the table or hand.
 export function eventsToLog(events: EventKind[], ctx: LogContext): string[] {
   const name = (id: number) => playerName(id, ctx);
+  // Panic! and Rag Time take the card for themselves; the other effects make the target discard it.
+  const takes = (kind: string) => kind === 'panic' || kind === 'rag_time';
   const list = (ids: CardId[]) => ids.length ? ids.map(cardName).join(', ') : 'không có lá nào';
   let waiting = ctx.waiting;
   return events.map((event): string => {
@@ -44,7 +46,7 @@ export function eventsToLog(events: EventKind[], ctx: LogContext): string[] {
       case 'deck_reshuffled': return `Xáo lại ${event.count} lá vào bộ rút.`;
       case 'card_played': {
         if (event.target !== null) {
-          const shooting = ['bang', 'missed'].includes(cardFace(event.card)?.kind ?? '');
+          const shooting = ['bang', 'missed', 'dodge', 'punch', 'springfield'].includes(cardFace(event.card)?.kind ?? '');
           return shooting ? `${name(event.player)} bắn ${name(event.target)} bằng ${cardName(event.card)}.` : `${name(event.player)} chơi ${cardName(event.card)} nhắm tới ${name(event.target)}.`;
         }
         if (waiting?.player === event.player && waiting.kind.type === 'attack_response') return `${name(event.player)} ${waiting.kind.kind === 'indians' ? 'đáp' : 'đỡ'} bằng ${cardName(event.card)}.`;
@@ -70,9 +72,9 @@ export function eventsToLog(events: EventKind[], ctx: LogContext): string[] {
       case 'hand_slots_opened': return `${name(event.actor)} mở bài trên tay ${name(event.target)} (${event.count} lá úp).`;
       case 'hand_slot_claimed': return `${name(event.actor)} chọn ô ${event.slot + 1} trên tay ${name(event.target)}.`;
       case 'hand_pick_cancelled': return `${name(event.actor)} dừng chọn bài từ tay ${name(event.target)}.`;
-      case 'hand_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${event.kind === 'panic' ? 'lấy' : 'buộc bỏ'} ${event.count} lá từ tay ${name(event.target)}.`;
-      case 'hand_card_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${event.kind === 'panic' ? 'lấy' : 'buộc bỏ'} ${cardName(event.card)} từ tay ${name(event.target)}.`;
-      case 'in_play_card_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${event.kind === 'panic' ? 'lấy' : 'bỏ'} ${cardName(event.card)} trước mặt ${name(event.target)}.`;
+      case 'hand_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${takes(event.kind) ? 'lấy' : 'buộc bỏ'} ${event.count} lá từ tay ${name(event.target)}.`;
+      case 'hand_card_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${takes(event.kind) ? 'lấy' : 'buộc bỏ'} ${cardName(event.card)} từ tay ${name(event.target)}.`;
+      case 'in_play_card_affected': return `${name(event.source)} dùng ${cards[event.kind].name} ${takes(event.kind) ? 'lấy' : 'bỏ'} ${cardName(event.card)} trước mặt ${name(event.target)}.`;
       case 'draw_revealed': return `${name(event.player)} lật kiểm tra cho ${cards[event.reason].name}: ${cardName(event.card)}.`;
       case 'store_opened': return `General Store mở ${event.count} lá úp.`;
       case 'store_card_claimed': return `${name(event.player)} chọn một lá General Store.`

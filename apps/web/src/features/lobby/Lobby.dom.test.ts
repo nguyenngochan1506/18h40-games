@@ -6,7 +6,7 @@ import { Window } from 'happy-dom';
 import { createServer } from 'vite';
 import { act, createElement, useRef, useState } from 'react';
 import { PROTOCOL_VERSION } from '../../generated/protocol.ts';
-import type { ClientMessage } from '../../generated/protocol.ts';
+import type { ClientMessage, GameSettings } from '../../generated/protocol.ts';
 import type LobbyComponent from './Lobby.tsx';
 import type RoomComponent from '../rooms/Room.tsx';
 import type { GameClient } from '../../games/types.ts';
@@ -117,7 +117,7 @@ test('returning to the lobby from the result explicitly leaves the room', async 
 test('room settings edit a draft, validate totals and send the selected mode with custom roles', async t => {
   const { container, root, sent, fill } = await mount(t);
   const settings = { mode: 'classic' as const, roles: { deputy: 0, outlaw: 2, renegade: 1 }, expansions: [] };
-  await act(async () => root.render(createElement(WaitingSettings, { settings: { game: 'bang', payload: settings }, players: 4, editable: true, onChange: settings => sent.push({ v: PROTOCOL_VERSION, type: 'update_settings', settings }) })));
+  await act(async () => root.render(createElement(WaitingSettings, { settings: { game: 'bang', payload: settings }, players: 4, maxPlayers: 7, editable: true, onChange: settings => sent.push({ v: PROTOCOL_VERSION, type: 'update_settings', settings }) })));
   const button = (label: string) => [...container.querySelectorAll<HTMLButtonElement>('button')].find(b => b.getAttribute('aria-label') === label || b.textContent === label)!;
   await act(() => button('Tăng Phó cảnh sát').click());
   await act(() => button('Áp dụng cài đặt').click());
@@ -135,7 +135,7 @@ test('room settings edit a draft, validate totals and send the selected mode wit
   assert.deepEqual(sent.at(-1), { v: PROTOCOL_VERSION, type: 'update_settings', settings: { game: 'bang', payload: { mode: 'club', roles: settings.roles, expansions: [] } } });
   await fill('#role-deputy', '');
   await act(() => button('Áp dụng cài đặt').click());
-  assert.match(container.querySelector('[role="alert"]')!.textContent!, /0 đến 6/);
+  assert.match(container.querySelector('[role="alert"]')!.textContent!, /0 đến 3/);
   await act(() => button('Tăng Phó cảnh sát').click());
   assert.equal(container.querySelector<HTMLInputElement>('#role-deputy')!.value, '1');
   assert.equal(container.querySelector('[role="alert"]'), null);
@@ -152,7 +152,7 @@ test('room settings are read-only to guests and reset a host draft on a seat-cou
   assert.equal(container.querySelector<HTMLInputElement>('#role-outlaw')!.value, '2');
   assert.match(container.querySelector('#role-total')!.textContent!, /5\/5 người · Hợp lệ/);
   await act(async () => root.render(createElement(Room, { ...props, room: { ...room, you: '2' } })));
-  assert.equal(container.querySelectorAll('.room-settings fieldset:disabled').length, 2);
+  assert.equal(container.querySelectorAll('.room-settings fieldset:disabled').length, 3);
   assert.equal(container.querySelector('.room-settings button[type="submit"]'), null);
   assert.equal(sent.length, 0);
 });
@@ -199,4 +199,74 @@ test('manual check controls expose Enter, lock pending input and retain Barrel a
   await act(async () => root.render(createElement(Room, { ...props, game: { ...game, seq: game.seq + 2 } })));
   const current = [...container.querySelectorAll<HTMLElement>('.game-controls')].find(control => !control.closest('[inert]'))!;
   assert.match(current.textContent!, /Lật Jourdonnais/);
+});
+
+function dodgeProps(extra: Record<string, unknown>) {
+  const settings = { mode: 'classic' as const, roles: { deputy: 2, outlaw: 3, renegade: 1 }, expansions: [] as 'dodge_city'[] };
+  return { settings: { game: 'bang' as const, payload: settings }, players: 7, maxPlayers: 7, editable: true, ...extra };
+}
+
+test('the host can switch Dodge City on in the room settings and the draft is applied with the other fields', async t => {
+  const { container, root, sent } = await mount(t);
+  const onChange = (settings: GameSettings) => sent.push({ v: PROTOCOL_VERSION, type: 'update_settings', settings });
+  await act(async () => root.render(createElement(WaitingSettings, { ...dodgeProps({}), onChange } as never)));
+  const box = container.querySelector<HTMLInputElement>('input[name="expansion"][value="dodge_city"]')!;
+  assert.equal(box.checked, false); assert.equal(box.closest('fieldset')!.disabled, false);
+  assert.match(container.textContent!, /Ghế chơi tối đa: 7 người/);
+  await act(() => box.click());
+  await act(() => [...container.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'Áp dụng cài đặt')!.click());
+  assert.deepEqual([...sent], [{ v: PROTOCOL_VERSION, type: 'update_settings', settings: { game: 'bang', payload: { mode: 'classic', roles: { deputy: 2, outlaw: 3, renegade: 1 }, expansions: ['dodge_city'] } } }]);
+});
+
+test('guests see the Dodge City choice read-only', async t => {
+  const { container, root } = await mount(t);
+  await act(async () => root.render(createElement(WaitingSettings, { ...dodgeProps({ editable: false }), onChange() { throw Error('read-only'); } } as never)));
+  const box = container.querySelector<HTMLInputElement>('input[name="expansion"]')!;
+  assert.equal(box.closest('fieldset')!.disabled, true, 'The whole expansion group is disabled for guests');
+  assert.match(container.textContent!, /Chỉ chủ phòng sửa cài đặt/);
+});
+
+test('eight seated players use the 2/3/2 preset and switching Dodge City off is blocked with a clear message', async t => {
+  const { container, root, sent } = await mount(t);
+  const eight = { settings: { game: 'bang' as const, payload: { mode: 'classic' as const, roles: { deputy: 2, outlaw: 3, renegade: 2 }, expansions: ['dodge_city' as const] } }, players: 8, maxPlayers: 8, editable: true, onChange: (settings: GameSettings) => sent.push({ v: PROTOCOL_VERSION, type: 'update_settings', settings }) };
+  await act(async () => root.render(createElement(WaitingSettings, eight as never)));
+  assert.match(container.querySelector('#role-total')!.textContent!, /Tổng: 8\/8 người · Hợp lệ/);
+  assert.match(container.textContent!, /Ghế chơi tối đa: 8 người/);
+  await act(() => container.querySelector<HTMLInputElement>('input[name="expansion"]')!.click());
+  await act(() => [...container.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'Áp dụng cài đặt')!.click());
+  assert.equal(sent.length, 0);
+  assert.match(container.querySelector('[role="alert"]')!.textContent!, /Đang có 8 người ngồi, nhiều hơn sức chứa 7 người/);
+  await act(() => container.querySelector<HTMLInputElement>('input[name="expansion"]')!.click());
+  await act(() => [...container.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'Về mặc định')!.click());
+  assert.equal(container.querySelector<HTMLInputElement>('#role-renegade')!.value, '2');
+});
+
+test('without the expansion a seven-seat room keeps the base capacity text and role validation', async t => {
+  const { container, root } = await mount(t);
+  await act(async () => root.render(createElement(WaitingSettings, { ...dodgeProps({}), players: 7, onChange() {} } as never)));
+  assert.match(container.querySelector('#role-total')!.textContent!, /Tổng: 7\/7 người · Hợp lệ/);
+});
+
+test('after an eight-player game ends the room shows the four-player preset and Dodge City can be switched off', async t => {
+  const { container, root, sent } = await mount(t);
+  const stale = { settings: { game: 'bang' as const, payload: { mode: 'classic' as const, roles: { deputy: 2, outlaw: 3, renegade: 2 }, expansions: ['dodge_city' as const] } }, players: 0, maxPlayers: 8, editable: true, onChange: (settings: GameSettings) => sent.push({ v: PROTOCOL_VERSION, type: 'update_settings', settings }) };
+  await act(async () => root.render(createElement(WaitingSettings, stale as never)));
+  assert.equal(container.querySelector<HTMLInputElement>('#role-outlaw')!.value, '2', 'The stale 2/3/2 is shown as the four-player preset');
+  assert.doesNotMatch(container.textContent!, /Thay đổi chưa áp dụng/, 'The auto-filled preset is not a user change');
+  await act(() => container.querySelector<HTMLInputElement>('input[name="expansion"]')!.click());
+  await act(() => [...container.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'Áp dụng cài đặt')!.click());
+  assert.equal(container.querySelector('[role="alert"]'), null);
+  assert.deepEqual([...sent], [{ v: PROTOCOL_VERSION, type: 'update_settings', settings: { game: 'bang', payload: { mode: 'classic', roles: { deputy: 0, outlaw: 2, renegade: 1 }, expansions: [] } } }]);
+});
+
+test('eight seats allow seven outlaws: the role cap is the seat count minus the sheriff', async t => {
+  const { container, root, sent } = await mount(t);
+  const eight = { settings: { game: 'bang' as const, payload: { mode: 'classic' as const, roles: { deputy: 0, outlaw: 7, renegade: 0 }, expansions: ['dodge_city' as const] } }, players: 8, maxPlayers: 8, editable: true, onChange: (settings: GameSettings) => sent.push({ v: PROTOCOL_VERSION, type: 'update_settings', settings }) };
+  await act(async () => root.render(createElement(WaitingSettings, eight as never)));
+  assert.equal(container.querySelector<HTMLInputElement>('#role-outlaw')!.max, '7');
+  assert.equal(container.querySelector<HTMLButtonElement>('[aria-label="Tăng Tội phạm"]')!.disabled, true, 'Already at the cap');
+  assert.equal(container.querySelector<HTMLButtonElement>('[aria-label="Tăng Phó cảnh sát"]')!.disabled, false);
+  await act(() => [...container.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'Áp dụng cài đặt')!.click());
+  assert.equal(container.querySelector('[role="alert"]'), null);
+  assert.equal(sent.length, 1);
 });

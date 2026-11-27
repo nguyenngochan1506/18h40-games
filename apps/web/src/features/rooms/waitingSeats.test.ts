@@ -67,3 +67,13 @@ test('the platform waiting skin supports capacities above seven without game geo
     assert.match(actor, /^\/platform\/seat\//);
   }
 });
+
+test('an eight-seat expansion room keeps the seven painted chairs and adds the top-centre chair from the server capacity', () => {
+  const members = Array.from({ length: 8 }, (_, i) => player(String(i)));
+  const seats = waitingSeats({ ...room(members), max_players: 8 });
+  assert.equal(seats.length, 8);
+  assert.deepEqual(seats.map(({ seat }) => [seat.x, seat.y]), [[50, 85], [19, 79], [14, 52], [26, 35], [50, 27], [74, 35], [86, 52], [81, 79]]);
+  assert.equal(new Set(seats.map(({ seat }) => `${seat.x},${seat.y}`)).size, 8);
+  // Seven players in an eight-seat room still use their own chairs, so nobody moves when the eighth joins.
+  assert.deepEqual(waitingSeats({ ...room(members.slice(0, 7)), max_players: 8 }).map(({ seat }) => seat.x), seats.slice(0, 7).map(({ seat }) => seat.x));
+});

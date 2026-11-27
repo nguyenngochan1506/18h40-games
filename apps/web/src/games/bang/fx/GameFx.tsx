@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { Component, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { assetUrl, availableSceneFiles, backFiles, cardFiles, seatActorFile, fxFiles, optionalSceneFiles } from '../scene/assetMap';
+import { assetUrl, availableSceneFiles, backFiles, cardArt, seatActorFile, fxFiles, optionalSceneFiles } from '../scene/assetMap';
 import type { SeatView } from '../scene/assetMap';
 import { cardFace } from '../cardCatalog';
 import { eventsToFx, FX_BUDGET, FX_CONCURRENT, scheduleFx, shouldPlayFx, shotOrigin, particlePolicy } from './fx';
@@ -54,7 +54,7 @@ function card(cardId?: number) {
   const node = element('fx-card');
   const face = cardId === undefined ? undefined : cardFace(cardId);
   const art = document.createElement('img');
-  art.src = assetUrl(face ? cardFiles[face.kind] : backFiles.card); art.alt = '';
+  art.src = assetUrl(face ? cardArt(cardId!, face.kind) : backFiles.card); art.alt = '';
   node.dataset.face = face ? 'public' : 'back';
   if (face) node.append(element('fx-card-rank', `${face.rank}${face.suit}`));
   node.append(art);

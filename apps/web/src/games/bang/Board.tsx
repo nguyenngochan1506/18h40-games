@@ -15,11 +15,11 @@ import type { EquipmentPose } from './equipment';
 import type { CSSProperties, ReactNode } from 'react';
 import type { Action, CardId, CardKind, PublicPlayer, RoomView, SpectatorView } from '../../generated/protocol';
 import type { BangSnapshot as GameSnapshot } from './types.ts';
-import { assetUrl, sceneFiles, landscapeScenes, seatActorFile, backFiles, cardFiles, characterFiles, roleFiles, fxFiles } from './scene/assetMap';
+import { assetUrl, sceneFiles, landscapeScenes, seatActorFile, backFiles, cardFiles, cardArt, characterFiles, roleFiles, fxFiles } from './scene/assetMap';
 import { cardFace } from './cardCatalog';
 import { cards, characters, roles } from './i18n';
 import { selectGameView } from './state';
-import { actionMode, emptyDraft, needsTarget, playKind, responseCard, playTargets } from './actions';
+import { actionMode, emptyDraft, needsTarget, isAffect, has, playKind, responseCard, playTargets } from './actions';
 import type { ActionDraft } from './actions';
 import { dragDestination } from './drag/cardDrag';
 import { useCardDrag } from './drag/useCardDrag';
@@ -45,7 +45,7 @@ import './styles/equipment.css';
 const StorePool = lazy(() => import('./StorePool'));
 const GameResult = lazy(() => import('./GameResult'));
 
-type Inspect = (kind: CardKind, scroll?: boolean, origin?: HTMLButtonElement) => void;
+type Inspect = (kind: CardKind, scroll?: boolean, origin?: HTMLButtonElement, card?: CardId) => void;
 
 function Artwork({ file, label, eager = false }: { file: string; label: string; eager?: boolean }) {
   const [missing, setMissing] = useState(false);
@@ -90,9 +90,9 @@ const Card = forwardRef<HTMLButtonElement, CardProps>(function Card({ id, inspec
     onDragStart={() => { setDragging(true); dragCard?.start(home.current); }} onDrag={(_event, info) => dragCard?.move(info.point)} onDragEnd={(event, info) => { draggedAt.current = performance.now(); setDragging(false); setReturning(true); if (!dragCard?.end(event.type === 'pointercancel' ? { x: NaN, y: NaN } : info.point, button.current!.getBoundingClientRect()) && animated) setRejected(true); }}
     onDragTransitionEnd={() => setReturning(false)}
     layout={animated && hand && !dragging && !managed ? 'position' : false} initial={managed ? false : { opacity: animated ? 0 : 1, ...cardFlight(hand, !animated), ...(straight ? { rotate: 0 } : {}) }} animate={{ opacity: 1, x: 0, y: 0, rotate: !animated && hand ? handPose(handIndex!, handCount, false, false, true).rotate : 0 }} exit={managed ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, x: 0, y: animated ? -32 : 0, rotate: animated && !straight ? 8 : 0 }} transition={animated ? { ...tableSpring, opacity: { duration: .15 } } : { duration: .1 }} whileTap={animated ? { scale: .97 } : undefined}
-    onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onClick={(event) => { if (event.detail > 0 && (dragging || performance.now() - draggedAt.current < 200)) return; if (pick) pick(); else inspect(face.kind, true, event.currentTarget); }}>
+    onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onClick={(event) => { if (event.detail > 0 && (dragging || performance.now() - draggedAt.current < 200)) return; if (pick) pick(); else inspect(face.kind, true, event.currentTarget, id); }}>
     <m.span className="card-visual" data-ui-motion="visual" onAnimationComplete={() => { if (rejected) setRejected(false); }} animate={{ x: animated && rejected ? [0, -4, 4, -2, 0] : 0, ...(equipment ? equipmentPose(equipment, hovered || focused || picked, !animated) : animated ? dragging ? { y: 0, rotate: 0, scale: 1.04 } : hand ? handPose(handIndex!, handCount, picked, hovered || focused, false) : { y: hovered || focused || picked ? -3 : 0, rotate: 0, scale: 1 } : { y: 0, rotate: 0, scale: 1 }) }} transition={rejected ? { duration: .2 } : tableSpring}>
-      {handIndex !== undefined && handIndex < 9 && <kbd className="hand-shortcut" aria-hidden="true">{handIndex + 1}</kbd>}<Artwork file={cardFiles[face.kind]} label={card.name} eager />
+      {handIndex !== undefined && handIndex < 9 && <kbd className="hand-shortcut" aria-hidden="true">{handIndex + 1}</kbd>}<Artwork file={cardArt(id, face.kind)} label={card.name} eager />
       <span className={face.suit === '♥' || face.suit === '♦' ? 'card-face red-suit' : 'card-face'}>{face.rank}{face.suit}</span>
       <span className="card-name">{card.name}</span>
       {jail && <span className="jail-turns" aria-label={jail.label} title={jail.label}>{jail.remaining}</span>}
@@ -112,7 +112,7 @@ function waitText(table: SpectatorView, name: (id: number) => string): string {
     case 'turn': return `${who} Lượt chơi.`;
     case 'attack_response': return `${who} ${decision.kind.kind === 'indians' ? 'Bỏ 1 BANG! hoặc mất 1 máu' : decision.kind.remaining > 1 ? `Cần thêm ${decision.kind.remaining} lá Missed! nữa` : 'Đỡ bằng Missed!, hoặc chịu đòn'}`;
     case 'duel': return `${who} Duel: bỏ 1 BANG! hoặc mất 1 máu.`;
-    case 'dying': return `${who} Dùng Beer để sống, hoặc chấp nhận bị loại.${table.players.find((player) => player.id === decision.player)?.character === 'sid_ketchum' ? ' Hoặc bỏ 2 lá để hồi máu.' : ''}`;
+    case 'dying': return `${who} Dùng Beer để sống, hoặc chấp nhận bị loại.${has(table.players.find((player) => player.id === decision.player)!, 'sid_ketchum') ? ' Hoặc bỏ 2 lá để hồi máu.' : ''}`;
     case 'general_store': return `${who} Chọn 1 lá úp.`;
     case 'pick_hand_slot': return `${who} Chọn một lá úp trên tay ${name(decision.kind.target)}.`;
     case 'check': return `${who} Lật kiểm tra cho ${cards[decision.kind.reason].name}.`;
@@ -207,6 +207,8 @@ function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch
     return () => observer.disconnect();
   }, [stage?.width, stage?.height, table.players, you]);
   const [selected, setSelected] = useState<CardKind | null>(null);
+  // The physical card behind the detail panel, so pack cards show the pack's picture.
+  const [selectedCard, setSelectedCard] = useState<CardId | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<number | null>(null);
   const [effectsEnabled, setEffectsEnabled] = useState(true);
   const [journalOpen, setJournalOpen] = useState(false);
@@ -238,9 +240,9 @@ function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch
     if (mode === 'keep_cards') setDraft({ ...draft, kept: draft.kept.includes(id) ? draft.kept.filter((card) => card !== id) : [...draft.kept, id] });
     else setDraft({ ...draft, card: draft.card === id ? null : id });
   };
-  const inspect: Inspect = (kind, _scroll, origin) => {
+  const inspect: Inspect = (kind, _scroll, origin, card) => {
     if (restoringFocus.current || drag.dragging !== null) return;
-    setSelected(kind); setSelectedPlayer(null);
+    setSelected(kind); setSelectedCard(card ?? null); setSelectedPlayer(null);
     if (origin) inspectedOrigin.current = origin;
   };
   const closeDetail = () => { restoringFocus.current = true; setSelected(null); setSelectedPlayer(null); inspectedOrigin.current?.focus({ preventScroll: true }); restoringFocus.current = false; };
@@ -263,8 +265,8 @@ function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch
   const turnMember = table.winner ? undefined : game.seats.find(seat => seat.player_id === table.turn.player)?.member_id;
   const inspectPlayer = (player: PublicPlayer, origin: HTMLButtonElement) => { setSelected(null); setSelectedPlayer(player.id); inspectedOrigin.current = origin; };
   const guns = own?.in_play.map(cardFace).filter((face) => face && ['volcanic', 'schofield', 'remington', 'rev_carabine', 'winchester'].includes(face.kind));
-  const distanceEffects = own ? [own.in_play.some((id) => cardFace(id)?.kind === 'mustang') && 'Mustang +1', own.in_play.some((id) => cardFace(id)?.kind === 'scope') && 'Scope −1', own.character === 'paul_regret' && 'Paul Regret +1', own.character === 'rose_doolan' && 'Rose Doolan −1'].filter(Boolean).join(' · ') : '';
-  const pickingEquipment = !locked && mode === 'turn' && !draft.healing && !draft.discarding && draft.card !== null && ['panic', 'cat_balou'].includes(playKind(game, draft.card) ?? '');
+  const distanceEffects = own ? [own.in_play.some((id) => cardFace(id)?.kind === 'mustang') && 'Mustang +1', own.in_play.some((id) => cardFace(id)?.kind === 'scope') && 'Scope −1', own.in_play.some((id) => cardFace(id)?.kind === 'binocular') && 'Binocular −1', own.in_play.some((id) => cardFace(id)?.kind === 'hideout') && 'Hideout +1', has(own, 'paul_regret') && 'Paul Regret +1', has(own, 'rose_doolan') && 'Rose Doolan −1'].filter(Boolean).join(' · ') : '';
+  const pickingEquipment = !locked && mode === 'turn' && !draft.healing && !draft.discarding && draft.card !== null && isAffect(game, draft.card);
   const pickEquipment = (player: number, card: CardId) => { setSelected(null); setSelectedPlayer(null); setDraft({ ...draft, target: player, selection: { in_play: card } }); };
   const ownTargetMode = !!own && targetMode && targetIds.includes(own.id);
   const ownNickname = game.seats.find(seat => seat.player_id === you)?.nickname ?? 'bạn';
@@ -348,7 +350,7 @@ function GameBoard({ game, room, disabled = false, sendAction, log = [], fxBatch
       </div>}
       <div className="section-heading"><h3>Bài trên tay của bạn</h3><span><MotionCount value={hand.length} /> lá</span></div><m.div className="hand-cards" data-animation-region="hand" style={{ '--hand-count': hand.length } as CSSProperties} data-ui-motion="hand-layout" layoutScroll><AnimatePresence initial={false} mode="popLayout">{hand.map((id, index) => <Card key={id} id={id} inspect={inspect} handIndex={index} handCount={hand.length} managed={!!stage && fxEnabled && effectsEnabled} hidden={drag.flight?.card === id} dragCard={stage && dragDestination(game, draft, id, locked) ? drag.props(id) : undefined} style={{ '--fan-angle': '0deg' } as CSSProperties} picked={draft.discarding || draft.healing ? draft.discard.includes(id) : draft.card === id} pick={!locked && (draft.healing || (mode === 'turn' && (draft.discarding || playKind(game, id))) || (mode === 'response' && responseCard(game, id))) ? () => chooseHand(id) : undefined} />)}</AnimatePresence>{!hand.length && <p>Bạn chưa có bài trên tay.</p>}</m.div>{stage && <span className="own-hand-label">Bài trên tay · {hand.length} lá</span>}<AnimatePresence initial={false}>{stage && quietControls && controls}</AnimatePresence></section>}
     <AnimatePresence initial={false}>{(!stage || !quietControls) && controls}</AnimatePresence>
-    <AnimatePresence>{(selected || inspectingPlayer) && <MotionPanel key={selected ?? `player-${selectedPlayer}`} className="card-detail parchment" role="complementary" label="Chi tiết lá bài"><button type="button" className="detail-close" aria-label="Đóng chi tiết lá" onClick={closeDetail}>×</button>{selected ? <><Artwork key={selected} file={cardFiles[selected]} label={cards[selected].name} /><h3>{cards[selected].name}</h3><p>{cards[selected].effect}</p></> : inspectingPlayer && <><Artwork key={inspectingPlayer.character} file={characterFiles[inspectingPlayer.character]} label={characters[inspectingPlayer.character].name} /><h3>{characters[inspectingPlayer.character].name}</h3><p>{characters[inspectingPlayer.character].ability}</p><p>Tầm bắn: {inspectingPlayer.weapon_range} · {inspectingPlayer.hand_count} lá trên tay</p></>}</MotionPanel>}</AnimatePresence>
+    <AnimatePresence>{(selected || inspectingPlayer) && <MotionPanel key={selected ?? `player-${selectedPlayer}`} className="card-detail parchment" role="complementary" label="Chi tiết lá bài"><button type="button" className="detail-close" aria-label="Đóng chi tiết lá" onClick={closeDetail}>×</button>{selected ? <><Artwork key={`${selected}:${selectedCard}`} file={selectedCard === null ? cardFiles[selected] : cardArt(selectedCard, selected)} label={cards[selected].name} /><h3>{cards[selected].name}</h3><p>{cards[selected].effect}</p></> : inspectingPlayer && <><Artwork key={inspectingPlayer.character} file={characterFiles[inspectingPlayer.character]} label={characters[inspectingPlayer.character].name} /><h3>{characters[inspectingPlayer.character].name}</h3><p>{characters[inspectingPlayer.character].ability}</p><p>Tầm bắn: {inspectingPlayer.weapon_range} · {inspectingPlayer.hand_count} lá trên tay</p></>}</MotionPanel>}</AnimatePresence>
     {drag.dragging !== null && <span className="drag-hint" role="status">{tableDrop ? 'Thả vào giữa bàn để dùng lá bài' : 'Thả lên người chơi để chọn mục tiêu'}</span>}
     {drag.overlay}
     <GameTooltip key={game.seq} root={sceneRef} enabled={!!stage} dragging={drag.dragging !== null} />

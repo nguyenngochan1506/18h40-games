@@ -1,8 +1,8 @@
 import type { CardId, CardKind } from '../../generated/protocol.ts';
 
 export type CardFace = { kind: CardKind; suit: '♠' | '♥' | '♦' | '♣'; rank: string };
-// Public card faces, indexed by physical CardId; guarded against Rust DECK in tests.
-export const cardCatalog: readonly CardFace[] = [
+// Public card faces of the base deck, indexed by physical CardId; guarded against Rust DECK in tests.
+const baseCatalog: readonly CardFace[] = [
   { kind: 'bang', suit: '♠', rank: 'A' },
   { kind: 'bang', suit: '♦', rank: '2' },
   { kind: 'bang', suit: '♦', rank: '3' },
@@ -84,5 +84,52 @@ export const cardCatalog: readonly CardFace[] = [
   { kind: 'rev_carabine', suit: '♣', rank: 'A' },
   { kind: 'winchester', suit: '♠', rank: '8' },
 ];
+
+// Dodge City faces follow the base deck (ids 80..119); guarded against model/dodge_city.rs in tests.
+const dodgeCityCatalog: readonly CardFace[] = [
+  { kind: 'barrel', suit: '♣', rank: 'A' },
+  { kind: 'binocular', suit: '♦', rank: '10' },
+  { kind: 'dynamite', suit: '♣', rank: '10' },
+  { kind: 'mustang', suit: '♥', rank: '5' },
+  { kind: 'remington', suit: '♦', rank: '6' },
+  { kind: 'rev_carabine', suit: '♠', rank: '5' },
+  { kind: 'hideout', suit: '♦', rank: 'K' },
+  { kind: 'bang', suit: '♠', rank: '8' },
+  { kind: 'bang', suit: '♣', rank: '5' },
+  { kind: 'bang', suit: '♣', rank: '6' },
+  { kind: 'bang', suit: '♣', rank: 'K' },
+  { kind: 'beer', suit: '♥', rank: '6' },
+  { kind: 'beer', suit: '♠', rank: '6' },
+  { kind: 'cat_balou', suit: '♣', rank: '8' },
+  { kind: 'general_store', suit: '♠', rank: 'A' },
+  { kind: 'indians', suit: '♦', rank: '5' },
+  { kind: 'missed', suit: '♦', rank: '8' },
+  { kind: 'panic', suit: '♥', rank: 'J' },
+  { kind: 'punch', suit: '♠', rank: '10' },
+  { kind: 'rag_time', suit: '♥', rank: '9' },
+  { kind: 'brawl', suit: '♠', rank: 'J' },
+  { kind: 'dodge', suit: '♦', rank: '7' },
+  { kind: 'dodge', suit: '♥', rank: 'K' },
+  { kind: 'springfield', suit: '♠', rank: 'K' },
+  { kind: 'tequila', suit: '♣', rank: '9' },
+  { kind: 'whisky', suit: '♦', rank: 'Q' },
+  { kind: 'bible', suit: '♥', rank: '10' },
+  { kind: 'canteen', suit: '♥', rank: '7' },
+  { kind: 'can_can', suit: '♣', rank: 'J' },
+  { kind: 'ten_gallon_hat', suit: '♦', rank: 'J' },
+  { kind: 'conestoga', suit: '♦', rank: '9' },
+  { kind: 'derringer', suit: '♠', rank: '7' },
+  { kind: 'buffalo_rifle', suit: '♣', rank: 'Q' },
+  { kind: 'howitzer', suit: '♠', rank: '9' },
+  { kind: 'pepperbox', suit: '♥', rank: 'A' },
+  { kind: 'iron_plate', suit: '♦', rank: 'A' },
+  { kind: 'iron_plate', suit: '♠', rank: 'Q' },
+  { kind: 'pony_express', suit: '♦', rank: 'Q' },
+  { kind: 'knife', suit: '♥', rank: '8' },
+  { kind: 'sombrero', suit: '♣', rank: '7' },
+];
+
+export const cardCatalog: readonly CardFace[] = [...baseCatalog, ...dodgeCityCatalog];
+export const DODGE_CITY_FIRST_CARD = baseCatalog.length;
 
 export function cardFace(id: CardId): CardFace | undefined { return cardCatalog[id]; }

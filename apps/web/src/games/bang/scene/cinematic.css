@@ -97,7 +97,7 @@
 .game-bang .cinematic .identity-copy > .game-art { display: block; width: 40px; }
 .game-bang .cinematic .identity-copy h3 { font-size: 16px; }
 .game-bang .cinematic .game-wait { left: 8px; right: auto; top: auto; bottom: calc(var(--hand-height) + 24px); transform: none; width: 18%; min-width: 180px; max-width: 268px; padding: 8px 12px; font-size: 12px; }
-.game-bang .cinematic.seats-6 .game-wait, .game-bang .cinematic.seats-7 .game-wait { top: max(158px, calc(var(--scene-height) * .22)); bottom: auto; }
+.game-bang .cinematic.seats-6 .game-wait, .game-bang .cinematic.seats-7 .game-wait, .game-bang .cinematic.seats-8 .game-wait { top: max(158px, calc(var(--scene-height) * .22)); bottom: auto; }
 .game-bang .cinematic .hand-tray { left: 50%; right: auto; top: auto; bottom: 8px; transform: translateX(-50%); width: 48%; min-width: 0; height: var(--hand-height); padding: 8px; }
 .game-bang .cinematic .hand-tray .section-heading { font-size: 12px; }
 .game-bang .cinematic .hand-tray .section-heading h3 { font-size: 14px; max-width: none; }

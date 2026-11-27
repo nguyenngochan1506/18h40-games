@@ -149,3 +149,8 @@ Nguồn: `bang_dodge_city_faq_eng.pdf` của dV Giochi (Q13–Q16 thuộc High N
 - `expansions` thiếu trong JSON = rỗng. `PROTOCOL_VERSION` = 10.
 - Ngoại lệ `end_game`: kết thúc ván tám người đưa phòng về chờ, không còn ghế có người, và giữ số vai 2/3/2 của ván trước. Khi đó tắt Dodge City cần gửi kèm preset bốn người hợp lệ; chỉ đổi `expansions` trong snapshot cũ bị `invalid_settings`. Sau lần `take_seat` đầu tiên, server tự tính lại số vai.
 - `unsupported_version`: khung lỗi mang `v` của client đã gửi (client v9 đã deploy không bác khung này); lệnh vào phòng/chơi v9 vẫn bị từ chối.
+
+## Ghi chú D3a (web)
+
+- Web hiển thị đủ 120 mặt lá, chọn bản mở rộng ở phòng chờ và bàn 8 ghế. Lá thường mới có luồng chơi: lá phụ → mục tiêu/lựa chọn (Springfield, Tequila, Whisky, Rag Time, Brawl), Punch như BANG! tầm 1, Dodge đáp như Missed!.
+- Lá viền xanh lá, kỹ năng nhân vật cần giao diện riêng, `VultureTake`/`ChooseCopy` và ảnh `03_*` thuộc D3b.

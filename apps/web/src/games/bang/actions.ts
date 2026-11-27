@@ -1,10 +1,10 @@
-import type { Action, CardId, CardKind, CardSelection, DrawSource } from '../../generated/protocol.ts';
+import type { Action, BrawlPick, CardId, CardKind, CardSelection, Character, DrawSource, PublicPlayer } from '../../generated/protocol.ts';
 import type { BangSnapshot as GameSnapshot } from './types.ts';
 import { cardFace } from './cardCatalog.ts';
 import { selectGameView } from './state.ts';
 
-export type ActionDraft = { storeSlot: number | null; handSlot: number | null; card: CardId | null; target: number | null; selection: CardSelection | null; discarding: boolean; discard: CardId[]; healing: boolean; source: DrawSource; kept: CardId[] };
-export const emptyDraft: ActionDraft = { storeSlot: null, handSlot: null, card: null, target: null, selection: null, discarding: false, discard: [], healing: false, source: 'deck', kept: [] };
+export type ActionDraft = { storeSlot: number | null; handSlot: number | null; card: CardId | null; target: number | null; selection: CardSelection | null; discarding: boolean; discard: CardId[]; healing: boolean; source: DrawSource; kept: CardId[]; extra: CardId | null; brawl: Record<number, CardSelection> };
+export const emptyDraft: ActionDraft = { storeSlot: null, handSlot: null, card: null, target: null, selection: null, discarding: false, discard: [], healing: false, source: 'deck', kept: [], extra: null, brawl: {} };
 
 export function actionMode(game: GameSnapshot): 'view' | 'waiting' | 'turn' | 'response' | 'check' | 'pick_hand_slot' | 'general_store' | 'draw_choice' | 'keep_cards' | 'choose_draw_result' {
   const { table, you } = selectGameView(game.view);
@@ -32,23 +32,98 @@ export function flipBarrelAction(game: GameSnapshot, locked: boolean): Action | 
   return { type: 'flip_barrel', pending_id: waiting.pending_id };
 }
 
+/** Printed character or the one Vera Custer is copying (engine `Player::has`). */
+export function has(player: Pick<PublicPlayer, 'character' | 'copied'>, character: Character): boolean {
+  return player.character === character || player.copied === character;
+}
+
 // These are input categories, not a client-side legality check (range, limits, etc.).
 export function playKind(game: GameSnapshot, card: CardId): CardKind | undefined {
   const { table, you, hand } = selectGameView(game.view);
   if (you === null || !hand.includes(card)) return undefined;
   const kind = cardFace(card)?.kind;
-  if (kind !== 'missed') return kind;
-  return table.players.find((player) => player.id === you)?.character === 'calamity_janet' ? 'bang' : undefined;
+  if (kind !== 'missed' && kind !== 'dodge') return kind;
+  const own = table.players.find((player) => player.id === you);
+  return own && has(own, 'calamity_janet') ? 'bang' : undefined;
+}
+
+// Dodge City cards that cost one more hand card (`play_with_discard`, `affect_with_discard`, `brawl`).
+const extraKinds: CardKind[] = ['springfield', 'tequila', 'whisky', 'rag_time', 'brawl'];
+// Cards that take or discard a chosen card of the target (hand slot or table card).
+const affectKinds: CardKind[] = ['panic', 'cat_balou', 'rag_time'];
+const targetKinds: CardKind[] = ['bang', 'panic', 'cat_balou', 'duel', 'jail', 'punch', 'springfield', 'tequila', 'rag_time'];
+const selfKinds: CardKind[] = ['panic', 'cat_balou', 'tequila', 'rag_time'];
+
+export function needsExtra(game: GameSnapshot, card: CardId): boolean {
+  return extraKinds.includes(playKind(game, card) ?? 'bang');
+}
+
+export function isAffect(game: GameSnapshot, card: CardId): boolean {
+  return affectKinds.includes(playKind(game, card) ?? 'bang');
 }
 
 export function needsTarget(game: GameSnapshot, card: CardId): boolean {
-  return ['bang', 'panic', 'cat_balou', 'duel', 'jail'].includes(playKind(game, card) ?? '');
+  return targetKinds.includes(playKind(game, card) ?? '' as CardKind);
 }
 
+/** Players Brawl must hear from: every other living player who still has a card. */
+export function brawlTargets(game: GameSnapshot) {
+  const { table, you } = selectGameView(game.view);
+  return table.players.filter(player => player.alive && player.id !== you && (player.hand_count > 0 || player.in_play.length > 0));
+}
+
+// Belle Star: during her turn the cards in front of the other players are inactive (engine `table_active`).
+function tableActive(game: GameSnapshot, owner: PublicPlayer): boolean {
+  const { table } = selectGameView(game.view);
+  const turn = table.players.find(player => player.id === table.turn.player);
+  return owner.id === table.turn.player || !(turn?.alive && has(turn, 'belle_star'));
+}
+
+/** Seat distance with equipment and character modifiers, as `effective_distance` in the engine. */
+export function effectiveDistance(game: GameSnapshot, from: number, to: number): number {
+  const { table } = selectGameView(game.view);
+  const living = table.players.filter(player => player.alive);
+  const a = living.findIndex(player => player.id === from), b = living.findIndex(player => player.id === to);
+  if (a < 0 || b < 0) return Infinity;
+  const source = living[a], target = living[b];
+  const count = (owner: PublicPlayer, kinds: CardKind[]) => tableActive(game, owner) ? owner.in_play.filter(id => kinds.includes(cardFace(id)?.kind as CardKind)).length : 0;
+  const around = Math.abs(a - b);
+  const base = Math.min(around, living.length - around);
+  return Math.max(1, base + count(target, ['mustang', 'hideout']) + (from !== to && has(target, 'paul_regret') ? 1 : 0)
+    - count(source, ['scope', 'binocular']) - (has(source, 'rose_doolan') ? 1 : 0));
+}
+
+const unlimitedBangs = (player: PublicPlayer) => has(player, 'willy_the_kid') || player.in_play.some(id => cardFace(id)?.kind === 'volcanic');
+
+/**
+ * Who a card may be aimed at. One list serves the Play button and drag-and-drop. Dodge City shots are
+ * checked like the engine (range, Apache Kid's diamonds, one BANG! per turn); the base cards keep the
+ * looser "input category" rule and leave range errors to the server.
+ */
 export function playTargets(game: GameSnapshot, card: CardId) {
   const { table, you } = selectGameView(game.view);
-  const self = ['panic', 'cat_balou'].includes(playKind(game, card) ?? '');
-  return needsTarget(game, card) ? table.players.filter(player => player.alive && (player.id !== you || self)) : [];
+  const kind = playKind(game, card);
+  const self = selfKinds.includes(kind ?? 'bang');
+  const own = table.players.find(player => player.id === you);
+  const suit = cardFace(card)?.suit;
+  const strict = kind === 'punch' || kind === 'springfield' || kind === 'rag_time' || cardFace(card)?.kind === 'dodge';
+  return needsTarget(game, card) ? table.players.filter(player => {
+    if (!player.alive || (player.id === you && !self)) return false;
+    if (!strict || !own) return true;
+    if (player.id !== you && has(player, 'apache_kid') && suit === '♦') return false;
+    if (kind === 'punch') return effectiveDistance(game, own.id, player.id) <= 1;
+    if (kind === 'bang') { // Dodge played as BANG! by Calamity Janet
+      return (table.turn.bangs_played < 1 || unlimitedBangs(own)) && effectiveDistance(game, own.id, player.id) <= own.weapon_range;
+    }
+    return true;
+  }) : [];
+}
+
+/** Hand cards of `target` that a taker can still pick: your own hand loses the cards you pay first. */
+export function pickableHand(game: GameSnapshot, card: CardId, target: PublicPlayer): number {
+  const { you, hand } = selectGameView(game.view);
+  if (target.id !== you) return target.hand_count;
+  return Math.max(0, hand.length - (playKind(game, card) === 'rag_time' ? 2 : 1));
 }
 
 export function responseKind(game: GameSnapshot): CardKind | null {
@@ -67,25 +142,36 @@ export function responseCard(game: GameSnapshot, card: CardId): boolean {
   const required = responseKind(game);
   const actual = cardFace(card)?.kind;
   if (!required || !actual || !hand.includes(card)) return false;
-  return actual === required || (table.players.find((player) => player.id === you)?.character === 'calamity_janet'
-    && ((required === 'bang' && actual === 'missed') || (required === 'missed' && actual === 'bang')));
+  return actual === required || (required === 'missed' && actual === 'dodge') || (has(table.players.find((player) => player.id === you)!, 'calamity_janet')
+    && ((required === 'bang' && (actual === 'missed' || actual === 'dodge')) || (required === 'missed' && actual === 'bang')));
 }
 
 export function playAction(game: GameSnapshot, draft: ActionDraft, locked: boolean): Action | null {
   if (locked || actionMode(game) !== 'turn' || draft.card === null) return null;
   const kind = playKind(game, draft.card);
   if (!kind) return null;
-  if (!needsTarget(game, draft.card)) return { type: 'play', card: draft.card, target: null };
-  const { table, you } = selectGameView(game.view);
-  const target = table.players.find((player) => player.id === draft.target && player.alive);
-  if (!target) return null;
-  if (kind === 'panic' || kind === 'cat_balou') {
-    const selection = draft.selection;
-    if (!selection || (selection !== 'hand' && !target.in_play.includes(selection.in_play))) return null;
-    return { type: 'affect_card', card: draft.card, target: target.id, selection };
+  const { table, you, hand } = selectGameView(game.view);
+  const extra = needsExtra(game, draft.card);
+  if (extra && (draft.extra === null || draft.extra === draft.card || !hand.includes(draft.extra))) return null;
+  if (kind === 'brawl') {
+    const picks: BrawlPick[] = [];
+    for (const player of brawlTargets(game)) {
+      const selection = draft.brawl[player.id];
+      if (!selection || (selection === 'hand' ? player.hand_count === 0 : !player.in_play.includes(selection.in_play))) return null;
+      picks.push({ target: player.id, selection });
+    }
+    // Nobody may have a card left: the server accepts an empty list and just spends the cards.
+    return { type: 'brawl', card: draft.card, discard: draft.extra!, picks };
   }
-  if (target.id === you) return null;
-  return { type: 'play', card: draft.card, target: target.id };
+  if (!needsTarget(game, draft.card)) return extra ? { type: 'play_with_discard', card: draft.card, discard: draft.extra!, target: null } : { type: 'play', card: draft.card, target: null };
+  const target = playTargets(game, draft.card).find((player) => player.id === draft.target);
+  if (!target) return null;
+  if (isAffect(game, draft.card)) {
+    const selection = draft.selection;
+    if (!selection || (selection === 'hand' ? pickableHand(game, draft.card, target) === 0 : !target.in_play.includes(selection.in_play))) return null;
+    return extra ? { type: 'affect_with_discard', card: draft.card, discard: draft.extra!, target: target.id, selection } : { type: 'affect_card', card: draft.card, target: target.id, selection };
+  }
+  return extra ? { type: 'play_with_discard', card: draft.card, discard: draft.extra!, target: target.id } : { type: 'play', card: draft.card, target: target.id };
 }
 
 export function respondAction(game: GameSnapshot, card: CardId | null, locked: boolean): Action | null {
@@ -125,8 +211,8 @@ export function chooseDrawSourceAction(game: GameSnapshot, source: DrawSource, l
   const { table, you } = selectGameView(game.view);
   if (locked || actionMode(game) !== 'draw_choice' || table.waiting?.pending_id == null) return null;
   const own = table.players.find((player) => player.id === you)!;
-  if (source === 'discard' && (own.character !== 'pedro_ramirez' || table.discard_count === 0)) return null;
-  if (typeof source === 'object' && (!('player' in source) || own.character !== 'jesse_jones' || source.player === you || !table.players.some((player) => player.id === source.player && player.alive && player.hand_count > 0))) return null;
+  if (source === 'discard' && (!has(own, 'pedro_ramirez') || table.discard_count === 0)) return null;
+  if (typeof source === 'object' && (!('player' in source) || !has(own, 'jesse_jones') || source.player === you || !table.players.some((player) => player.id === source.player && player.alive && player.hand_count > 0))) return null;
   return { type: 'choose_draw_source', pending_id: table.waiting.pending_id, source };
 }
 
@@ -150,7 +236,7 @@ export function chooseDrawResultAction(game: GameSnapshot, card: CardId | null, 
 
 export function isSid(game: GameSnapshot): boolean {
   const { table, you } = selectGameView(game.view);
-  return !table.winner && you !== null && table.players.some((player) => player.id === you && player.character === 'sid_ketchum');
+  return !table.winner && you !== null && table.players.some((player) => player.id === you && has(player, 'sid_ketchum'));
 }
 
 export function sidHealAction(game: GameSnapshot, discard: CardId[], locked: boolean): Action | null {

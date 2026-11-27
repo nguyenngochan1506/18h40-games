@@ -118,11 +118,11 @@ export const cards = {
   },
   "punch": {
     "name": "Punch",
-    "effect": "BANG! vào người ở khoảng cách 1, không tính giới hạn BANG!"
+    "effect": "BANG! vào người ở khoảng cách 1 (tính cả Scope/Mustang), không tính giới hạn BANG!"
   },
   "rag_time": {
     "name": "Rag Time",
-    "effect": "Bỏ thêm 1 lá; lấy 1 lá từ tay hoặc trước mặt bất kỳ người nào, không giới hạn khoảng cách"
+    "effect": "Bỏ thêm 1 lá; lấy 1 lá từ tay (chọn mù) hoặc trước mặt bất kỳ người nào, không giới hạn khoảng cách"
   },
   "brawl": {
     "name": "Brawl",
@@ -130,7 +130,7 @@ export const cards = {
   },
   "dodge": {
     "name": "Dodge",
-    "effect": "Missed! rồi rút 1 lá"
+    "effect": "Dùng như Missed! khi bị bắn, rồi rút 1 lá; không đánh được trong lượt"
   },
   "springfield": {
     "name": "Springfield",

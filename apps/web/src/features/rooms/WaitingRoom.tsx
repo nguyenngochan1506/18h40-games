@@ -47,7 +47,7 @@ export default function WaitingRoom({ room, roomTools, disabled, send, Settings,
   const nextGames = host && waiting ? games.filter(game => game.enabled && game.id !== room.game) : [];
   const missing = Math.max(0, room.min_players - seats.length);
   const feedback = { whileHover: { scale: reduced || disabled ? 1 : 1.02 }, whileTap: { scale: reduced || disabled ? 1 : .98 }, transition: { duration: .1 } };
-  const settings = waiting && Settings && <Settings key={JSON.stringify([room.settings, seats.length])} settings={room.settings} players={seats.length} editable={host && !disabled} onChange={settings => send({ v: PROTOCOL_VERSION, type: 'update_settings', settings })} />;
+  const settings = waiting && Settings && <Settings key={JSON.stringify([room.settings, seats.length])} settings={room.settings} players={seats.length} maxPlayers={room.max_players} editable={host && !disabled} onChange={settings => send({ v: PROTOCOL_VERSION, type: 'update_settings', settings })} />;
   async function copyCode(link = false) {
     setCopying(true);
     try {
