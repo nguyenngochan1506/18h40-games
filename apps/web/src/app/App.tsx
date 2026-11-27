@@ -120,12 +120,13 @@ export default function App() {
   }, [location.pathname]);
   useEffect(() => { document.title = room ? `18h40 — Phòng ${room.code}` : '18h40 — Phòng chơi cùng hội'; }, [room?.code]);
   useEffect(() => {
-    const onVisibility = () => { if (document.hidden) voice.stopMic(); };
-    window.addEventListener('blur', voice.stopMic);
+    const stopHeldMic = () => { if (voice.snapshot().mode === 'hold') voice.stopMic(); };
+    const onVisibility = () => { if (document.hidden) stopHeldMic(); };
+    window.addEventListener('blur', stopHeldMic);
     window.addEventListener('pagehide', voice.leave);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      window.removeEventListener('blur', voice.stopMic);
+      window.removeEventListener('blur', stopHeldMic);
       window.removeEventListener('pagehide', voice.leave);
       document.removeEventListener('visibilitychange', onVisibility);
     };

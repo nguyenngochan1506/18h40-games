@@ -391,7 +391,7 @@ for (const reconnect of [false, true]) test(`a rejected rejoin leaves a usable l
   const count = connection.commands().length; await fx.tick(1000); assert.equal(connection.commands().length, count);
 });
 
-test('room voice signaling and its controls survive a game transition while game commands are pending', async t => {
+test('room voice survives game transitions and only a held mic stops on focus loss', async t => {
   const fx = await mount(t, '/r/ABCDE', saved);
   const session = joined();
   assert.equal(session.type, 'joined');
@@ -454,27 +454,56 @@ test('room voice signaling and its controls survive a game transition while game
   } });
   t.after(() => { Reflect.deleteProperty(navigator, 'mediaDevices'); });
   assert.equal(tracks.length, 0, 'Listening must not open the microphone');
+  const blur = async () => { await act(() => window.dispatchEvent(new Event('blur'))); };
+  const hide = async () => {
+    const hidden = t.mock.getter(document, 'hidden', () => true);
+    try { await act(() => document.dispatchEvent(new Event('visibilitychange'))); }
+    finally { hidden.mock.restore(); }
+  };
+  const toggle = '.saloon-restoring [data-voice-mic]';
+  await fx.click(toggle);
+  const toggled = tracks.at(-1)!;
+  assert.equal(toggled.enabled, true);
+  for (const background of [blur, hide]) {
+    await background();
+    assert.equal(toggled.readyState, 'live');
+    assert.equal(toggled.enabled, true);
+    assert.equal(currentVoice.querySelector('[data-voice-mic]')?.getAttribute('aria-pressed'), 'true');
+  }
+  await fx.click(toggle);
+  assert.equal(toggled.readyState, 'ended');
+
   const mode = currentVoice.querySelector<HTMLSelectElement>('select')!;
   await act(() => { mode.value = 'hold'; mode.dispatchEvent(new Event('change', { bubbles: true })); });
   const hold = currentVoice.querySelector<HTMLButtonElement>('.voice-hold')!;
   await act(() => hold.focus());
   const pointer = (type: string) => new dom.PointerEvent(type, { bubbles: true, pointerId: 9, isPrimary: true, pointerType: 'touch' }) as unknown as PointerEvent;
   await act(() => hold.dispatchEvent(pointer('pointerdown')));
-  assert.equal(tracks[0]?.enabled, true);
+  assert.equal(tracks.at(-1)?.enabled, true);
   await act(() => window.dispatchEvent(pointer('pointercancel')));
-  assert.equal(tracks[0]?.readyState, 'ended');
+  assert.equal(tracks.at(-1)?.readyState, 'ended');
+  for (const background of [blur, hide]) {
+    await act(() => hold.dispatchEvent(pointer('pointerdown')));
+    const held = tracks.at(-1)!;
+    assert.equal(held.readyState, 'live');
+    assert.equal(held.enabled, true);
+    await background();
+    assert.equal(held.readyState, 'ended');
+  }
 
   const key = (type: string, options?: KeyboardEventInit) => new KeyboardEvent(type, { key: 'v', code: 'KeyV', bubbles: true, ...options });
+  const captureCount = tracks.length;
   await act(() => hold.dispatchEvent(key('keydown')));
-  assert.equal(tracks.length, 1, 'V is disabled by default');
+  assert.equal(tracks.length, captureCount, 'V is disabled by default');
   await fx.click('.voice-options input');
   await act(() => hold.focus());
   await act(() => hold.dispatchEvent(key('keydown', { isComposing: true })));
-  assert.equal(tracks.length, 1);
+  assert.equal(tracks.length, captureCount);
   await act(() => hold.dispatchEvent(key('keydown')));
-  assert.equal(tracks[1]?.enabled, true);
+  assert.equal(tracks.length, captureCount + 1);
+  assert.equal(tracks.at(-1)?.enabled, true);
   await act(() => hold.dispatchEvent(key('keyup')));
-  assert.equal(tracks[1]?.readyState, 'ended');
+  assert.equal(tracks.at(-1)?.readyState, 'ended');
 
   await fx.click('.saloon-restoring button');
   assert.deepEqual(fx.connection.commands().map(message => message.type), ['rejoin_room', 'voice_token', 'start_game', 'voice_leave', 'leave_room']);
