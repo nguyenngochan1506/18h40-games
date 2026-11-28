@@ -116,12 +116,21 @@ impl Session {
         }
         let previous_action = self.state.last_action().map(|action| action.id);
         let rng_before = self.rng.clone();
-        let events = ::cats::apply(&mut self.state, player, action, &mut self.rng)
+        // Restore the RNG snapshot BEFORE applying a Nope so that any follow-up
+        // effect during Nope reconciliation (e.g. Garbage Collection shuffling the
+        // deck when every remaining player emptied their hand) advances the restored
+        // RNG instead of being overwritten afterwards.
+        let mut working_rng = match action {
+            ::cats::Action::Nope { pending_id } => self
+                .rng_before
+                .get(&pending_id.0)
+                .cloned()
+                .unwrap_or_else(|| self.rng.clone()),
+            _ => self.rng.clone(),
+        };
+        let events = ::cats::apply(&mut self.state, player, action, &mut working_rng)
             .map_err(|_| ErrorCode::IllegalAction)?;
-        let undone_action = events.iter().find_map(|event| match &event.kind {
-            ::cats::EventKind::ActionUndone { action_id, .. } => Some(*action_id),
-            _ => None,
-        });
+        self.rng = working_rng;
         let noped = events
             .iter()
             .any(|event| matches!(&event.kind, ::cats::EventKind::NopePlayed { .. }));
@@ -130,9 +139,6 @@ impl Session {
             None => self.rng_before.clear(),
             Some(action_id) if noped => {
                 self.rng_before.insert(action_id.0, rng_before);
-                if let Some(snapshot) = undone_action.and_then(|id| self.rng_before.get(&id.0)) {
-                    self.rng = snapshot.clone();
-                }
             }
             Some(action_id) if previous_action != Some(action_id) => {
                 self.rng_before.clear();
@@ -347,5 +353,93 @@ mod tests {
             rng_before_shuffle.clone().next_u64()
         );
         assert_eq!(session.seq(), 3);
+    }
+
+    #[test]
+    fn counter_nope_garbage_collection_shuffle_advances_rng() {
+        use rand::seq::SliceRandom;
+
+        let now = Instant::now();
+        let two_seats = seats().into_iter().take(2).collect();
+        let mut session = Session::new(
+            two_seats,
+            ::cats::Settings {
+                imploding: false,
+                streaking: true,
+                barking: false,
+            },
+            Some(41),
+            now,
+        )
+        .unwrap();
+        let actor = session.state.turn.player;
+        let other = session.state.next_active(actor).unwrap();
+
+        let gc = extract(&mut session.state, ::cats::CardKind::GarbageCollection);
+        let actor_nope = extract(&mut session.state, ::cats::CardKind::Nope);
+        let other_nope = extract(&mut session.state, ::cats::CardKind::Nope);
+
+        // Empty both hands so the two Nopes leave zero cards for GiveToDeck,
+        // forcing reconcile_restored_pending to shuffle the deck during Counter-Nope.
+        let a_extra = std::mem::take(&mut session.state.players[actor.0].hand);
+        let o_extra = std::mem::take(&mut session.state.players[other.0].hand);
+        session.state.deck.splice(0..0, a_extra);
+        session.state.deck.splice(0..0, o_extra);
+        session.state.players[actor.0].hand.extend([gc, actor_nope]);
+        session.state.players[other.0].hand.push(other_nope);
+
+        let deck_before_gc = session.state.deck.clone();
+        let rng_before_gc = session.rng.clone();
+        let mut expected_deck = deck_before_gc.clone();
+        let mut expected_rng = rng_before_gc.clone();
+        expected_deck.shuffle(&mut expected_rng);
+
+        session
+            .apply(
+                &format!("member-{}", actor.0),
+                GameAction::Cats(::cats::Action::PlayCard { card: gc }),
+                now,
+            )
+            .unwrap();
+        let gc_id = session.state.last_action().unwrap().id;
+        session
+            .apply(
+                &format!("member-{}", other.0),
+                GameAction::Cats(::cats::Action::Nope { pending_id: gc_id }),
+                now,
+            )
+            .unwrap();
+        let first_nope_id = session.state.last_action().unwrap().id;
+
+        // Counter-Nope empties both hands and shuffles the deck.
+        session
+            .apply(
+                &format!("member-{}", actor.0),
+                GameAction::Cats(::cats::Action::Nope {
+                    pending_id: first_nope_id,
+                }),
+                now,
+            )
+            .unwrap();
+
+        assert!(session.state.pending.is_empty());
+        assert_eq!(
+            session.state.deck, expected_deck,
+            "Garbage Collection must shuffle the deck using the restored RNG"
+        );
+        assert_ne!(
+            session.state.deck, deck_before_gc,
+            "shuffled deck must differ from pre-shuffle deck"
+        );
+        assert_eq!(
+            session.rng.clone().next_u64(),
+            expected_rng.clone().next_u64(),
+            "server RNG must stay at the post-shuffle state instead of rewinding"
+        );
+        assert_ne!(
+            session.rng.clone().next_u64(),
+            rng_before_gc.clone().next_u64(),
+            "server RNG must not rewind to pre-shuffle state"
+        );
     }
 }

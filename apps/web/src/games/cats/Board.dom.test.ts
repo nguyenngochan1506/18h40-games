@@ -493,3 +493,52 @@ test('playing Bury clears future preview immediately while choosing bury positio
     'future preview must clear as soon as Bury takes the top card',
   );
 });
+
+test('future preview still opens after a rejoin reset even when previously dismissed', async t => {
+  const { container, root } = await mount(t);
+  const sent: GameAction[] = [];
+  const baseView = playerView([], { player: 0, pending_id: null, kind: { type: 'turn' } });
+  if (baseView.game !== 'cats') throw new Error('Cats view expected');
+
+  const frame1: GameBoardProps['sync']['frames'][number] = {
+    id: 1,
+    game: { seq: 1, seats, view: baseView },
+    update: {
+      game: 'cats',
+      events: [{ type: 'future_seen', player: 0, cards: [{ id: 12, kind: 'skip' }] }],
+      view: baseView.payload,
+    },
+    reset: null,
+    setup: false,
+  };
+  await act(async () => root.render(createElement(Board, propsFor(baseView, sent, [], [frame1]))));
+  await act(() => container.querySelector<HTMLButtonElement>('[aria-label="Ẩn xem tương lai"]')!.click());
+  assert.equal(container.querySelector('.cats-future-strip'), null);
+
+  // Rejoin reset frame arrives, then a new future_seen arrives -> must reopen!
+  const resetFrame: GameBoardProps['sync']['frames'][number] = {
+    id: 2,
+    game: { seq: 2, seats, view: baseView },
+    update: null,
+    reset: 'joined',
+    setup: false,
+  };
+  await act(async () => root.render(createElement(Board, propsFor(baseView, sent, [], [resetFrame]))));
+
+  const frame3: GameBoardProps['sync']['frames'][number] = {
+    id: 3,
+    game: { seq: 3, seats, view: baseView },
+    update: {
+      game: 'cats',
+      events: [{ type: 'future_seen', player: 0, cards: [{ id: 14, kind: 'exploding' }] }],
+      view: baseView.payload,
+    },
+    reset: null,
+    setup: false,
+  };
+  await act(async () => root.render(createElement(Board, propsFor(baseView, sent, [], [frame3]))));
+  assert.ok(
+    container.querySelector('.cats-future-strip'),
+    'new future_seen after rejoin reset must display even if an earlier preview was dismissed',
+  );
+});

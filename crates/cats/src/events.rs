@@ -140,11 +140,9 @@ pub enum EventKind {
     },
     ImplodingPlaced {
         player: PlayerId,
-        position: usize,
     },
     Defused {
         player: PlayerId,
-        position: usize,
     },
     PlayerEliminated {
         player: PlayerId,

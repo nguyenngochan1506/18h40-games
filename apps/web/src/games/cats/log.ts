@@ -301,7 +301,7 @@ export function receiveCatsFrame(
   let nextLogId = frame.reset ? 1 : current.nextLogId;
   const added: CatsLogEntry[] = [];
   let futurePreview = frame.reset ? null : current.futurePreview;
-  let futureSeq = frame.reset ? 0 : current.futureSeq;
+  let futureSeq = current.futureSeq;
 
   const seenFuture = events.find(
     (event): event is Extract<CatsEventKind, { type: 'future_seen' }> =>

@@ -1922,7 +1922,7 @@ fn defuse(state: &mut State, player: PlayerId, position: usize, events: &mut Vec
     debug_assert_eq!(owner, player);
     state.last_action = None;
     deck::insert_from_top(&mut state.deck, exploding, position);
-    events.push(Event::public(EventKind::Defused { player, position }));
+    events.push(Event::public(EventKind::Defused { player }));
     if end_turn {
         lift_curse(state, player, events);
         finish_turn(state, events);
@@ -1943,10 +1943,7 @@ fn insert_imploding(state: &mut State, player: PlayerId, position: usize, events
     state.last_action = None;
     state.face_up.insert(card);
     deck::insert_from_top(&mut state.deck, card, position);
-    events.push(Event::public(EventKind::ImplodingPlaced {
-        player,
-        position,
-    }));
+    events.push(Event::public(EventKind::ImplodingPlaced { player }));
     if end_turn {
         lift_curse(state, player, events);
         finish_turn(state, events);

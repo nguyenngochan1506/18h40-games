@@ -1108,7 +1108,7 @@ fn bury_triggers_exploding_and_rejects_while_trapped_by_ill_take_that() {
     let dec = decision(&state).unwrap();
     assert_eq!(dec.player, actor);
     assert!(matches!(dec.kind, cats::state::DecisionKind::Defuse { .. }));
-    apply(
+    let defuse_events = apply(
         &mut state,
         actor,
         Action::Defuse {
@@ -1118,6 +1118,19 @@ fn bury_triggers_exploding_and_rejects_while_trapped_by_ill_take_that() {
         &mut rng,
     )
     .unwrap();
+    for recipient in [Some(target), None] {
+        let filtered = filter_events(&defuse_events, recipient);
+        let defused = filtered
+            .iter()
+            .find(|e| matches!(e.kind, cats::EventKind::Defused { .. }))
+            .expect("opponent and spectator receive public Defused event");
+        let json = serde_json::to_value(&defused.kind).unwrap();
+        assert_eq!(json["type"], "defused");
+        assert!(
+            json.get("position").is_none(),
+            "Defused event sent to {recipient:?} must not leak reinsertion position"
+        );
+    }
     assert_eq!(state.turn.player, target);
     assert_card_conservation(&state, &initial);
 }
@@ -1659,4 +1672,230 @@ fn bury_hides_position_publicly_and_preserves_imploding_orientation() {
     assert!(state.imploding_face_up);
     assert_eq!(spectator_view(&state).top_known, Some(CardKind::Imploding));
     assert_card_conservation(&state, &initial);
+}
+
+fn find_pair(hand: &[CardId]) -> Option<Vec<CardId>> {
+    for i in 0..hand.len() {
+        let Some(k1) = hand[i].kind() else { continue };
+        if !k1.is_combo_cat() {
+            continue;
+        }
+        for j in (i + 1)..hand.len() {
+            let Some(k2) = hand[j].kind() else { continue };
+            if !k2.is_combo_cat() {
+                continue;
+            }
+            if k1 == k2 || k1 == CardKind::FeralCat || k2 == CardKind::FeralCat {
+                return Some(vec![hand[i], hand[j]]);
+            }
+        }
+    }
+    None
+}
+
+fn find_five_distinct(hand: &[CardId]) -> Option<Vec<CardId>> {
+    let mut picked = Vec::with_capacity(5);
+    let mut seen_cats = Vec::with_capacity(5);
+    for &card in hand {
+        let Some(kind) = card.kind() else { continue };
+        if !kind.is_combo_cat() {
+            continue;
+        }
+        if kind == CardKind::FeralCat || !seen_cats.contains(&kind) {
+            if kind != CardKind::FeralCat {
+                seen_cats.push(kind);
+            }
+            picked.push(card);
+            if picked.len() == 5 {
+                return Some(picked);
+            }
+        }
+    }
+    None
+}
+
+#[test]
+fn adversarial_fuzz_all_expansion_subsets_with_combos_nopes_and_privacy_invariants() {
+    let expansion_configs = [
+        Settings::base_only(),
+        Settings {
+            imploding: true,
+            streaking: false,
+            barking: false,
+        },
+        Settings {
+            imploding: false,
+            streaking: true,
+            barking: false,
+        },
+        Settings {
+            imploding: false,
+            streaking: false,
+            barking: true,
+        },
+        Settings::default(),
+    ];
+
+    for (cfg_idx, settings) in expansion_configs.iter().enumerate() {
+        for count in [2, 3, 4, 6, 8] {
+            for seed in 1_u64..=3 {
+                let mut rng = seeded((cfg_idx as u64 + 1) * 1000 + count as u64 * 37 + seed);
+                let (mut state, _) = setup(count, settings.clone(), &mut rng).unwrap();
+                let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+                let mut steps = 0;
+
+                while state.winner.is_none() && steps < 2000 {
+                    assert!(
+                        decision(&state).is_some(),
+                        "active game must always have a decision (cfg={cfg_idx} count={count} seed={seed} step={steps})"
+                    );
+                    let default = default_action(&state);
+                    assert!(
+                        default.is_some(),
+                        "active game must never deadlock default_action (cfg={cfg_idx} count={count} seed={seed} step={steps} pending={:?})",
+                        state.pending
+                    );
+
+                    // Occasionally have an active uncursed player play Nope.
+                    if let Some(last) = state.last_action()
+                        && last.nopeable
+                        && rng.random_bool(0.30)
+                    {
+                        let nopers: Vec<PlayerId> = state
+                            .active_players()
+                            .filter(|p| {
+                                !state.players[p.0].cursed
+                                    && state.players[p.0]
+                                        .hand
+                                        .iter()
+                                        .any(|c| c.kind() == Some(CardKind::Nope))
+                            })
+                            .collect();
+                        if let Some(&noper) = nopers.first()
+                            && let Ok(events) = apply(
+                                &mut state,
+                                noper,
+                                Action::Nope {
+                                    pending_id: last.id,
+                                },
+                                &mut rng,
+                            )
+                        {
+                            assert_privacy_invariants(&state, &events);
+                            assert_card_conservation(&state, &initial);
+                            steps += 1;
+                            continue;
+                        }
+                    }
+
+                    // Occasionally play AlterFutureNow out of turn.
+                    if state.pending.is_empty() && rng.random_bool(0.15) {
+                        let alter_now = state.active_players().find_map(|p| {
+                            (p != state.turn.player && !state.players[p.0].cursed).then(|| {
+                                state.players[p.0]
+                                    .hand
+                                    .iter()
+                                    .copied()
+                                    .find(|c| c.kind() == Some(CardKind::AlterFutureNow))
+                                    .map(|c| (p, c))
+                            })?
+                        });
+                        if let Some((other, card)) = alter_now {
+                            let events =
+                                apply(&mut state, other, Action::PlayCard { card }, &mut rng)
+                                    .unwrap();
+                            assert_privacy_invariants(&state, &events);
+                            assert_card_conservation(&state, &initial);
+                            steps += 1;
+                            continue;
+                        }
+                    }
+
+                    let (player, action) = if state.pending.is_empty() && rng.random_bool(0.65) {
+                        let p = state.turn.player;
+                        if state.players[p.0].cursed {
+                            if !state.players[p.0].hand.is_empty() && rng.random_bool(0.6) {
+                                let slot = rng.random_range(0..state.players[p.0].hand.len());
+                                (p, Action::PlayBlind { slot })
+                            } else {
+                                (p, Action::Draw)
+                            }
+                        } else if !state.discard.is_empty()
+                            && let Some(five) = find_five_distinct(&state.players[p.0].hand)
+                            && rng.random_bool(0.5)
+                        {
+                            (p, Action::PlayFive { cards: five })
+                        } else if let Some(pair) = find_pair(&state.players[p.0].hand)
+                            && rng.random_bool(0.4)
+                        {
+                            (p, Action::PlayPair { cards: pair })
+                        } else {
+                            let playable: Vec<CardId> = state.players[p.0]
+                                .hand
+                                .iter()
+                                .copied()
+                                .filter(|c| {
+                                    c.kind().is_some_and(|kind| {
+                                        kind.is_playable_single()
+                                            && !(kind == CardKind::IllTakeThat
+                                                && state.first_ill_take_that_target(p).is_none())
+                                            && !(kind == CardKind::Bury
+                                                && state.players[p.0].ill_take_that.is_some())
+                                    })
+                                })
+                                .collect();
+                            if let Some(&card) = playable.first() {
+                                (p, Action::PlayCard { card })
+                            } else {
+                                default.unwrap()
+                            }
+                        }
+                    } else {
+                        default.unwrap()
+                    };
+
+                    let events = apply(&mut state, player, action, &mut rng).unwrap();
+                    assert_privacy_invariants(&state, &events);
+                    assert_card_conservation(&state, &initial);
+                    steps += 1;
+                }
+
+                assert!(
+                    state.winner.is_some(),
+                    "adversarial fuzz stalled (cfg={cfg_idx} count={count} seed={seed})"
+                );
+                assert_eq!(state.active_count(), 1);
+            }
+        }
+    }
+}
+
+fn assert_privacy_invariants(state: &cats::State, events: &[cats::Event]) {
+    for event in filter_events(events, None) {
+        let json = serde_json::to_value(&event.kind).unwrap();
+        if matches!(
+            json["type"].as_str(),
+            Some("card_buried" | "defused" | "imploding_placed")
+        ) {
+            assert!(
+                json.get("position").is_none(),
+                "public placement event leaked position: {json}"
+            );
+        }
+    }
+    for idx in 0..state.players.len() {
+        let pid = PlayerId(idx);
+        if state.players[idx].cursed {
+            assert!(
+                view(state, pid).hand.is_empty(),
+                "cursed player view must never expose hand identities"
+            );
+            assert!(
+                !filter_events(events, Some(pid))
+                    .iter()
+                    .any(|e| matches!(e.kind, cats::EventKind::CardReceived { .. })),
+                "cursed player must not receive CardReceived identity"
+            );
+        }
+    }
 }
