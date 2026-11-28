@@ -119,16 +119,27 @@ fn resume<R: Rng + ?Sized>(
                 damage_player(state, player, None, None, 3, rng, events);
             } else {
                 let target = if state.config.mode == crate::GameMode::Club {
-                    let round = state.dynamite_round.as_mut().unwrap();
+                    let round = state
+                        .dynamite_rounds
+                        .iter_mut()
+                        .find(|round| round.card == dynamite)
+                        .unwrap();
                     round
                         .remaining
                         .retain(|id| *id != player && state.players[id.0].alive);
-                    let Some(&target) = round.remaining.first() else {
+                    // Several Dynamites may be on the table: pass over players who already
+                    // hold one, but keep the seats after the target for the next pass.
+                    let Some(skip) = round
+                        .remaining
+                        .iter()
+                        .position(|id| !state.players[id.0].has_in_play(CardKind::Dynamite))
+                    else {
                         discard_in_play(state, player, dynamite, events);
                         events.push(Event::public(EventKind::DynamiteRoundEnded { player }));
                         return;
                     };
-                    target
+                    round.remaining.drain(..skip);
+                    round.remaining[0]
                 } else {
                     // With two Dynamites (Dodge City) it skips players that already hold one.
                     let count = state.players.len();

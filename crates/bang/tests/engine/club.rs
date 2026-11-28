@@ -85,7 +85,7 @@ fn club_dynamite_waits_then_checks_every_living_player_once_while_classic_keeps_
         assert_eq!(checked, (0..4).map(PlayerId).collect::<Vec<_>>());
         if mode == GameMode::Club {
             assert!(game.state.discard_pile.contains(&dynamite));
-            assert!(game.state.dynamite_round.is_none());
+            assert!(game.state.dynamite_rounds.is_empty());
             assert!(!has_event(&safe_end(&mut game), |event| matches!(
                 event,
                 EventKind::DrawRevealed {
@@ -122,7 +122,7 @@ fn club_dynamite_uses_original_spade_boundaries_and_unattributed_damage() {
         assert_eq!(game.state.players[1].health, if explodes { 1 } else { 4 });
         if explodes {
             assert!(game.state.discard_pile.contains(&dynamite));
-            assert!(game.state.dynamite_round.is_none());
+            assert!(game.state.dynamite_rounds.is_empty());
             assert!(has_event(&events, |event| matches!(
                 event,
                 EventKind::HealthChanged {
@@ -198,7 +198,7 @@ fn club_holder_death_discards_or_vulture_inherits_dynamite_and_replay_starts_a_f
         let dynamite = game.equip(1, CardKind::Dynamite);
         safe_end(&mut game);
         kill(&mut game, 1, 2);
-        assert!(game.state.dynamite_round.is_none());
+        assert!(game.state.dynamite_rounds.is_empty());
         if vulture {
             assert!(game.state.players[3].hand.contains(&dynamite));
             game.state.turn.player = PlayerId(3);
@@ -210,7 +210,7 @@ fn club_holder_death_discards_or_vulture_inherits_dynamite_and_replay_starts_a_f
                 },
             );
             assert_eq!(
-                game.state.dynamite_round.as_ref().unwrap().remaining,
+                game.state.dynamite_rounds[0].remaining,
                 vec![PlayerId(3), PlayerId(0), PlayerId(1)]
             );
         } else {
@@ -234,7 +234,7 @@ fn club_dynamite_removed_by_panic_or_cat_balou_ends_old_round() {
                 selection: CardSelection::InPlay(dynamite),
             },
         );
-        assert!(game.state.dynamite_round.is_none());
+        assert!(game.state.dynamite_rounds.is_empty());
         if kind == CardKind::Panic {
             game.act_with_checks(
                 1,
@@ -244,7 +244,7 @@ fn club_dynamite_removed_by_panic_or_cat_balou_ends_old_round() {
                 },
             );
             assert_eq!(
-                game.state.dynamite_round.as_ref().unwrap().remaining,
+                game.state.dynamite_rounds[0].remaining,
                 vec![PlayerId(1), PlayerId(2), PlayerId(3), PlayerId(0)]
             );
         } else {
@@ -420,7 +420,7 @@ fn club_lucky_dynamite_and_jail_survive_serialization_dying_and_stale_choices() 
             ..
         }
     )));
-    assert!(game.state.dynamite_round.is_none());
+    assert!(game.state.dynamite_rounds.is_empty());
     assert!(game.state.discard_pile.contains(&dynamite));
     assert!(matches!(
         game.state.decision().unwrap().kind,
@@ -601,7 +601,7 @@ fn club_seeded_games_preserve_cards_metadata_and_replay() {
                             assert_eq!(player.jail_turns_served, 0);
                         }
                     }
-                    if let Some(round) = &state.dynamite_round {
+                    for round in &state.dynamite_rounds {
                         assert_eq!(
                             state
                                 .players
@@ -692,7 +692,7 @@ fn club_dynamite_death_removes_round_and_jail_without_a_killer() {
     game.end();
     let events = game.respond(None);
     assert!(!game.state.players[1].alive);
-    assert!(game.state.dynamite_round.is_none());
+    assert!(game.state.dynamite_rounds.is_empty());
     assert!(game.state.discard_pile.contains(&dynamite));
     assert!(game.state.discard_pile.contains(&jail));
     assert_eq!(game.state.players[1].jail_turns_served, 0);
@@ -798,4 +798,21 @@ fn club_empty_jail_draw_still_loses_the_turn_and_emits_public_progress() {
     game.state.config.mode = GameMode::Classic;
     let classic = serde_json::to_value(spectator_view(&game.state)).unwrap();
     assert!(classic["players"][1].get("jail_turns_left").is_none());
+}
+
+#[test]
+fn club_dynamite_pass_keeps_seats_after_the_target_when_another_dynamite_leaves() {
+    let mut game = Scenario::dodge(4);
+    game.state.config.mode = GameMode::Club;
+    let first = game.equip(0, CardKind::Dynamite);
+    let second = game.equip(2, CardKind::Dynamite);
+    game.state.turn.player = PlayerId(3);
+    safe_end(&mut game);
+    // Player 0 checked the first Dynamite and passed it past nobody: player 1 is next.
+    assert!(game.state.players[1].in_play.contains(&first));
+    // The second Dynamite leaves player 2 before the first one reaches them.
+    game.state.players[2].in_play.retain(|card| *card != second);
+    game.state.discard_pile.push(second);
+    safe_end(&mut game);
+    assert!(game.state.players[2].in_play.contains(&first));
 }

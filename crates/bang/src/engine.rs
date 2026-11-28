@@ -63,7 +63,7 @@ pub fn setup<R: Rng + ?Sized>(
     draw_pile.shuffle(rng);
     let mut state = GameState {
         config,
-        dynamite_round: None,
+        dynamite_rounds: Vec::new(),
         players,
         draw_pile,
         discard_pile: Vec::new(),
@@ -697,7 +697,8 @@ fn equip_card(
         state.players[target.0].placed_green.push(card);
     }
     if state.config.mode == crate::GameMode::Club && kind == CardKind::Dynamite {
-        state.dynamite_round = Some(crate::DynamiteRound {
+        state.dynamite_rounds.retain(|round| round.card != card);
+        state.dynamite_rounds.push(crate::DynamiteRound {
             card,
             remaining: turn_order(state, target, true),
         });
@@ -885,13 +886,7 @@ fn clear_in_play_state(state: &mut GameState, player: PlayerId, card: CardId) {
     if card.card().unwrap().kind == CardKind::Jail {
         state.players[player.0].jail_turns_served = 0;
     }
-    if state
-        .dynamite_round
-        .as_ref()
-        .is_some_and(|round| round.card == card)
-    {
-        state.dynamite_round = None;
-    }
+    state.dynamite_rounds.retain(|round| round.card != card);
 }
 
 fn discard_all(state: &mut GameState, player: PlayerId, events: &mut Vec<Event>) {
@@ -1363,9 +1358,13 @@ fn advance_until_input<R: Rng + ?Sized>(
                     .copied()
                     .find(|card| card.card().unwrap().kind == CardKind::Dynamite)
                 {
-                    if state.config.mode == crate::GameMode::Club && state.dynamite_round.is_none()
+                    if state.config.mode == crate::GameMode::Club
+                        && !state
+                            .dynamite_rounds
+                            .iter()
+                            .any(|round| round.card == dynamite)
                     {
-                        state.dynamite_round = Some(crate::DynamiteRound {
+                        state.dynamite_rounds.push(crate::DynamiteRound {
                             card: dynamite,
                             remaining: turn_order(state, player, true),
                         });

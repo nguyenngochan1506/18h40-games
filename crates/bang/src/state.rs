@@ -271,7 +271,7 @@ pub struct Decision {
 pub struct GameState {
     pub config: crate::GameConfig,
     #[serde(default)]
-    pub dynamite_round: Option<DynamiteRound>,
+    pub dynamite_rounds: Vec<DynamiteRound>,
     pub players: Vec<Player>,
     pub draw_pile: Vec<CardId>,
     pub discard_pile: Vec<CardId>,

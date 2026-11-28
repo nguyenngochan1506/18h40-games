@@ -13,7 +13,7 @@
 ## Chỉ chế độ 18h40 (`club`)
 | # | Yêu cầu | Chi tiết |
 |---|---|---|
-| 2 | **Dynamite đi đúng 1 vòng** | Người đánh Dynamite đặt trước mặt mình. Vòng đó chưa tính. Từ đầu lượt kế tiếp của chủ, mỗi người sống kiểm tra đúng 1 lần theo thứ tự lượt, bắt đầu từ chủ: nổ thì mất 3 máu, không nổ thì chuyền tiếp. Khi vòng quay lại chủ (mọi người sống đã kiểm tra) mà chưa nổ thì bỏ Dynamite, không đi vòng nữa |
+| 2 | **Dynamite đi đúng 1 vòng** | Người đánh Dynamite đặt trước mặt mình. Vòng đó chưa tính. Từ đầu lượt kế tiếp của chủ, mỗi người sống kiểm tra đúng 1 lần theo thứ tự lượt, bắt đầu từ chủ: nổ thì mất 3 máu, không nổ thì chuyền tiếp. Khi vòng quay lại chủ (mọi người sống đã kiểm tra) mà chưa nổ thì bỏ Dynamite, không đi vòng nữa. Trên bàn có thể có **nhiều Dynamite cùng lúc** (mỗi Dynamite một vòng riêng; mỗi người vẫn chỉ giữ tối đa một lá, khi chuyền thì bỏ qua người đã có Dynamite) |
 | 3 | **Jail: tối đa 3 lượt** | Đầu lượt người bị Jail `draw!`: ♥ thì thoát (bỏ Jail, chơi bình thường). Không thì mất lượt đó và Jail ở lại. Sau khi mất đủ 3 lượt thì Jail tự bỏ (lượt thứ 4 chơi bình thường). Vẫn bị bắn và phản ứng ngoài lượt |
 | 6 | **Nhiều súng cùng lúc** | Được đặt nhiều lá vũ khí trước mặt (đánh súng mới không bỏ súng cũ). Tầm bắn = **tầm lớn nhất** trong các súng (kèm Colt .45 mặc định). Volcanic + Winchester: bắn BANG! không giới hạn số lá với tầm 5 |
 

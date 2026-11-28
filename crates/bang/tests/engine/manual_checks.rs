@@ -581,10 +581,10 @@ fn automatic_club_expirations_do_not_add_extra_flip_prompts() {
     game.state.config.mode = GameMode::Club;
     let dynamite = game.equip(1, CardKind::Dynamite);
     let jail = game.equip(1, CardKind::Jail);
-    game.state.dynamite_round = Some(DynamiteRound {
+    game.state.dynamite_rounds = vec![DynamiteRound {
         card: dynamite,
         remaining: vec![PlayerId(1)],
-    });
+    }];
     game.state.players[1].jail_turns_served = 3;
     game.top_face(CardKind::Beer, Suit::Hearts, Rank::Six);
     end(&mut game);
