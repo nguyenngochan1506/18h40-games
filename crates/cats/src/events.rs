@@ -113,6 +113,9 @@ pub enum EventKind {
         actor: PlayerId,
         target: PlayerId,
     },
+    BarkingDefused {
+        player: PlayerId,
+    },
     IllTakeThatPlaced {
         actor: PlayerId,
         target: PlayerId,

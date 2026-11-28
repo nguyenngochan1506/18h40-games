@@ -122,7 +122,8 @@ function decisionSummary(
 
 function CardArtwork({ kind, label }: { kind: CatsCardKind; label?: string }) {
   const meta = cardCatalog[kind];
-  const [missing, setMissing] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const missing = failedSrc === meta.image;
   return (
     <span className="cats-art">
       {missing ? (
@@ -136,7 +137,7 @@ function CardArtwork({ kind, label }: { kind: CatsCardKind; label?: string }) {
           loading="eager"
           decoding="async"
           draggable={false}
-          onError={() => setMissing(true)}
+          onError={() => setFailedSrc(meta.image)}
         />
       )}
     </span>
@@ -158,7 +159,7 @@ export default function Board(props: GameBoardProps) {
   const [futureOrder, setFutureOrder] = useState<number[]>([]);
   const [inspectedKind, setInspectedKind] = useState<CatsCardKind | null>(null);
   const [journalOpen, setJournalOpen] = useState(false);
-  const [dismissedFuture, setDismissedFuture] = useState(false);
+  const [dismissedFutureSeq, setDismissedFutureSeq] = useState(0);
 
   useEffect(() => {
     if (!frame || props.sync.desynced) return;
@@ -171,7 +172,6 @@ export default function Board(props: GameBoardProps) {
     setSelected([]);
     setInsertPosition(0);
     setStealChoice('');
-    setDismissedFuture(false);
     props.consume(frame.id);
   }, [frame, props.sync.desynced, props.sync.viewer, props.consume]);
 
@@ -218,6 +218,11 @@ export default function Board(props: GameBoardProps) {
   }
 
   const { table, hand, cursed, you, previewCards } = unwrapped;
+  const viewerId = you ?? props.sync.viewer;
+  const selfEliminated =
+    you === null &&
+    viewerId !== null &&
+    (table.players.find(player => player.id === viewerId)?.eliminated ?? false);
   const ownPublic = you !== null ? table.players.find(player => player.id === you) ?? null : null;
   const blindHandCount = cursed ? (ownPublic?.hand_count ?? 0) : 0;
   const currentDecision: CatsDecision | null = table.decision;
@@ -231,6 +236,13 @@ export default function Board(props: GameBoardProps) {
   const send = (action: CatsAction) => props.sendAction({ game: 'cats', payload: action });
 
   const otherPlayers = table.players.filter(player => !player.eliminated && player.id !== you);
+  const isTrappedByIllTakeThat =
+    ownPublic?.ill_take_that_by !== null && ownPublic?.ill_take_that_by !== undefined;
+  const hasUntrappedOpponent = otherPlayers.some(player => player.ill_take_that_by === null);
+  const canPlaySingle = (kind: CatsCardKind) =>
+    cardCatalog[kind].playableSingle &&
+    !(kind === 'ill_take_that' && !hasUntrappedOpponent) &&
+    !(kind === 'bury' && isTrappedByIllTakeThat);
   const lastAction = table.last_action;
   const hasNope = !cursed && hand.some(card => card.kind === 'nope');
   const canNopeNow = !locked && activeSelf && hasNope && !!lastAction?.nopeable && !over;
@@ -277,7 +289,7 @@ export default function Board(props: GameBoardProps) {
   const seatPoses = catsSeatLayout(table.players.length, viewerIndex < 0 ? null : viewerIndex);
   const topDiscard = table.discard.length > 0 ? table.discard[table.discard.length - 1] : null;
   const expansions = activeExpansionNames(table.settings);
-  const statusText = decisionSummary(table, seats, you);
+  const statusText = decisionSummary(table, seats, viewerId);
 
   function toggleCard(cardId: number) {
     setSelected(current =>
@@ -303,11 +315,7 @@ export default function Board(props: GameBoardProps) {
       toggleCard(card.id);
       return;
     }
-    if (isTurn && canAct && meta.playableSingle) {
-      if (card.kind === 'ill_take_that' && !otherPlayers.some(p => p.ill_take_that_by === null)) {
-        setInspectedKind(card.kind);
-        return;
-      }
+    if (isTurn && canAct && canPlaySingle(card.kind)) {
       send({ type: 'play_card', card: card.id });
       return;
     }
@@ -825,7 +833,7 @@ export default function Board(props: GameBoardProps) {
             <p className="cats-tower-pill">
               👑 Kho Tháp Quyền Lực: {table.tower_stash_count} lá
               {table.players.some(p => p.has_tower)
-                ? ` (${seatNickname(seats, table.players.find(p => p.has_tower)!.id, you)})`
+                ? ` (${seatNickname(seats, table.players.find(p => p.has_tower)!.id, viewerId)})`
                 : ' (chưa có chủ)'}
             </p>
           )}
@@ -1001,7 +1009,7 @@ export default function Board(props: GameBoardProps) {
           </div>
         )}
 
-        {clientState.futurePreview && !dismissedFuture && (
+        {clientState.futurePreview && dismissedFutureSeq !== clientState.futureSeq && (
           <aside className="cats-future-strip" aria-live="polite">
             <div className="cats-future-head">
               <strong>🔮 {clientState.futurePreview.length} lá kế tiếp (trái → rút trước)</strong>
@@ -1009,7 +1017,7 @@ export default function Board(props: GameBoardProps) {
                 type="button"
                 className="cats-close-small"
                 aria-label="Ẩn xem tương lai"
-                onClick={() => setDismissedFuture(true)}
+                onClick={() => setDismissedFutureSeq(clientState.futureSeq)}
               >
                 ×
               </button>
@@ -1129,14 +1137,11 @@ export default function Board(props: GameBoardProps) {
                   const meta = cardCatalog[card.kind];
                   const isSelected = selected.includes(card.id);
                   const isMarked = ownPublic?.marked_cards.some(m => m.id === card.id) ?? false;
+                  const singlePlayable = canPlaySingle(card.kind);
                   const playableNow =
                     (card.kind === 'nope' && canNopeNow) ||
                     (card.kind === 'alter_future_now' && canAlterFutureNow) ||
-                    (isTurn &&
-                      canAct &&
-                      (meta.comboCat ||
-                        (meta.playableSingle &&
-                          !(card.kind === 'ill_take_that' && !otherPlayers.some(p => p.ill_take_that_by === null)))));
+                    (isTurn && canAct && (meta.comboCat || singlePlayable));
                   return (
                     <div key={card.id} className="cats-hand-slot">
                       <button
@@ -1160,7 +1165,7 @@ export default function Board(props: GameBoardProps) {
                                   ? isSelected
                                     ? 'Đã chọn'
                                     : 'Chọn combo'
-                                  : isTurn && meta.playableSingle
+                                  : isTurn && singlePlayable
                                     ? 'Bấm để đánh'
                                     : 'Xem chi tiết'}
                           </small>
@@ -1184,7 +1189,9 @@ export default function Board(props: GameBoardProps) {
         </section>
       ) : (
         <p className="cats-spectator-note cats-wood-panel">
-          Bạn đang xem ván Mèo Nổ (chế độ khán giả).
+          {selfEliminated
+            ? '💀 Bạn đã nổ tung và bị loại. Đang theo dõi phần còn lại của ván chơi.'
+            : 'Bạn đang xem ván Mèo Nổ (chế độ khán giả).'}
         </p>
       )}
 
@@ -1231,11 +1238,11 @@ export default function Board(props: GameBoardProps) {
         <div className="cats-winner-overlay" role="dialog" aria-modal="false" aria-label="Kết quả ván Mèo Nổ">
           <div className="cats-winner-card">
             <p className="cats-winner-eyebrow">Ván đấu kết thúc</p>
-            <h3>🏆 {seatNickname(seats, table.winner, you)} chiến thắng!</h3>
+            <h3>🏆 {seatNickname(seats, table.winner, viewerId)} chiến thắng!</h3>
             <ul className="cats-standings">
               {table.players.map(player => (
                 <li key={player.id}>
-                  <strong>{seatNickname(seats, player.id, you)}</strong>
+                  <strong>{seatNickname(seats, player.id, viewerId)}</strong>
                   <span>{player.id === table.winner ? 'Sống sót cuối cùng' : 'Đã bị loại'}</span>
                 </li>
               ))}

@@ -21,6 +21,7 @@ export type CatsClientState = {
   game: GameSnapshot | null;
   log: CatsLogEntry[];
   futurePreview: CatsCardView[] | null;
+  futureSeq: number;
   nextLogId: number;
 };
 
@@ -28,6 +29,7 @@ export const initialCatsState: CatsClientState = {
   game: null,
   log: [],
   futurePreview: null,
+  futureSeq: 0,
   nextLogId: 1,
 };
 
@@ -177,6 +179,11 @@ export function formatCatsEvent(
         text: `🐶💥 Mèo Sủa của ${who(event.actor)} kích nổ nhắm thẳng vào ${who(event.target)}!`,
         tone: 'danger',
       };
+    case 'barking_defused':
+      return {
+        text: `🛡️ ${who(event.player)} dùng Gỡ Bom chặn thành công Mèo Sủa!`,
+        tone: 'normal',
+      };
     case 'ill_take_that_placed':
       return {
         text: `🎯 ${who(event.actor)} đặt bẫy "Tớ Lấy Nhé" trước mặt ${who(event.target)}.`,
@@ -258,6 +265,23 @@ export function formatCatsEvent(
   }
 }
 
+const DECK_MUTATING_EVENTS = new Set<CatsEventKind['type']>([
+  'cards_drawn',
+  'deck_shuffled',
+  'deck_reshuffled',
+  'deck_swapped',
+  'future_altered',
+  'defused',
+  'imploding_placed',
+  'card_buried',
+  'card_put_in_deck',
+  'catomic_bomb_triggered',
+  'exploding_drawn',
+  'imploding_drawn',
+  'ill_take_that_triggered',
+  'action_undone',
+]);
+
 export function receiveCatsFrame(
   current: CatsClientState,
   frame: GameFrame,
@@ -268,6 +292,7 @@ export function receiveCatsFrame(
   let nextLogId = frame.reset ? 1 : current.nextLogId;
   const added: CatsLogEntry[] = [];
   let futurePreview = frame.reset ? null : current.futurePreview;
+  let futureSeq = frame.reset ? 0 : current.futureSeq;
 
   const seenFuture = events.find(
     (event): event is Extract<CatsEventKind, { type: 'future_seen' }> =>
@@ -275,7 +300,8 @@ export function receiveCatsFrame(
   );
   if (seenFuture) {
     futurePreview = seenFuture.cards;
-  } else if (events.some(event => event.type === 'cards_drawn' || event.type === 'deck_shuffled' || event.type === 'deck_swapped' || event.type === 'future_altered')) {
+    futureSeq += 1;
+  } else if (events.some(event => DECK_MUTATING_EVENTS.has(event.type))) {
     futurePreview = null;
   }
 
@@ -291,6 +317,7 @@ export function receiveCatsFrame(
     game: frame.game,
     log: combined,
     futurePreview,
+    futureSeq,
     nextLogId,
   };
 }

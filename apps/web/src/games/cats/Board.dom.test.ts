@@ -343,3 +343,107 @@ test('cursed blind hand emits play_blind and Alter Future NOW works outside own 
   await act(() => nowBtn.click());
   assert.deepEqual(sent.pop(), { game: 'cats', payload: { type: 'play_card', card: 99 } });
 });
+
+test('dismissed future preview stays closed on non-mutating frames and clears on deck mutation', async t => {
+  const { container, root } = await mount(t);
+  const sent: GameAction[] = [];
+  const baseView = playerView([], { player: 0, pending_id: null, kind: { type: 'turn' } });
+  if (baseView.game !== 'cats') throw new Error('Cats view expected');
+
+  const frame1: GameBoardProps['sync']['frames'][number] = {
+    id: 1,
+    game: { seq: 1, seats, view: baseView },
+    update: {
+      game: 'cats',
+      events: [{ type: 'future_seen', player: 0, cards: [{ id: 12, kind: 'exploding' }] }],
+      view: baseView.payload,
+    },
+    reset: null,
+    setup: false,
+  };
+  await act(async () => root.render(createElement(Board, propsFor(baseView, sent, [], [frame1]))));
+  assert.ok(container.querySelector('.cats-future-strip'));
+
+  // Dismiss the future preview, then receive an unrelated frame -> must NOT reopen!
+  await act(() => container.querySelector<HTMLButtonElement>('[aria-label="Ẩn xem tương lai"]')!.click());
+  assert.equal(container.querySelector('.cats-future-strip'), null);
+
+  const frame2: GameBoardProps['sync']['frames'][number] = {
+    id: 2,
+    game: { seq: 2, seats, view: baseView },
+    update: {
+      game: 'cats',
+      events: [{ type: 'card_played', player: 0, kind: 'ill_take_that' }],
+      view: baseView.payload,
+    },
+    reset: null,
+    setup: false,
+  };
+  await act(async () => root.render(createElement(Board, propsFor(baseView, sent, [], [frame2]))));
+  assert.equal(container.querySelector('.cats-future-strip'), null);
+
+  // Receive a second future_seen -> opens again, then deck-mutating catomic_bomb clears it.
+  const frame3: GameBoardProps['sync']['frames'][number] = {
+    id: 3,
+    game: { seq: 3, seats, view: baseView },
+    update: {
+      game: 'cats',
+      events: [{ type: 'future_seen', player: 0, cards: [{ id: 13, kind: 'skip' }] }],
+      view: baseView.payload,
+    },
+    reset: null,
+    setup: false,
+  };
+  await act(async () => root.render(createElement(Board, propsFor(baseView, sent, [], [frame3]))));
+  assert.ok(container.querySelector('.cats-future-strip'));
+
+  const frame4: GameBoardProps['sync']['frames'][number] = {
+    id: 4,
+    game: { seq: 4, seats, view: baseView },
+    update: {
+      game: 'cats',
+      events: [{ type: 'catomic_bomb_triggered', player: 1, exploding_count: 2 }],
+      view: baseView.payload,
+    },
+    reset: null,
+    setup: false,
+  };
+  await act(async () => root.render(createElement(Board, propsFor(baseView, sent, [], [frame4]))));
+  assert.equal(container.querySelector('.cats-future-strip'), null);
+});
+
+test('trapped Bury and eliminated player spectator state display accurately', async t => {
+  const { container, root } = await mount(t);
+  const sent: GameAction[] = [];
+
+  // Trapped player with Bury cannot click to play it and sees "Xem chi tiết".
+  const trappedView = playerView([{ id: 50, kind: 'bury' }]);
+  if (trappedView.game !== 'cats' || trappedView.payload.perspective !== 'player') throw new Error('player view expected');
+  trappedView.payload.view.table.players[0].ill_take_that_by = 1;
+  await act(async () => root.render(createElement(Board, propsFor(trappedView, sent))));
+  const buryCard = container.querySelector<HTMLButtonElement>('.cats-card')!;
+  assert.match(buryCard.textContent ?? '', /Xem chi tiết/);
+  await act(() => buryCard.click());
+  assert.equal(sent.length, 0);
+  assert.ok(container.querySelector('.cats-detail-card'));
+
+  // Eliminated player receives spectator view while sync.viewer keeps their seat id.
+  const specView: GameView = {
+    game: 'cats',
+    payload: {
+      perspective: 'spectator',
+      view: {
+        ...trappedView.payload.view.table,
+        players: [
+          { ...trappedView.payload.view.table.players[0], eliminated: true, ill_take_that_by: null },
+          { ...trappedView.payload.view.table.players[1], eliminated: false },
+        ],
+        winner: 1,
+        decision: null,
+      },
+    },
+  };
+  await act(async () => root.render(createElement(Board, propsFor(specView, sent))));
+  assert.match(container.textContent ?? '', /Bạn đã nổ tung và bị loại/);
+  assert.match(container.querySelector('.cats-standings')?.textContent ?? '', /Meow \(bạn\)/);
+});

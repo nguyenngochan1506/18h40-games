@@ -508,7 +508,9 @@ fn reverse_draw_bottom_swap_alter_share_bury_garbage_potluck_and_catomic() {
     assert_eq!(spectator_view(&state).top_known, Some(CardKind::Exploding));
     assert_eq!(state.turn.player, next);
 
-    // Bury draws top card and reinserts secretly
+    // Bury draws a safe top card and reinserts secretly
+    let safe_for_bury = extract(&mut state, CardKind::CatTaco);
+    state.deck.push(safe_for_bury);
     let bury = extract(&mut state, CardKind::Bury);
     state.players[next.0].hand.push(bury);
     apply(&mut state, next, Action::PlayCard { card: bury }, &mut rng).unwrap();
@@ -647,6 +649,8 @@ fn fuzz_bot_finishes_games_for_2_to_8_players_with_all_expansions_and_conserves_
                                     kind.is_playable_single()
                                         && !(kind == CardKind::IllTakeThat
                                             && state.first_ill_take_that_target(p).is_none())
+                                        && !(kind == CardKind::Bury
+                                            && state.players[p.0].ill_take_that.is_some())
                                 })
                             })
                             .collect();
@@ -868,6 +872,14 @@ fn barking_kitten_places_front_and_blasts_opponent_defuse_or_eliminates() {
             .iter()
             .any(|e| matches!(e.kind, cats::events::EventKind::BarkingTriggered { actor: a, target: t } if a == actor && t == target))
     );
+    assert!(events.iter().any(
+        |e| matches!(e.kind, cats::events::EventKind::BarkingDefused { player } if player == target)
+    ));
+    assert!(
+        events
+            .iter()
+            .all(|e| !matches!(e.kind, cats::events::EventKind::Defused { .. }))
+    );
     let defuse_after = state.players[target.0]
         .hand
         .iter()
@@ -1025,6 +1037,138 @@ fn alter_future_now_plays_out_of_turn_and_preserves_turn_owner() {
     assert_eq!(state.turn.player, active);
     assert_eq!(decision(&state).unwrap().player, active);
     assert_card_conservation(&state, &initial);
+}
+
+#[test]
+fn bury_triggers_exploding_and_rejects_while_trapped_by_ill_take_that() {
+    let mut rng = seeded(807);
+    let (mut state, _) = setup(2, Settings::default(), &mut rng).unwrap();
+    let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+    let (actor, target) = starting_turn(&state);
+
+    // 1. Trapped player cannot play Bury while I'll Take That is in front of them.
+    let trap = extract(&mut state, CardKind::IllTakeThat);
+    let skip = extract(&mut state, CardKind::Skip);
+    let bury = extract(&mut state, CardKind::Bury);
+    state.players[actor.0].hand.push(trap);
+    state.players[actor.0].hand.push(skip);
+    state.players[target.0].hand.push(bury);
+
+    apply(&mut state, actor, Action::PlayCard { card: trap }, &mut rng).unwrap();
+    let pid = decision(&state).unwrap().pending_id.unwrap();
+    apply(
+        &mut state,
+        actor,
+        Action::IllTakeThatTarget {
+            pending_id: pid,
+            target,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    apply(&mut state, actor, Action::PlayCard { card: skip }, &mut rng).unwrap();
+    assert_eq!(state.turn.player, target);
+    assert!(
+        apply(
+            &mut state,
+            target,
+            Action::PlayCard { card: bury },
+            &mut rng
+        )
+        .is_err()
+    );
+
+    // 2. Clear trap via a safe draw, then verify Bury drawing Exploding triggers Defuse.
+    let safe = extract(&mut state, CardKind::CatTaco);
+    state.deck.push(safe);
+    apply(&mut state, target, Action::Draw, &mut rng).unwrap();
+    assert_eq!(state.turn.player, actor);
+
+    let bury2 = extract(&mut state, CardKind::Bury);
+    let bomb = extract(&mut state, CardKind::Exploding);
+    // Ensure actor doesn't hold Streaking Kitten so bomb must trigger Defuse.
+    if let Some(idx) = state.players[actor.0]
+        .hand
+        .iter()
+        .position(|c| c.kind() == Some(CardKind::Streaking))
+    {
+        let streaking = state.players[actor.0].hand.remove(idx);
+        state.deck.insert(0, streaking);
+    }
+    state.players[actor.0].hand.push(bury2);
+    state.deck.push(bomb);
+
+    apply(
+        &mut state,
+        actor,
+        Action::PlayCard { card: bury2 },
+        &mut rng,
+    )
+    .unwrap();
+    let dec = decision(&state).unwrap();
+    assert_eq!(dec.player, actor);
+    assert!(matches!(dec.kind, cats::state::DecisionKind::Defuse { .. }));
+    apply(
+        &mut state,
+        actor,
+        Action::Defuse {
+            pending_id: dec.pending_id.unwrap(),
+            position: 0,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert_eq!(state.turn.player, target);
+    assert_card_conservation(&state, &initial);
+}
+
+#[test]
+fn ill_take_that_lethal_elimination_emits_no_phantom_turn_for_eliminated_owner() {
+    let mut rng = seeded(808);
+    let (mut state, _) = setup(2, Settings::default(), &mut rng).unwrap();
+    let (actor, target) = starting_turn(&state);
+
+    // Strip Defuse & Streaking from actor so actor explodes when trap triggers.
+    let mut removed_protection = Vec::new();
+    state.players[actor.0].hand.retain(|c| {
+        if matches!(c.kind(), Some(CardKind::Defuse | CardKind::Streaking)) {
+            removed_protection.push(*c);
+            false
+        } else {
+            true
+        }
+    });
+    state.deck.splice(0..0, removed_protection);
+
+    let trap = extract(&mut state, CardKind::IllTakeThat);
+    let skip = extract(&mut state, CardKind::Skip);
+    let bomb = extract(&mut state, CardKind::Exploding);
+    state.players[actor.0].hand.push(trap);
+    state.players[actor.0].hand.push(skip);
+    state.deck.push(bomb);
+
+    apply(&mut state, actor, Action::PlayCard { card: trap }, &mut rng).unwrap();
+    let pid = decision(&state).unwrap().pending_id.unwrap();
+    apply(
+        &mut state,
+        actor,
+        Action::IllTakeThatTarget {
+            pending_id: pid,
+            target,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    apply(&mut state, actor, Action::PlayCard { card: skip }, &mut rng).unwrap();
+
+    let events = apply(&mut state, target, Action::Draw, &mut rng).unwrap();
+    assert_eq!(state.winner, Some(target));
+    assert!(
+        events
+            .iter()
+            .all(|e| !matches!(e.kind, cats::events::EventKind::TurnStarted { .. })),
+        "no TurnStarted should fire after trap owner is eliminated and game ends"
+    );
 }
 
 #[test]

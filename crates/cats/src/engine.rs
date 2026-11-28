@@ -504,6 +504,9 @@ fn validate(state: &State, player: PlayerId, action: &Action) -> Result<(), Acti
             if kind == CardKind::IllTakeThat && state.first_ill_take_that_target(player).is_none() {
                 return Err(ActionError::InvalidTarget);
             }
+            if kind == CardKind::Bury && own.ill_take_that.is_some() {
+                return Err(ActionError::WrongAction);
+            }
             if kind.is_playable_single() {
                 Ok(())
             } else {
@@ -687,10 +690,7 @@ fn resolve_barking_blast(
             player: target,
             kind: CardKind::Defuse,
         }));
-        events.push(Event::public(EventKind::Defused {
-            player: target,
-            position: 0,
-        }));
+        events.push(Event::public(EventKind::BarkingDefused { player: target }));
     } else {
         if let Some(pos) = state.discard.iter().position(|c| *c == lethal_card) {
             state.discard.remove(pos);
@@ -763,8 +763,8 @@ fn draw_from_deck<R: Rng + ?Sized>(
                             face_up: true,
                         }));
                         state.face_up.remove(&card);
-                        finish_turn(state, events);
                         eliminate(state, trap.owner, card, events);
+                        finish_turn(state, events);
                     } else {
                         state.imploding_face_up = true;
                         state.face_up.insert(card);
@@ -796,8 +796,8 @@ fn draw_from_deck<R: Rng + ?Sized>(
                         }
                         finish_turn(state, events);
                     } else {
-                        finish_turn(state, events);
                         trigger_exploding(state, trap.owner, card, false, events);
+                        finish_turn(state, events);
                     }
                     return;
                 }
@@ -1007,7 +1007,8 @@ fn play_blind<R: Rng + ?Sized>(
     let card = state.players[player.0].hand[slot];
     let kind = card.kind().expect("valid card in hand");
     let can_play = kind.is_playable_single()
-        && !(kind == CardKind::IllTakeThat && state.first_ill_take_that_target(player).is_none());
+        && !(kind == CardKind::IllTakeThat && state.first_ill_take_that_target(player).is_none())
+        && !(kind == CardKind::Bury && state.players[player.0].ill_take_that.is_some());
     if can_play {
         play_card(state, player, card, rng, events);
         return;
@@ -1268,6 +1269,10 @@ fn play_card<R: Rng + ?Sized>(
                         end_turn: true,
                     });
                 }
+                return;
+            }
+            if drawn.kind() == Some(CardKind::Exploding) && !can_streak_protect(state, player) {
+                trigger_exploding(state, player, drawn, true, events);
                 return;
             }
             if let Some(view) = CardView::new(drawn) {
