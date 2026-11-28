@@ -39,6 +39,7 @@ export default function WaitingRoom({ room, roomTools, disabled, send, Settings,
   const info = registry[room.game];
   const [copyStatus, setCopyStatus] = useState('');
   const [copying, setCopying] = useState(false);
+  const [heirId, setHeirId] = useState('');
   const seatedPlayers = room.members.filter(member => member.role === 'player');
   const seats = waitingScene
     ? seatedPlayers.map((member, index) => {
@@ -50,6 +51,7 @@ export default function WaitingRoom({ room, roomTools, disabled, send, Settings,
   const spectators = room.members.filter(member => member.role === 'spectator');
   const you = room.members.find(member => member.id === room.you);
   const host = room.host === room.you;
+  const heirs = host ? room.members.filter(member => member.online && member.id !== room.you) : [];
   const waiting = room.phase === 'waiting';
   const nextGames = host && waiting ? games.filter(game => game.enabled && game.id !== room.game) : [];
   const missing = Math.max(0, room.min_players - seats.length);
@@ -102,6 +104,13 @@ export default function WaitingRoom({ room, roomTools, disabled, send, Settings,
           {host && waiting && <m.button {...feedback} className="western-button" disabled={disabled || missing > 0 || !Settings} aria-describedby="waiting-help" onClick={() => send({ v: PROTOCOL_VERSION, type: 'start_game' })}>Bắt đầu <span aria-hidden="true">→</span></m.button>}
           {host && !waiting && <m.button {...feedback} className="western-button" disabled={disabled} onClick={() => send({ v: PROTOCOL_VERSION, type: 'end_game' })}>Kết thúc ván</m.button>}
         </div>
+        {heirs.length > 0 && <div className="give-host" role="group" aria-label="Nhường chủ phòng">
+          <select aria-label="Người nhận quyền chủ phòng" disabled={disabled} value={heirs.some(member => member.id === heirId) ? heirId : ''} onChange={event => setHeirId(event.target.value)}>
+            <option value="">Nhường chủ phòng cho…</option>
+            {heirs.map(member => <option key={member.id} value={member.id}>{member.nickname}</option>)}
+          </select>
+          <button type="button" disabled={disabled || !heirs.some(member => member.id === heirId)} onClick={() => { send({ v: PROTOCOL_VERSION, type: 'transfer_host', member: heirId }); setHeirId(''); }}>Nhường</button>
+        </div>}
         <div id="waiting-help" className="waiting-help" aria-live="polite">
           {waiting && missing > 0 && <p>Cần thêm {missing} người chơi để bắt đầu.</p>}
           {waiting && !host && <p>Chờ chủ phòng bắt đầu ván.</p>}

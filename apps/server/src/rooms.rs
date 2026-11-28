@@ -647,6 +647,19 @@ impl Room {
                         self.drive_game(now);
                         return Ok(false);
                     }
+                    ClientMessage::TransferHost { member, .. } => {
+                        if self.members[index].view.id != self.host {
+                            return Err(ErrorCode::NotHost);
+                        }
+                        if !self
+                            .members
+                            .iter()
+                            .any(|m| m.view.id == member && m.view.online)
+                        {
+                            return Err(ErrorCode::InvalidMessage);
+                        }
+                        self.host = member;
+                    }
                     ClientMessage::HostSkip { .. } => {
                         if self.members[index].view.id != self.host {
                             return Err(ErrorCode::NotHost);
