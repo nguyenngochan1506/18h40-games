@@ -1,0 +1,45 @@
+[env]
+DEPLOY_HOST = "betodemy-staging"
+DEPLOY_DIR = "/opt/18h40-games"
+
+[tasks.check]
+description = "pnpm check (fmt, clippy, test, typecheck, build)"
+run = "pnpm check"
+
+[tasks.deploy]
+description = "Redeploy staging (07nghiep.site): build -> :prev -> ship -> recreate server+web"
+run = '''
+set -euo pipefail
+[ "$(git branch --show-current)" = main ] || { echo "Không ở nhánh main"; exit 1; }
+git fetch -q origin main
+[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "main local lệch origin/main, pull/push trước đã"; exit 1; }
+git diff --quiet HEAD || { echo "Working tree chưa sạch, commit trước đã"; exit 1; }
+sha=$(git rev-parse --short HEAD)
+
+pnpm check
+
+for t in server web; do
+  docker build --target $t --label org.opencontainers.image.revision=$(git rev-parse HEAD) \
+    -t bang-$t:staging -t bang-$t:$sha .
+done
+
+# Giữ đường lui; bỏ qua lỗi ở lần deploy đầu khi chưa có image cũ
+ssh $DEPLOY_HOST 'for t in server web; do docker tag bang-$t:staging bang-$t:prev 2>/dev/null || true; done'
+
+docker save bang-server:staging bang-web:staging | gzip | ssh $DEPLOY_HOST 'gunzip | docker load'
+scp -q deploy/docker-compose.yml $DEPLOY_HOST:$DEPLOY_DIR/docker-compose.yml
+# --no-deps server web: giữ nguyên LiveKit; --force-recreate vì tag :staging không đổi
+ssh $DEPLOY_HOST "cd $DEPLOY_DIR && docker compose up -d --no-deps --force-recreate server web"
+
+sleep 3
+curl -fsS https://07nghiep.site/healthz && echo
+{% raw %}ssh $DEPLOY_HOST "docker inspect -f '{{.Name}} {{.State.Status}} {{index .Config.Labels \"org.opencontainers.image.revision\"}}' bang-server-staging bang-web-staging"{% endraw %}
+echo "Deploy xong $sha"
+'''
+
+[tasks."deploy:rollback"]
+description = "Trả cả server và web về :prev"
+run = '''
+ssh $DEPLOY_HOST "docker tag bang-server:prev bang-server:staging && docker tag bang-web:prev bang-web:staging && cd $DEPLOY_DIR && docker compose up -d --no-deps --force-recreate server web"
+curl -fsS https://07nghiep.site/healthz && echo
+'''
