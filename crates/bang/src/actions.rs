@@ -527,13 +527,6 @@ pub(crate) fn validate(
                     if kind.is_equipment() && own.has_in_play(kind) {
                         return Err(ActionError::DuplicateInPlay);
                     }
-                    // Club mode tracks a single Dynamite round, so only one may be on the table.
-                    if kind == CardKind::Dynamite
-                        && state.config.mode == crate::GameMode::Club
-                        && state.dynamite_round.is_some()
-                    {
-                        return Err(ActionError::DuplicateInPlay);
-                    }
                     Ok(())
                 }
             }

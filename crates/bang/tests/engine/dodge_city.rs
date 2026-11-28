@@ -1629,17 +1629,24 @@ fn two_dynamites_never_stack_on_one_player() {
 }
 
 #[test]
-fn club_mode_allows_only_one_dynamite_on_the_table() {
+fn club_mode_allows_several_dynamites_each_with_its_own_round() {
     let mut game = Scenario::dodge(4);
     game.state.config.mode = GameMode::Club;
     let first = game.give_face(0, Dynamite, Hearts, Two);
     let second = game.give_face(1, Dynamite, Clubs, Ten);
     play(&mut game, 0, first, None);
     game.state.turn.player = PlayerId(1);
+    play(&mut game, 1, second, None);
+    assert_eq!(game.state.dynamite_rounds.len(), 2);
+    assert!(game.state.players[0].in_play.contains(&first));
+    assert!(game.state.players[1].in_play.contains(&second));
+    // A player still cannot hold two of them.
+    game.state.players[0].in_play.retain(|card| *card != first);
+    game.state.players[1].hand.push(first);
     game.reject(
         1,
         Action::Play {
-            card: second,
+            card: first,
             target: None,
         },
         ActionError::DuplicateInPlay,
