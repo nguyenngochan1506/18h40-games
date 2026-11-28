@@ -665,4 +665,15 @@ test('Board mounts roomTools and displays live MemberList and seat voice indicat
   assert.equal(container.querySelectorAll('.ww-members [data-speaking]').length, 1);
   assert.equal(container.querySelectorAll('.ww-seat-card.is-speaking').length, 1);
   assert.equal(container.querySelectorAll('.ww-seat-mic').length, 2);
+
+  // Thu gọn và mở lại danh sách thành viên.
+  const toggle = container.querySelector<HTMLButtonElement>('.ww-members-toggle')!;
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  await act(() => toggle.click());
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(container.querySelectorAll('.ww-members .member-row').length, 0);
+  assert.ok(container.querySelector('.ww-board.ww-members-collapsed'));
+  await act(() => toggle.click());
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  assert.equal(container.querySelectorAll('.ww-members .member-row').length, 5);
 });

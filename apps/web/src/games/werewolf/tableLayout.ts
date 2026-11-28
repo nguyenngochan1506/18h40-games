@@ -58,12 +58,12 @@ export function tableSeatPose(index: number, count: number, viewerIndex: number 
 
   // Smooth ground ring around the central campfire for 8–16 players.
   const angle = Math.PI / 2 + (slot * Math.PI * 2) / Math.max(1, count);
-  const rx = count >= 12 ? 36 : 34;
-  const ry = count >= 12 ? 21 : 20;
+  const rx = count >= 12 ? 40 : 36;
+  const ry = count >= 12 ? 25 : 22;
   const x = 50 + rx * Math.cos(angle);
-  const y = 61 + ry * Math.sin(angle);
+  const y = 60 + ry * Math.sin(angle);
   const view: TableSeatView = y >= 70 ? 'q3back' : y < 50 ? 'q3front' : 'side';
-  const actorHeight = count >= 12 ? 0.15 : 0.17;
+  const actorHeight = count >= 12 ? 0.14 : 0.17;
   return {
     slot,
     x,

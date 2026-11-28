@@ -148,6 +148,7 @@ export default function Board(props: GameBoardProps) {
   const [hideMyCard, setHideMyCard] = useState(false);
   const [showDeckModal, setShowDeckModal] = useState(false);
   const [logExpanded, setLogExpanded] = useState(false);
+  const [membersCollapsed, setMembersCollapsed] = useState(false);
   const [selectedTargets, setSelectedTargets] = useState<WerewolfPlayerId[]>([]);
   const [alphaInfect, setAlphaInfect] = useState(false);
   const [witchHeal, setWitchHeal] = useState(false);
@@ -487,6 +488,7 @@ export default function Board(props: GameBoardProps) {
         isNight ? 'ww-theme-night' : 'ww-theme-day',
         isHunterShot ? 'ww-theme-hunter' : '',
         table.players.length > 7 ? 'ww-many-seats' : '',
+        membersCollapsed ? 'ww-members-collapsed' : '',
       ].filter(Boolean).join(' ')}
       aria-label="Bàn Ma Sói"
     >
@@ -520,15 +522,33 @@ export default function Board(props: GameBoardProps) {
       </header>
 
       {/* Top-Left Room Members & Live Voice Status */}
-      <div className="ww-members" role="region" aria-label="Thành viên trong phòng" tabIndex={0}>
-        <MemberList
-          players={seatedMembers}
-          spectators={spectators}
-          host={room.host}
-          you={room.you}
-          defaultAvatar={tableActorImage(0, 'q3front', true)}
-          voice={props.voice}
-        />
+      <div
+        className={`ww-members${membersCollapsed ? ' is-collapsed' : ''}`}
+        role="region"
+        aria-label="Thành viên trong phòng"
+        tabIndex={0}
+      >
+        <div className="ww-members-head">
+          <span className="ww-members-title">Thành viên ({room.members.length})</span>
+          <button
+            type="button"
+            className="ww-members-toggle"
+            aria-expanded={!membersCollapsed}
+            onClick={() => setMembersCollapsed(v => !v)}
+          >
+            {membersCollapsed ? 'Mở' : 'Thu gọn'}
+          </button>
+        </div>
+        {!membersCollapsed && (
+          <MemberList
+            players={seatedMembers}
+            spectators={spectators}
+            host={room.host}
+            you={room.you}
+            defaultAvatar={tableActorImage(0, 'q3front', true)}
+            voice={props.voice}
+          />
+        )}
       </div>
 
       {/* Full-bleed Campfire Clearing Stage */}
@@ -609,6 +629,7 @@ export default function Board(props: GameBoardProps) {
 
                   <button
                     type="button"
+                    data-seat-id={seat.id}
                     disabled={!selectable}
                     onClick={() => toggleTarget(seat.id)}
                     className={[
