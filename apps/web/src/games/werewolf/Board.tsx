@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties } from 'react';
 import type {
   WerewolfAction,
@@ -8,6 +8,8 @@ import type {
   WerewolfRoleDeck,
 } from '../../generated/protocol.ts';
 import type { GameBoardProps } from '../types.ts';
+import MemberList from '../../shared/MemberList.tsx';
+import VoiceIcon from '../../shared/VoiceIcon.tsx';
 import RoleCard from './RoleCard.tsx';
 import { ROLE_ORDER, ROLES, teamLabel } from './roles.ts';
 import {
@@ -22,6 +24,9 @@ import {
 } from './state.ts';
 import { campfireBackdrop, tableActorImage, tableSeatPose } from './tableLayout.ts';
 import './styles.css';
+
+const noVoice = () => null;
+const noSubscription = () => () => {};
 
 function phaseTitle(
   phase: WerewolfPublicPhase,
@@ -131,6 +136,10 @@ function DeckDialog({
 
 export default function Board(props: GameBoardProps) {
   const { sync, consume, room } = props;
+  const voiceState = useSyncExternalStore(
+    props.voice?.subscribe ?? noSubscription,
+    props.voice?.snapshot ?? noVoice,
+  );
   const first = sync.frames[0];
   const [state, setState] = useState(() => (first?.reset ? receiveFrame(initialWerewolfState, first) : initialWerewolfState));
   const seen = useRef<number | null>(first?.reset ? first.id : null);
@@ -179,6 +188,7 @@ export default function Board(props: GameBoardProps) {
         <button type="button" className="ww-btn ww-btn-secondary" onClick={props.leaveRoom}>
           Rời phòng
         </button>
+        {props.roomTools}
       </section>
     );
   }
@@ -193,6 +203,20 @@ export default function Board(props: GameBoardProps) {
   const isHost = room.host === room.you;
   const viewerIndex = player ? table.players.findIndex(p => p.id === player.you) : null;
   const livingCount = table.players.filter(p => p.alive).length;
+  const firstSeat = Math.max(0, seats.findIndex(seat => seat.player_id === player?.you));
+  const seatedMembers = [...seats.slice(firstSeat), ...seats.slice(0, firstSeat)].flatMap(seat => {
+    const member = room.members.find(m => m.id === seat.member_id);
+    if (!member) return [];
+    const target = table.players.find(p => p.id === seat.player_id);
+    return [{
+      id: member.id,
+      nickname: member.nickname,
+      online: member.online,
+      avatar: tableActorImage(seat.player_id, 'q3front', target?.alive !== false),
+      eliminated: target?.alive === false,
+    }];
+  });
+  const spectators = room.members.filter(member => member.role === 'spectator');
 
   function emit(payload: WerewolfAction) {
     props.sendAction({ game: 'werewolf', payload });
@@ -495,6 +519,18 @@ export default function Board(props: GameBoardProps) {
         </div>
       </header>
 
+      {/* Top-Left Room Members & Live Voice Status */}
+      <div className="ww-members" role="region" aria-label="Thành viên trong phòng" tabIndex={0}>
+        <MemberList
+          players={seatedMembers}
+          spectators={spectators}
+          host={room.host}
+          you={room.you}
+          defaultAvatar={tableActorImage(0, 'q3front', true)}
+          voice={props.voice}
+        />
+      </div>
+
       {/* Full-bleed Campfire Clearing Stage */}
       <main className="ww-village" aria-label="Bãi lửa trại Ma Sói">
         <div className="ww-table-stage">
@@ -534,6 +570,15 @@ export default function Board(props: GameBoardProps) {
               const isWinner = table.winning_players.includes(seat.id);
               const wolfVoteFor = player?.wolf_votes.filter(v => v.target === seat.id) ?? [];
               const displayRole = seat.role ?? (isMe && !hideMyCard ? player.your_role : null);
+              const seatInfo = seats.find(s => s.player_id === seat.id);
+              const member = seatInfo ? room.members.find(m => m.id === seatInfo.member_id) : undefined;
+              const isSpeaking = Boolean(member?.online && voiceState?.speakers.includes(member.id));
+              const isMicOn = Boolean(
+                member?.online &&
+                  (member.id === room.you
+                    ? voiceState?.mic === 'on'
+                    : voiceState?.micOn.includes(member.id)),
+              );
               const actorSrc = tableActorImage(seat.id, pose.view, seat.alive);
               const depthBand = pose.y < 52 ? 'ww-seat-far' : pose.y > 78 ? 'ww-seat-near' : 'ww-seat-mid';
 
@@ -573,6 +618,7 @@ export default function Board(props: GameBoardProps) {
                       selected ? 'is-selected' : '',
                       isMe ? 'is-me' : '',
                       isWinner ? 'is-winner' : '',
+                      isSpeaking ? 'is-speaking' : '',
                     ].filter(Boolean).join(' ')}
                   >
                     <div className="ww-seat-card-body">
@@ -582,8 +628,19 @@ export default function Board(props: GameBoardProps) {
                           {seatName(seats, seat.id)}
                           {isMe && ' (Bạn)'}
                         </span>
-                        <span className={`ww-status-dot ${seat.alive ? 'alive' : 'dead'}`}>
-                          {seat.alive ? 'Sống' : 'Đã loại'}
+                        <span className="ww-seat-status-row">
+                          <span className={`ww-status-dot ${seat.alive ? 'alive' : 'dead'}`}>
+                            {seat.alive ? 'Sống' : 'Đã loại'}
+                          </span>
+                          {(isMicOn || isSpeaking) && (
+                            <span
+                              className={`ww-seat-mic${isSpeaking ? ' is-speaking' : ''}`}
+                              title={isSpeaking ? 'Đang nói' : 'Đang bật mic'}
+                              aria-label={isSpeaking ? 'Đang nói' : 'Đang bật mic'}
+                            >
+                              <VoiceIcon name="mic" />
+                            </span>
+                          )}
                         </span>
                       </div>
                     </div>

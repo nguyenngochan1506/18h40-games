@@ -593,3 +593,76 @@ test('Settings allows host to adjust roles before 5 players join and exposes cam
   assert.equal(seat0.view, 'q3back');
   assert.equal(client.waitingScene.actor(0, seat0.view), '/werewolf/scene/villager-q3back.webp');
 });
+
+
+test('Board mounts roomTools and displays live MemberList and seat voice indicators', async t => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  t.after(async () => { await act(() => root.unmount()); container.remove(); });
+
+  const listeners = new Set<() => void>();
+  let snapshot: { mic: 'off' | 'starting' | 'on'; micOn: string[]; speakers: string[] } = {
+    mic: 'off',
+    micOn: [],
+    speakers: [],
+  };
+  const voice = {
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+    snapshot: () => snapshot,
+  };
+
+  let sync = receiveGameState(initialGameState, {
+    v: PROTOCOL_VERSION,
+    type: 'game_started',
+    seq: 0,
+    seats: SEATS,
+    view: { game: 'werewolf', payload: { perspective: 'player', view: makePlayerView() } },
+  });
+
+  const renderBoard = async () => {
+    await act(async () => {
+      root.render(createElement(client.Board, {
+        room: BASE_ROOM,
+        sync,
+        disabled: false,
+        pending: false,
+        requestVersion: 0,
+        actionError: null,
+        actionErrorCode: null,
+        fxEnabled: false,
+        roomMenu: null,
+        roomTools: createElement('button', { type: 'button', 'data-test-voice-tool': 'true' }, 'Thoại'),
+        voice,
+        consume: (id: number) => {
+          sync = { ...sync, frames: sync.frames.filter(f => f.id > id) };
+        },
+        sendAction() {},
+        endGame() {},
+        hostSkip() {},
+        leaveRoom() {},
+      }));
+    });
+  };
+
+  await renderBoard();
+  await renderBoard();
+
+  assert.ok(container.querySelector('.ww-topbar-actions [data-test-voice-tool="true"]'));
+  assert.equal(container.querySelectorAll('.ww-members .member-row').length, 5);
+  assert.equal(container.querySelectorAll('.ww-members [data-speaking]').length, 0);
+  assert.equal(container.querySelectorAll('.ww-seat-card.is-speaking').length, 0);
+
+  await act(() => {
+    snapshot = { mic: 'on', micOn: ['m1'], speakers: ['m1'] };
+    for (const listener of listeners) listener();
+  });
+
+  assert.equal(container.querySelectorAll('.ww-members .member-mic[data-on]').length, 2);
+  assert.equal(container.querySelectorAll('.ww-members [data-speaking]').length, 1);
+  assert.equal(container.querySelectorAll('.ww-seat-card.is-speaking').length, 1);
+  assert.equal(container.querySelectorAll('.ww-seat-mic').length, 2);
+});
