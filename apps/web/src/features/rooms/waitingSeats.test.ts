@@ -58,7 +58,7 @@ test('join, leave and take-seat follow the server membership order without expos
 });
 
 test('the platform waiting skin supports capacities above seven without game geometry', () => {
-  const state = { ...room(Array.from({ length: 16 }, (_, i) => player(String(i)))), game: 'werewolf' as const, settings: { game: 'werewolf' as const, payload: {} }, min_players: 5, max_players: 16 };
+  const state = { ...room(Array.from({ length: 16 }, (_, i) => player(String(i)))), game: 'werewolf' as const, settings: { game: 'werewolf' as const, payload: { reveal_role_on_death: true, roles: { villager: 2, werewolf: 1, alpha_wolf: 0, minion: 0, sorcerer: 0, seer: 1, bodyguard: 1, witch: 0, hunter: 0, cupid: 0, lycan: 0, cursed: 0, diseased: 0, prince: 0, mayor: 0, tanner: 0 } } }, min_players: 5, max_players: 16 };
   const seats = waitingSeats(state);
   assert.equal(seats.length, 16);
   for (const { seat, actor } of seats) {

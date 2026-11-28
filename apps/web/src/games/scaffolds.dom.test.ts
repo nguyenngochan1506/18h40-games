@@ -22,7 +22,7 @@ after(async () => {
   for (const name of Object.keys(globals)) { if (previous[name]) Object.defineProperty(globalThis, name, previous[name]); else Reflect.deleteProperty(globalThis, name); }
 });
 
-for (const [id, name] of [['uno', 'UNO'], ['werewolf', 'Ma Sói']] as const) test(`${name} stays disabled while its direct loader and placeholders are ready for implementation`, async t => {
+for (const [id, name] of [['uno', 'UNO']] as const) test(`${name} stays disabled while its direct loader and placeholders are ready for implementation`, async t => {
   const info = registry[id];
   assert.equal(info.enabled, false); assert.equal(info.status, 'soon');
   await assert.rejects(loadGame(id), /chưa được hỗ trợ/);
@@ -38,7 +38,7 @@ for (const [id, name] of [['uno', 'UNO'], ['werewolf', 'Ma Sói']] as const) tes
     assert.equal(errors.mock.callCount(), 0, errors.mock.calls.map(call => String(call.arguments)).join('\n'));
     assert.equal(warnings.mock.callCount(), 0, warnings.mock.calls.map(call => String(call.arguments)).join('\n'));
   });
-  const settings: GameSettings = id === 'uno' ? { game: 'uno', payload: {} } : { game: 'werewolf', payload: {} };
+  const settings: GameSettings = { game: 'uno', payload: {} };
   const room: RoomView = { code: 'ABCDE', game: id, settings, phase: 'playing', host: 'a', you: 'a', min_players: info.limits![0], max_players: info.limits![1], members: [] };
   const leaveRoom = t.mock.fn();
   await act(async () => root.render(createElement(client.Board, { room, sync: initialGameState, disabled: false, pending: false, requestVersion: 0, actionError: null, actionErrorCode: null, fxEnabled: false, roomMenu: null, consume() {}, sendAction() {}, endGame() {}, hostSkip() {}, leaveRoom })));

@@ -635,7 +635,7 @@ async fn disabled_games_and_mismatched_settings_reject_without_fallback() {
     })
     .await;
     let mut client = server.connect().await;
-    for game in ["uno", "werewolf"] {
+    for game in ["uno"] {
         client
             .send(json!({"type":"create_room","game":game,"nickname":"Host"}))
             .await;
@@ -649,7 +649,7 @@ async fn disabled_games_and_mismatched_settings_reject_without_fallback() {
         .await;
     let joined = client.until("joined").await;
     let settings = joined["room"]["settings"].clone();
-    for game in ["uno", "werewolf"] {
+    for game in ["uno"] {
         client
             .send(json!({"type":"update_settings","settings":{"game":game,"payload":{}}}))
             .await;

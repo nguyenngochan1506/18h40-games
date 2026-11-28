@@ -69,7 +69,7 @@ test('lobby requires an explicit available game and never submits upcoming games
   const bang = container.querySelector<HTMLButtonElement>('[data-game-id="bang"]')!;
   await fill('#nickname', 'Hân');
   assert.equal(create.disabled, true);
-  for (const id of ['uno', 'werewolf']) {
+  for (const id of ['uno']) {
     const button = container.querySelector<HTMLButtonElement>(`[data-game-id="${id}"]`)!;
     assert.equal(button.disabled, true); assert.equal(button.getAttribute('aria-disabled'), 'true');
     assert.match(button.textContent!, /Sắp có/); await act(() => button.click());

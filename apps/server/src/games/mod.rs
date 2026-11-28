@@ -30,15 +30,16 @@ pub(crate) trait GameSession: Send {
     fn waiting_since(&self) -> Instant;
     fn is_over(&self) -> bool;
     fn view(&self, member: &str) -> GameView;
-    fn snapshot(&self, member: &str) -> GameSnapshot {
+    fn snapshot(&mut self, member: &str) -> GameSnapshot {
         GameSnapshot {
             seq: self.seq(),
             seats: self.seats().to_vec(),
             view: self.view(member),
         }
     }
-    // Before the first action this renders the setup batch at seq=0.
-    fn update(&self, member: &str) -> ServerMessage;
+    // Before the first action this renders the setup batch at seq=0; returns None when nothing
+    // visible changed for this recipient.
+    fn update(&mut self, member: &str) -> Option<ServerMessage>;
     /// Authenticate the actor by member; errors preserve state, RNG, sequence and batch.
     fn apply(&mut self, member: &str, action: GameAction, now: Instant) -> Result<(), ErrorCode>;
     fn apply_default(&mut self, now: Instant) -> Result<(), ErrorCode>;

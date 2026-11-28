@@ -383,11 +383,13 @@ impl Room {
         }
     }
 
-    fn broadcast_game(&self) {
-        let game = self.game.as_ref().unwrap();
+    fn broadcast_game(&mut self) {
+        let game = self.game.as_mut().unwrap();
         for member in &self.members {
-            if let Some(peer) = &member.connection {
-                peer.send(game.update(&member.view.id));
+            if let Some(peer) = &member.connection
+                && let Some(message) = game.update(&member.view.id)
+            {
+                peer.send(message);
             }
         }
     }
@@ -492,7 +494,7 @@ impl Room {
                     room_code: self.code.clone(),
                     token: encode_token(&token),
                     room: self.view(&id),
-                    game: self.game.as_ref().map(|game| game.snapshot(&id)),
+                    game: self.game.as_mut().map(|game| game.snapshot(&id)),
                     voice_enabled: self.voice.is_some(),
                 });
             }
@@ -519,7 +521,7 @@ impl Room {
                     room_code: self.code.clone(),
                     token: encode_token(&token),
                     room: self.view(&id),
-                    game: self.game.as_ref().map(|game| game.snapshot(&id)),
+                    game: self.game.as_mut().map(|game| game.snapshot(&id)),
                     voice_enabled: self.voice.is_some(),
                 });
             }

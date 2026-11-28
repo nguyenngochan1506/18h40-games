@@ -160,12 +160,12 @@ impl GameSession for Session {
         GameView::Bang(self.bang_view(member))
     }
 
-    fn update(&self, member: &str) -> ServerMessage {
+    fn update(&mut self, member: &str) -> Option<ServerMessage> {
         let update = GameDelta::Bang {
             events: BangEvents::for_recipient(&self.events, self.recipient(member)),
             view: self.bang_view(member),
         };
-        if self.is_over() {
+        Some(if self.is_over() {
             ServerMessage::GameOver {
                 v: PROTOCOL_VERSION,
                 seq: self.seq,
@@ -177,7 +177,7 @@ impl GameSession for Session {
                 seq: self.seq,
                 update,
             }
-        }
+        })
     }
 
     fn apply(&mut self, member: &str, action: GameAction, now: Instant) -> Result<(), ErrorCode> {

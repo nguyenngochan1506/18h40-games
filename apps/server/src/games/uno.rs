@@ -52,7 +52,7 @@ impl GameSession for Session {
     fn view(&self, _member: &str) -> GameView {
         todo!("Filter UNO views by authenticated recipient")
     }
-    fn update(&self, _member: &str) -> ServerMessage {
+    fn update(&mut self, _member: &str) -> Option<ServerMessage> {
         todo!("Render recipient-filtered UNO events and view, including setup at seq=0")
     }
     fn apply(
