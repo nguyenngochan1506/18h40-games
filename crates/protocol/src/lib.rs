@@ -4,7 +4,7 @@ pub mod werewolf;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 10;
+pub const PROTOCOL_VERSION: u32 = 11;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -111,6 +111,10 @@ pub enum ClientMessage {
     },
     HostSkip {
         v: u32,
+    },
+    TransferHost {
+        v: u32,
+        member: String,
     },
     EndGame {
         v: u32,
@@ -544,6 +548,10 @@ mod tests {
         for message in [
             ClientMessage::HostSkip {
                 v: PROTOCOL_VERSION,
+            },
+            ClientMessage::TransferHost {
+                v: PROTOCOL_VERSION,
+                member: "2".into(),
             },
             ClientMessage::GameAction {
                 v: PROTOCOL_VERSION,

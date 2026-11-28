@@ -211,6 +211,20 @@ async fn rejoin_preserves_identity_and_closes_the_previous_connection() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn host_can_transfer_host_to_online_member() {
+    let server = TestServer::new(Config::default()).await;
+    let (mut host, joined) = server.create("Host").await;
+    let (mut guest, data) = server.join(code(&joined), "P1").await;
+    let guest_id = you(&data).to_string();
+    guest.send(json!({"type":"transfer_host","member":you(&joined)})).await;
+    guest.error("not_host").await;
+    host.send(json!({"type":"transfer_host","member":"999"})).await;
+    host.error("invalid_message").await;
+    host.send(json!({"type":"transfer_host","member":guest_id})).await;
+    guest.state(|room| room["host"] == guest_id).await;
+}
+
+#[tokio::test(start_paused = true)]
 async fn offline_waiting_members_expire_and_transfer_host() {
     let server = TestServer::new(Config::default()).await;
     let (mut host, joined) = server.create("Host").await;
