@@ -216,11 +216,15 @@ async fn host_can_transfer_host_to_online_member() {
     let (mut host, joined) = server.create("Host").await;
     let (mut guest, data) = server.join(code(&joined), "P1").await;
     let guest_id = you(&data).to_string();
-    guest.send(json!({"type":"transfer_host","member":you(&joined)})).await;
+    guest
+        .send(json!({"type":"transfer_host","member":you(&joined)}))
+        .await;
     guest.error("not_host").await;
-    host.send(json!({"type":"transfer_host","member":"999"})).await;
+    host.send(json!({"type":"transfer_host","member":"999"}))
+        .await;
     host.error("invalid_message").await;
-    host.send(json!({"type":"transfer_host","member":guest_id})).await;
+    host.send(json!({"type":"transfer_host","member":guest_id}))
+        .await;
     guest.state(|room| room["host"] == guest_id).await;
 }
 
