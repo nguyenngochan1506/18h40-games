@@ -2,3 +2,10 @@ target/
 node_modules/
 dist/
 specs/games/*/research/
+
+# Công cụ cục bộ
+.agents/skills/gitnexus-*/
+.claude/skills/gitnexus-*/
+.playwright-mcp/
+AGENTS.md
+CLAUDE.md
