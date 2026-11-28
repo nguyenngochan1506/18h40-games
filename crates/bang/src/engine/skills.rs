@@ -44,33 +44,56 @@ pub(super) fn draw_phase<R: Rng + ?Sized>(
     rng: &mut R,
     events: &mut Vec<Event>,
 ) {
+    let own = &state.players[player.0];
+    // Vera Custer picks her borrowed ability first; the draw step resumes afterwards.
+    if own.character == Character::VeraCuster && !state.skill_uses.vera_copy {
+        state.push_pending(PendingKind::ChooseCopy { player });
+        return;
+    }
     state.turn.step = TurnStep::Play;
-    match state.players[player.0].character {
-        Character::JesseJones | Character::PedroRamirez => {
-            state.push_pending(PendingKind::DrawChoice { player })
+    let own = &state.players[player.0];
+    let (choice, kit, black_jack) = (
+        own.has(Character::JesseJones)
+            || own.has(Character::PedroRamirez)
+            || own.has(Character::PatBrennan),
+        own.has(Character::KitCarlson),
+        own.has(Character::BlackJack),
+    );
+    let lost = (own.max_health - own.health).max(0) as usize;
+    let count = if own.has(Character::PixiePete) {
+        activate(state, player, events);
+        3
+    } else if own.has(Character::BillNoface) && lost > 0 {
+        activate(state, player, events);
+        1 + lost
+    } else if own.has(Character::BillNoface) {
+        1
+    } else {
+        2
+    };
+    if choice {
+        state.push_pending(PendingKind::DrawChoice { player });
+    } else if kit {
+        let pool = take_draw(state, 3, rng, events);
+        if !pool.is_empty() {
+            activate(state, player, events);
+            offer(player, &pool, events);
+            let keep = pool.len().min(2);
+            state.push_pending(PendingKind::KeepCards { player, pool, keep });
         }
-        Character::KitCarlson => {
-            let pool = take_draw(state, 3, rng, events);
-            if !pool.is_empty() {
-                activate(state, player, events);
-                offer(player, &pool, events);
-                let keep = pool.len().min(2);
-                state.push_pending(PendingKind::KeepCards { player, pool, keep });
+    } else if black_jack {
+        let cards = take_draw(state, 2, rng, events);
+        let second = cards.get(1).copied();
+        receive(state, player, cards, events);
+        if let Some(card) = second {
+            activate(state, player, events);
+            events.push(Event::public(EventKind::CardShown { player, card }));
+            if matches!(card.card().unwrap().suit, Suit::Hearts | Suit::Diamonds) {
+                draw(state, player, 1, rng, events);
             }
         }
-        Character::BlackJack => {
-            let cards = take_draw(state, 2, rng, events);
-            let second = cards.get(1).copied();
-            receive(state, player, cards, events);
-            if let Some(card) = second {
-                activate(state, player, events);
-                events.push(Event::public(EventKind::CardShown { player, card }));
-                if matches!(card.card().unwrap().suit, Suit::Hearts | Suit::Diamonds) {
-                    draw(state, player, 1, rng, events);
-                }
-            }
-        }
-        _ => draw(state, player, 2, rng, events),
+    } else {
+        draw(state, player, count, rng, events);
     }
 }
 
@@ -121,7 +144,29 @@ pub(super) fn choose_source<R: Rng + ?Sized>(
 ) {
     state.pending.pop();
     match source {
+        DrawSource::Deck if state.players[player.0].has(Character::PatBrennan) => {
+            draw(state, player, 2, rng, events);
+            return;
+        }
         DrawSource::Deck => draw(state, player, 1, rng, events),
+        DrawSource::InPlay { player: from, card } => {
+            let index = state.players[from.0]
+                .in_play
+                .iter()
+                .position(|id| *id == card)
+                .unwrap();
+            state.players[from.0].in_play.remove(index);
+            clear_in_play_state(state, from, card);
+            // The card was face up, so everyone already knows it: no private draw event.
+            state.players[player.0].hand.push(card);
+            events.push(Event::public(EventKind::TableCardTaken {
+                player,
+                target: from,
+                card,
+            }));
+            activate(state, player, events);
+            return;
+        }
         DrawSource::Discard => {
             let card = state.discard_pile.pop().unwrap();
             state.hidden_discards.retain(|id| *id != card);
@@ -161,19 +206,15 @@ pub(super) fn after_damage<R: Rng + ?Sized>(
     rng: &mut R,
     events: &mut Vec<Event>,
 ) {
-    match state.players[player.0].character {
-        Character::BartCassidy => {
-            activate(state, player, events);
-            draw(state, player, usize::from(damage), rng, events);
-        }
-        Character::ElGringo => {
-            if let Some(source) = card_owner.filter(|owner| *owner != player)
-                && steal(state, player, source, usize::from(damage), rng, events) > 0
-            {
-                activate(state, player, events);
-            }
-        }
-        _ => {}
+    if state.players[player.0].has(Character::BartCassidy) {
+        activate(state, player, events);
+        draw(state, player, usize::from(damage), rng, events);
+    }
+    if state.players[player.0].has(Character::ElGringo)
+        && let Some(source) = card_owner.filter(|owner| *owner != player)
+        && steal(state, player, source, usize::from(damage), rng, events) > 0
+    {
+        activate(state, player, events);
     }
 }
 
@@ -187,9 +228,17 @@ pub(super) fn after_action<R: Rng + ?Sized>(
     }
     for index in 0..state.players.len() {
         let player = &state.players[index];
-        let choosing_hand = state.pending.iter().any(|frame| matches!(frame.kind, PendingKind::PickHandSlot { actor, .. } if actor == PlayerId(index)));
+        // Wait until a blind pick or a Brawl she started is fully resolved.
+        let choosing_hand = state.pending.iter().any(|frame| {
+            matches!(
+                frame.kind,
+                PendingKind::PickHandSlot { actor: who, .. }
+                    | PendingKind::ResolveBrawl { source: who, .. }
+                    if who == PlayerId(index)
+            )
+        });
         if player.alive
-            && player.character == Character::SuzyLafayette
+            && player.has(Character::SuzyLafayette)
             && player.hand.is_empty()
             && !choosing_hand
         {
@@ -241,10 +290,10 @@ pub(super) fn range_used(
     if source == target {
         return;
     }
-    if state.players[source.0].character == Character::RoseDoolan {
+    if state.players[source.0].has(Character::RoseDoolan) {
         activate(state, source, events);
     }
-    if state.players[target.0].character == Character::PaulRegret {
+    if state.players[target.0].has(Character::PaulRegret) {
         activate(state, target, events);
     }
 }

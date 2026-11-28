@@ -5,13 +5,13 @@ import type { ClientMessage, RoomView } from '../../generated/protocol';
 import { PROTOCOL_VERSION } from '../../generated/protocol';
 import { DecodedImage } from '../../shared/SaloonScene';
 import { waitingBackdrop } from '../../shared/waitingScene';
-import type { GameClient, GameInfo } from '../../games/types';
+import type { GameClient, GameInfo, GameWaitingScene } from '../../games/types';
 import { waitingSeats } from './waitingSeats';
 import { games, registry } from '../../games/registry';
 import { inviteLink } from '../../shared/lib/roomRoute';
 import { copyText } from '../../shared/lib/clipboard';
 
-type Props = { room: RoomView; roomTools?: ReactNode; disabled: boolean; send: (message: ClientMessage) => void; Settings?: GameClient['Settings']; retryLoad?: () => void };
+type Props = { room: RoomView; roomTools?: ReactNode; disabled: boolean; send: (message: ClientMessage) => void; Settings?: GameClient['Settings']; waitingScene?: GameWaitingScene; retryLoad?: () => void };
 
 function ChangeGameForm({ options, disabled, send }: Pick<Props, 'disabled' | 'send'> & { options: GameInfo[] }) {
   const hintId = useId();
@@ -34,12 +34,19 @@ function ChangeGameForm({ options, disabled, send }: Pick<Props, 'disabled' | 's
   </form>;
 }
 
-export default function WaitingRoom({ room, roomTools, disabled, send, Settings, retryLoad }: Props) {
+export default function WaitingRoom({ room, roomTools, disabled, send, Settings, waitingScene, retryLoad }: Props) {
   const reduced = useReducedMotion();
   const info = registry[room.game];
   const [copyStatus, setCopyStatus] = useState('');
   const [copying, setCopying] = useState(false);
-  const seats = waitingSeats(room);
+  const seatedPlayers = room.members.filter(member => member.role === 'player');
+  const seats = waitingScene
+    ? seatedPlayers.map((member, index) => {
+        const seat = waitingScene.seat(index, room.max_players, seatedPlayers.length);
+        return { member, seat, slot: index, actor: waitingScene.actor(index, seat.view) };
+      })
+    : waitingSeats(room);
+  const backdrop = waitingScene?.backdrop ?? waitingBackdrop;
   const spectators = room.members.filter(member => member.role === 'spectator');
   const you = room.members.find(member => member.id === room.you);
   const host = room.host === room.you;
@@ -47,7 +54,7 @@ export default function WaitingRoom({ room, roomTools, disabled, send, Settings,
   const nextGames = host && waiting ? games.filter(game => game.enabled && game.id !== room.game) : [];
   const missing = Math.max(0, room.min_players - seats.length);
   const feedback = { whileHover: { scale: reduced || disabled ? 1 : 1.02 }, whileTap: { scale: reduced || disabled ? 1 : .98 }, transition: { duration: .1 } };
-  const settings = waiting && Settings && <Settings key={JSON.stringify([room.settings, seats.length])} settings={room.settings} players={seats.length} editable={host && !disabled} onChange={settings => send({ v: PROTOCOL_VERSION, type: 'update_settings', settings })} />;
+  const settings = waiting && Settings && <Settings key={JSON.stringify([room.settings, seats.length])} settings={room.settings} players={seats.length} maxPlayers={room.max_players} editable={host && !disabled} onChange={settings => send({ v: PROTOCOL_VERSION, type: 'update_settings', settings })} />;
   async function copyCode(link = false) {
     setCopying(true);
     try {
@@ -59,9 +66,9 @@ export default function WaitingRoom({ room, roomTools, disabled, send, Settings,
       setCopying(false);
     }
   }
-  return <section className={`saloon-waiting${waiting ? ' with-settings' : ''}`} aria-label={`Phòng ${room.code}`}>
+  return <section className={`saloon-waiting${waiting ? ' with-settings' : ''}${waitingScene?.className ? ` ${waitingScene.className}` : ''}`} aria-label={`Phòng ${room.code}`}>
     <div className="waiting-stage">
-      <DecodedImage className="waiting-backdrop" src={waitingBackdrop} />
+      <DecodedImage className="waiting-backdrop" src={backdrop} />
       <div className="waiting-vignette" aria-hidden="true" />
       <header className="waiting-code western-wood">
         <h2 id="room-overview" data-scene-title tabIndex={-1}>Mã phòng</h2>

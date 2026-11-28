@@ -1,5 +1,5 @@
 export function seatLayout(count: number, viewerIndex: number | null) {
-  if (!Number.isInteger(count) || count < 4 || count > 7) throw new RangeError('Expected 4 to 7 seats');
+  if (!Number.isInteger(count) || count < 4 || count > 8) throw new RangeError('Expected 4 to 8 seats');
   if (viewerIndex !== null && (!Number.isInteger(viewerIndex) || viewerIndex < 0 || viewerIndex >= count)) throw new RangeError('Invalid viewer seat');
   return Array.from({ length: count }, (_, index) => {
     const offset = viewerIndex === null ? index : (index - viewerIndex + count) % count;
@@ -8,8 +8,9 @@ export function seatLayout(count: number, viewerIndex: number | null) {
       index,
       x: 50 + Math.cos(radians) * 36,
       y: 50 + Math.sin(radians) * 38,
+      // Eight seats are tighter than seven on the portrait ellipse, so they use the same wide ellipse as six.
       // Six seats place a pair beside the piles, requiring a wider portrait ellipse.
-      portraitX: 50 + Math.cos(radians) * (count === 6 ? 35 : 32),
+      portraitX: 50 + Math.cos(radians) * (count === 6 || count === 8 ? 35 : 32),
       portraitY: 50 + Math.sin(radians) * 38,
       landscapeY: 50 + Math.sin(radians) * 46,
       angle: ((radians * 180 / Math.PI - 90 + 180) % 360) - 180,

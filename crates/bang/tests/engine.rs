@@ -77,7 +77,7 @@ fn catalog_matches_every_physical_card_and_character() {
     assert_eq!(coaches.len(), 2);
     assert_ne!(coaches[0], coaches[1]);
     assert_eq!(coaches[0].card(), coaches[1].card());
-    assert_eq!(CardId(80).card(), None);
+    assert_eq!(CardId(120).card(), None);
     assert_eq!(Character::ALL.len(), 16);
     let mut names = BTreeSet::new();
     for character in Character::ALL {
@@ -918,9 +918,10 @@ fn custom_roles_are_validated_before_rng_and_preserved_with_mode() {
             let config = GameConfig {
                 mode: GameMode::Club,
                 roles,
+                ..Default::default()
             };
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
-            let (state, events) = setup(4, config, &mut rng).unwrap();
+            let (state, events) = setup(4, config.clone(), &mut rng).unwrap();
             invariant(&state);
             assert_eq!(state.config, config);
             for (role, count) in [
@@ -936,7 +937,7 @@ fn custom_roles_are_validated_before_rng_and_preserved_with_mode() {
             }
             sheriff_seats.insert(state.turn.player.0);
             let (replay, replay_events) =
-                setup(4, config, &mut ChaCha8Rng::seed_from_u64(seed)).unwrap();
+                setup(4, config.clone(), &mut ChaCha8Rng::seed_from_u64(seed)).unwrap();
             assert_eq!(state, replay);
             assert_eq!(events, replay_events);
             let restored: GameState =
@@ -947,6 +948,7 @@ fn custom_roles_are_validated_before_rng_and_preserved_with_mode() {
                 GameConfig {
                     mode: GameMode::Classic,
                     roles,
+                    ..Default::default()
                 },
                 &mut ChaCha8Rng::seed_from_u64(seed),
             )
@@ -989,7 +991,8 @@ fn custom_roles_are_validated_before_rng_and_preserved_with_mode() {
                 4,
                 GameConfig {
                     mode: GameMode::Classic,
-                    roles
+                    roles,
+                    ..Default::default()
                 },
                 &mut rng
             ),
@@ -1007,3 +1010,6 @@ mod manual_checks;
 
 #[path = "engine/hand_slots.rs"]
 mod hand_slots;
+
+#[path = "engine/dodge_city.rs"]
+mod dodge_city;

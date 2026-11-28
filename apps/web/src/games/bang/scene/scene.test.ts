@@ -17,8 +17,8 @@ test('scene URLs map to the four bundled WebP files', async () => {
 });
 
 test('desktop scenes map each player count to its bundled WebP', async () => {
-  assert.deepEqual(landscapeScenes, { 4: '/bang/scene/scene4-landscape.webp', 5: '/bang/scene/scene5-landscape.webp', 6: '/bang/scene/scene6-landscape.webp', 7: '/platform/waiting-table.webp' });
-  assert.equal(new Set(Object.values(landscapeScenes)).size, 4);
+  assert.deepEqual(landscapeScenes, { 4: '/bang/scene/scene4-landscape.webp', 5: '/bang/scene/scene5-landscape.webp', 6: '/bang/scene/scene6-landscape.webp', 7: '/platform/waiting-table.webp', 8: '/platform/waiting-table.webp' });
+  assert.equal(new Set(Object.values(landscapeScenes)).size, 4, 'eight seats reuse the seven-seat table art');
   for (const url of Object.values(landscapeScenes)) {
     const data = await readFile(new URL(`../../../../../../assets${url}`, import.meta.url));
     assert.equal(data.toString('ascii', 0, 4), 'RIFF');

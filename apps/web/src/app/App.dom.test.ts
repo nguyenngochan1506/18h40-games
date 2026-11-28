@@ -129,18 +129,16 @@ test('creating pushes a room URL and leaving replaces it with the lobby', async 
 
 test('only a waiting host can request a new game and the room follows the server snapshot', async t => {
   const { registry } = await vite.ssrLoadModule('/src/games/registry.ts');
-  const prevCatsEnabled = registry.cats.enabled;
-  registry.cats.enabled = false;
-  t.after(() => { registry.cats.enabled = prevCatsEnabled; });
   const fx = await mount(t, '/r/ABCDE', saved);
   const session = joined();
   assert.equal(session.type, 'joined');
   await fx.receive(session);
   const picker = '.waiting-game-switch';
-  assert.equal(fx.container.querySelector(picker), null);
+  const initialSelect = fx.container.querySelector<HTMLSelectElement>(`${picker} select`);
+  assert.ok(initialSelect);
+  assert.deepEqual([...initialSelect.options].map(option => option.value), ['', 'werewolf', 'cats']);
 
   registry.uno.enabled = true;
-  registry.cats.enabled = prevCatsEnabled;
   t.after(() => { registry.uno.enabled = false; });
   t.mock.method(registry.uno, 'load', async () => ({
     Board: () => null,
@@ -158,7 +156,7 @@ test('only a waiting host can request a new game and the room follows the server
   const select = fx.container.querySelector<HTMLSelectElement>(`${picker} select`)!;
   const button = fx.container.querySelector<HTMLButtonElement>(`${picker} button`)!;
   assert.equal(button.disabled, true);
-  assert.deepEqual([...select.options].map(option => option.value), ['', 'uno', 'cats']);
+  assert.deepEqual([...select.options].map(option => option.value), ['', 'uno', 'werewolf', 'cats']);
   await act(() => { select.value = 'uno'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   assert.equal(button.disabled, false);
   await fx.click(`${picker} button`);
@@ -188,8 +186,9 @@ test('only a waiting host can request a new game and the room follows the server
 
 test('a waiting host can switch back when the new game fails to load', async t => {
   const { registry } = await vite.ssrLoadModule('/src/games/registry.ts');
+  const oldEnabled = registry.werewolf.enabled;
   registry.werewolf.enabled = true;
-  t.after(() => { registry.werewolf.enabled = false; });
+  t.after(() => { registry.werewolf.enabled = oldEnabled; });
   const loader = t.mock.method(registry.werewolf, 'load', async () => { throw new Error('Import failed'); });
   const fx = await mount(t, '/r/ABCDE', saved);
   const session = joined();
@@ -203,7 +202,7 @@ test('a waiting host can switch back when the new game fails to load', async t =
   };
   await changeGame('werewolf');
   await fx.receive({ v: PROTOCOL_VERSION, type: 'room_state', room: {
-    ...session.room, game: 'werewolf', settings: { game: 'werewolf', payload: {} }, max_players: 16,
+    ...session.room, game: 'werewolf', settings: { game: 'werewolf', payload: { reveal_role_on_death: true, roles: { villager: 2, werewolf: 1, alpha_wolf: 0, minion: 0, sorcerer: 0, seer: 1, bodyguard: 1, witch: 0, hunter: 0, cupid: 0, lycan: 0, cursed: 0, diseased: 0, prince: 0, mayor: 0, tanner: 0 } } }, max_players: 16,
   } });
   assert.match(fx.container.querySelector('.waiting-load-error [role="alert"]')!.textContent!, /Không tải được/);
   assert.equal(fx.container.querySelector<HTMLButtonElement>('.waiting-primary button')!.disabled, true);
@@ -323,7 +322,7 @@ test('manual invalid codes show inline feedback without sending and clear on cor
   await fx.fill('#room-code', 'abcde'); assert.equal(fx.container.querySelector('#room-code')!.getAttribute('aria-invalid'), null);
 });
 
-for (const code of ['invalid_token', 'nickname_taken', 'wrong_phase'] as const) test(`entry error ${code} returns to the lobby without an automatic retry`, async t => {
+for (const code of ['invalid_token', 'nickname_taken', 'wrong_phase', 'unsupported_version'] as const) test(`entry error ${code} returns to the lobby without an automatic retry`, async t => {
   const fx = await mount(t, '/r/ABCDE', code === 'invalid_token' ? saved : undefined);
   if (code !== 'invalid_token') { await fx.fill('#join-nickname', 'Mai'); await fx.click('.join-poster button[type="submit"]'); }
   await fx.receive({ v: PROTOCOL_VERSION, type: 'error', code, message: 'Rejected' });

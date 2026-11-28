@@ -28,9 +28,10 @@ export default function Lobby({ disabled, send, inviteCode, previousRoom, return
   const nameLength = Array.from(nickname.trim()).length;
   const validName = nameLength >= 1 && nameLength <= 20;
   const feedback = { whileHover: { scale: reduced || disabled ? 1 : 1.02 }, whileTap: { scale: reduced || disabled ? 1 : .98 }, transition: { duration: .1 } };
+  const lobbyBackdrop = selectedGame ? availableGames[selectedGame]?.lobbyBackdrop : undefined;
   return (
     <section className="saloon-lobby" aria-label="Sảnh chọn game">
-      <SaloonBackdrop />
+      <SaloonBackdrop src={lobbyBackdrop} />
       <header className="lobby-heading">
         <p className="saloon-eyebrow">18h40 games · Quán quen miền Tây</p>
         <h2 className="saloon-sign western-wood" data-scene-title tabIndex={-1}>18h40</h2>

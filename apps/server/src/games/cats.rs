@@ -15,7 +15,7 @@ impl GameModule for Module {
         true
     }
 
-    fn limits(&self) -> (u32, u32) {
+    fn limits(&self, _settings: &GameSettings) -> (u32, u32) {
         ::cats::PLAYER_LIMITS
     }
 
@@ -172,12 +172,12 @@ impl GameSession for Session {
         GameView::Cats(self.cats_view(member))
     }
 
-    fn update(&self, member: &str) -> ServerMessage {
+    fn update(&mut self, member: &str) -> Option<ServerMessage> {
         let update = GameDelta::Cats {
             events: protocol::cats::CatsEvents::for_recipient(&self.events, self.recipient(member)),
             view: self.cats_view(member),
         };
-        if self.is_over() {
+        Some(if self.is_over() {
             ServerMessage::GameOver {
                 v: PROTOCOL_VERSION,
                 seq: self.seq,
@@ -189,7 +189,7 @@ impl GameSession for Session {
                 seq: self.seq,
                 update,
             }
-        }
+        })
     }
 
     fn apply(&mut self, member: &str, action: GameAction, now: Instant) -> Result<(), ErrorCode> {

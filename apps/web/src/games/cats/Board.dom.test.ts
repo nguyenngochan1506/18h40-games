@@ -298,6 +298,7 @@ test('Nope works outside own turn, Future stays private, and Settings toggles ex
   await act(async () => root.render(createElement(Settings, {
     settings: { game: 'cats', payload: defaultSettings },
     players: 4,
+    maxPlayers: 8,
     editable: true,
     onChange: next => { updated = next; },
   })));

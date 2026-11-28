@@ -44,7 +44,28 @@ test('overflow drops old effects and locks for a fresh authoritative snapshot', 
 
 test('a mismatched delta cannot switch the session game', () => {
   const state = receiveGameState(initialGameState, start);
-  const wrong: ServerMessage = { v: PROTOCOL_VERSION, type: 'game_update', seq: 1, update: { game: 'werewolf', events: {}, view: {} } };
+  const wrong: ServerMessage = {
+    v: PROTOCOL_VERSION,
+    type: 'game_update',
+    seq: 1,
+    update: {
+      game: 'werewolf',
+      events: [],
+      view: {
+        perspective: 'spectator',
+        view: {
+          players: [],
+          phase: { kind: 'game_over' },
+          day_number: 1,
+          role_counts: { villager: 2, werewolf: 1, alpha_wolf: 0, minion: 0, sorcerer: 0, seer: 1, bodyguard: 1, witch: 0, hunter: 0, cupid: 0, lycan: 0, cursed: 0, diseased: 0, prince: 0, mayor: 0, tanner: 0 },
+          reveal_role_on_death: true,
+          winner: null,
+          winning_players: [],
+          awaited_count: 0,
+        },
+      },
+    },
+  };
   const next = receiveGameState(state, wrong);
   assert.equal(next.game, state.game); assert.equal(next.desynced, true);
 });

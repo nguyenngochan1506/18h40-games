@@ -1,6 +1,6 @@
 use crate::{
-    model::{CardId, CardKind, Character, PlayerId, Role},
-    rules::effective_distance,
+    model::{CardId, CardKind, Character, PlayerId, Role, Suit},
+    rules::{effective_distance, table_active},
     state::{AttackKind, GameState, PendingId, PendingKind},
 };
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,19 @@ pub enum DrawSource {
     Deck,
     Discard,
     Player(PlayerId),
+    /// Pat Brennan: take one card from in front of a player instead of drawing.
+    InPlay {
+        player: PlayerId,
+        card: CardId,
+    },
+}
+
+/// Brawl: the card the user picks for one other player to discard.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrawlPick {
+    pub target: PlayerId,
+    pub selection: CardSelection,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -65,6 +78,53 @@ pub enum Action {
     ChooseStoreSlot {
         pending_id: PendingId,
         slot: u8,
+    },
+    /// Dodge City: Springfield, Tequila or Whisky; `discard` is the extra hand card they cost.
+    PlayWithDiscard {
+        card: CardId,
+        discard: CardId,
+        target: Option<PlayerId>,
+    },
+    /// Dodge City: Rag Time, which costs an extra hand card.
+    AffectWithDiscard {
+        card: CardId,
+        discard: CardId,
+        target: PlayerId,
+        selection: CardSelection,
+    },
+    /// Dodge City: Brawl, which costs an extra hand card and picks a card of every other player.
+    Brawl {
+        card: CardId,
+        discard: CardId,
+        picks: Vec<BrawlPick>,
+    },
+    /// Dodge City: use a green card that has been in front of you since an earlier turn.
+    ActivateGreen {
+        card: CardId,
+        target: Option<PlayerId>,
+        selection: Option<CardSelection>,
+    },
+    /// Chuck Wengam: lose a life (never the last) to draw 2 cards.
+    ChuckDraw,
+    /// José Delgado: discard a blue card from hand to draw 2 (twice per turn).
+    JoseDelgado {
+        card: CardId,
+    },
+    /// Doc Holyday: once per turn, discard two hand cards to shoot a BANG!.
+    DocHolyday {
+        cards: [CardId; 2],
+        target: PlayerId,
+    },
+    /// Vulture Sam shared with Vera Custer: claim the next card of the eliminated player, a random
+    /// hand card (`Hand`) or a table card (`InPlay`).
+    VultureTake {
+        pending_id: PendingId,
+        selection: CardSelection,
+    },
+    /// Vera Custer: pick the player whose character ability she holds until her next turn.
+    ChooseCopy {
+        pending_id: PendingId,
+        target: PlayerId,
     },
     Respond {
         pending_id: PendingId,
@@ -112,6 +172,77 @@ fn target_player(state: &GameState, target: PlayerId) -> Result<(), ActionError>
     }
 }
 
+/// Apache Kid ignores diamond cards played by others (not in a Duel). `suits` are the suits of the
+/// cards that make the effect; a two-card effect only hits him if one of them is not a diamond.
+pub(crate) fn apache_immune(
+    state: &GameState,
+    source: PlayerId,
+    target: PlayerId,
+    suits: &[Suit],
+) -> bool {
+    source != target
+        && state.players[target.0].has(Character::ApacheKid)
+        && suits.iter().all(|suit| *suit == Suit::Diamonds)
+}
+
+fn suit_of(card: CardId) -> Result<Suit, ActionError> {
+    Ok(card.card().ok_or(ActionError::InvalidCard)?.suit)
+}
+
+fn check_selection(
+    state: &GameState,
+    player: PlayerId,
+    target: PlayerId,
+    selection: CardSelection,
+    hand_removed: usize,
+) -> Result<(), ActionError> {
+    target_player(state, target)?;
+    let target_player = &state.players[target.0];
+    let hand = target_player
+        .hand
+        .len()
+        .saturating_sub(if target == player { hand_removed } else { 0 });
+    match selection {
+        CardSelection::Hand if hand > 0 => Ok(()),
+        CardSelection::InPlay(card) if target_player.in_play.contains(&card) => Ok(()),
+        _ => Err(ActionError::InvalidTarget),
+    }
+}
+
+/// `card` must be another hand card than `played`.
+fn extra_discard(
+    state: &GameState,
+    player: PlayerId,
+    played: CardId,
+    discard: CardId,
+) -> Result<(), ActionError> {
+    if played == discard {
+        return Err(ActionError::InvalidDiscard);
+    }
+    held_kind(state, player, discard)?;
+    Ok(())
+}
+
+fn shoot_target(
+    state: &GameState,
+    player: PlayerId,
+    target: Option<PlayerId>,
+    suits: &[Suit],
+    range: Option<u16>,
+) -> Result<(), ActionError> {
+    let target = target.ok_or(ActionError::InvalidTarget)?;
+    target_player(state, target)?;
+    if target == player || apache_immune(state, player, target, suits) {
+        return Err(ActionError::InvalidTarget);
+    }
+    if let Some(range) = range
+        && effective_distance(state, player, target)? > range
+    {
+        return Err(ActionError::OutOfRange);
+    }
+    Ok(())
+}
+
 pub(crate) fn response_kind(frame: &PendingKind) -> Option<CardKind> {
     match frame {
         PendingKind::AttackResponse {
@@ -145,7 +276,7 @@ pub(crate) fn validate(
         discard,
     } = action
     {
-        if own.character != Character::SidKetchum || own.health >= own.max_health {
+        if !own.has(Character::SidKetchum) || own.health >= own.max_health {
             return Err(ActionError::WrongAction);
         }
         let dying_id = state
@@ -213,13 +344,21 @@ pub(crate) fn validate(
                 match source {
                     DrawSource::Deck => Ok(()),
                     DrawSource::Discard
-                        if own.character == Character::PedroRamirez
-                            && !state.discard_pile.is_empty() =>
+                        if own.has(Character::PedroRamirez) && !state.discard_pile.is_empty() =>
+                    {
+                        Ok(())
+                    }
+                    DrawSource::InPlay { player: from, card }
+                        if own.has(Character::PatBrennan)
+                            && state
+                                .players
+                                .get(from.0)
+                                .is_some_and(|p| p.alive && p.in_play.contains(card)) =>
                     {
                         Ok(())
                     }
                     DrawSource::Player(target)
-                        if own.character == Character::JesseJones
+                        if own.has(Character::JesseJones)
                             && *target != player
                             && state
                                 .players
@@ -271,15 +410,54 @@ pub(crate) fn validate(
                     _ => Err(ActionError::WrongAction),
                 }
             }
+            Action::VultureTake {
+                pending_id,
+                selection,
+            } => {
+                if *pending_id != frame.id {
+                    return Err(ActionError::StalePending);
+                }
+                let PendingKind::VultureSplit { pool, hand_len, .. } = &frame.kind else {
+                    return Err(ActionError::WrongAction);
+                };
+                match selection {
+                    CardSelection::Hand if *hand_len > 0 => Ok(()),
+                    CardSelection::InPlay(card) if pool[*hand_len..].contains(card) => Ok(()),
+                    _ => Err(ActionError::InvalidCard),
+                }
+            }
+            Action::ChooseCopy { pending_id, target } => {
+                if *pending_id != frame.id {
+                    return Err(ActionError::StalePending);
+                }
+                if !matches!(frame.kind, PendingKind::ChooseCopy { .. }) {
+                    return Err(ActionError::WrongAction);
+                }
+                if *target != player && state.players.get(target.0).is_some_and(|p| p.alive) {
+                    Ok(())
+                } else {
+                    Err(ActionError::InvalidTarget)
+                }
+            }
             Action::Respond { pending_id, card } => {
                 if *pending_id != frame.id {
                     return Err(ActionError::StalePending);
                 }
                 let expected = response_kind(&frame.kind).ok_or(ActionError::WrongAction)?;
-                if let Some(card) = card
-                    && !own.accepts_response(held_kind(state, player, *card)?, expected)
-                {
-                    return Err(ActionError::WrongAction);
+                if let Some(card) = card {
+                    if own.in_play.contains(card) {
+                        // Only a ready green Missed! card, answering a Missed! request.
+                        let kind = card.card().ok_or(ActionError::InvalidCard)?.kind;
+                        if expected != CardKind::Missed
+                            || !kind.green_missed()
+                            || !own.green_answers().any(|id| id == *card)
+                            || !table_active(state, player)
+                        {
+                            return Err(ActionError::WrongAction);
+                        }
+                    } else if !own.accepts_response(held_kind(state, player, *card)?, expected) {
+                        return Err(ActionError::WrongAction);
+                    }
                 }
                 Ok(())
             }
@@ -294,15 +472,22 @@ pub(crate) fn validate(
         | Action::ChooseStoreSlot { .. }
         | Action::ChooseDrawSource { .. }
         | Action::KeepCards { .. }
+        | Action::ChooseCopy { .. }
+        | Action::VultureTake { .. }
         | Action::ChooseDrawResult { .. } => Err(ActionError::StalePending),
         Action::SidHeal { .. } => unreachable!("validated separately"),
         Action::Play { card, target } => {
             let kind = own.play_kind(held_kind(state, player, *card)?);
             match kind {
-                CardKind::Bang | CardKind::Duel | CardKind::Jail => {
+                CardKind::Bang | CardKind::Duel | CardKind::Jail | CardKind::Punch => {
                     let target = target.ok_or(ActionError::InvalidTarget)?;
                     target_player(state, target)?;
                     if target == player {
+                        return Err(ActionError::InvalidTarget);
+                    }
+                    if kind != CardKind::Duel
+                        && apache_immune(state, player, target, &[suit_of(*card)?])
+                    {
                         return Err(ActionError::InvalidTarget);
                     }
                     if kind == CardKind::Bang {
@@ -310,6 +495,10 @@ pub(crate) fn validate(
                             return Err(ActionError::BangLimit);
                         }
                         if effective_distance(state, player, target)? > own.weapon_range() {
+                            return Err(ActionError::OutOfRange);
+                        }
+                    } else if kind == CardKind::Punch {
+                        if effective_distance(state, player, target)? > 1 {
                             return Err(ActionError::OutOfRange);
                         }
                     } else if kind == CardKind::Jail {
@@ -322,9 +511,15 @@ pub(crate) fn validate(
                     }
                     Ok(())
                 }
-                CardKind::Missed | CardKind::Panic | CardKind::CatBalou => {
-                    Err(ActionError::WrongAction)
-                }
+                CardKind::Missed
+                | CardKind::Dodge
+                | CardKind::Panic
+                | CardKind::CatBalou
+                | CardKind::RagTime
+                | CardKind::Brawl
+                | CardKind::Springfield
+                | CardKind::Tequila
+                | CardKind::Whisky => Err(ActionError::WrongAction),
                 _ => {
                     if target.is_some_and(|target| target != player) {
                         return Err(ActionError::InvalidTarget);
@@ -332,9 +527,174 @@ pub(crate) fn validate(
                     if kind.is_equipment() && own.has_in_play(kind) {
                         return Err(ActionError::DuplicateInPlay);
                     }
+                    // Club mode tracks a single Dynamite round, so only one may be on the table.
+                    if kind == CardKind::Dynamite
+                        && state.config.mode == crate::GameMode::Club
+                        && state.dynamite_round.is_some()
+                    {
+                        return Err(ActionError::DuplicateInPlay);
+                    }
                     Ok(())
                 }
             }
+        }
+        Action::PlayWithDiscard {
+            card,
+            discard,
+            target,
+        } => {
+            let kind = held_kind(state, player, *card)?;
+            extra_discard(state, player, *card, *discard)?;
+            match kind {
+                CardKind::Springfield => {
+                    shoot_target(state, player, *target, &[suit_of(*card)?], None)
+                }
+                CardKind::Tequila => {
+                    target_player(state, target.ok_or(ActionError::InvalidTarget)?)
+                }
+                CardKind::Whisky if target.is_none_or(|target| target == player) => Ok(()),
+                CardKind::Whisky => Err(ActionError::InvalidTarget),
+                _ => Err(ActionError::WrongAction),
+            }
+        }
+        Action::AffectWithDiscard {
+            card,
+            discard,
+            target,
+            selection,
+        } => {
+            if held_kind(state, player, *card)? != CardKind::RagTime {
+                return Err(ActionError::WrongAction);
+            }
+            extra_discard(state, player, *card, *discard)?;
+            check_selection(state, player, *target, *selection, 2)?;
+            if apache_immune(state, player, *target, &[suit_of(*card)?]) {
+                return Err(ActionError::InvalidTarget);
+            }
+            Ok(())
+        }
+        Action::Brawl {
+            card,
+            discard,
+            picks,
+        } => {
+            if held_kind(state, player, *card)? != CardKind::Brawl {
+                return Err(ActionError::WrongAction);
+            }
+            extra_discard(state, player, *card, *discard)?;
+            let suit = suit_of(*card)?;
+            // One pick for every other living player that still has a card, nothing else.
+            let required = state.players.iter().enumerate().filter(|(index, p)| {
+                *index != player.0 && p.alive && !(p.hand.is_empty() && p.in_play.is_empty())
+            });
+            let mut expected = 0;
+            for (index, _) in required {
+                expected += 1;
+                let id = PlayerId(index);
+                let mut matching = picks.iter().filter(|pick| pick.target == id);
+                let pick = matching.next().ok_or(ActionError::InvalidTarget)?;
+                if matching.next().is_some() {
+                    return Err(ActionError::InvalidTarget);
+                }
+                check_selection(state, player, id, pick.selection, 0)?;
+                if apache_immune(state, player, id, &[suit]) {
+                    return Err(ActionError::InvalidTarget);
+                }
+            }
+            if picks.len() == expected {
+                Ok(())
+            } else {
+                Err(ActionError::InvalidTarget)
+            }
+        }
+        Action::ActivateGreen {
+            card,
+            target,
+            selection,
+        } => {
+            let kind = card.card().ok_or(ActionError::InvalidCard)?.kind;
+            if !own.ready_green().any(|id| id == *card) {
+                return Err(ActionError::InvalidCard);
+            }
+            let suit = suit_of(*card)?;
+            match kind {
+                CardKind::Bible
+                | CardKind::Canteen
+                | CardKind::PonyExpress
+                | CardKind::Howitzer => {
+                    if target.is_some() || selection.is_some() {
+                        Err(ActionError::InvalidTarget)
+                    } else {
+                        Ok(())
+                    }
+                }
+                CardKind::CanCan | CardKind::Conestoga => {
+                    let (Some(target), Some(selection)) = (target, selection) else {
+                        return Err(ActionError::InvalidTarget);
+                    };
+                    check_selection(state, player, *target, *selection, 0)?;
+                    // The card being spent is already leaving the table.
+                    if apache_immune(state, player, *target, &[suit])
+                        || (*target == player && *selection == CardSelection::InPlay(*card))
+                    {
+                        return Err(ActionError::InvalidTarget);
+                    }
+                    Ok(())
+                }
+                CardKind::Derringer
+                | CardKind::Knife
+                | CardKind::Pepperbox
+                | CardKind::BuffaloRifle
+                    if selection.is_some() =>
+                {
+                    Err(ActionError::InvalidTarget)
+                }
+                CardKind::Derringer | CardKind::Knife => {
+                    shoot_target(state, player, *target, &[suit], Some(1))
+                }
+                CardKind::Pepperbox => {
+                    shoot_target(state, player, *target, &[suit], Some(own.weapon_range()))
+                }
+                CardKind::BuffaloRifle => shoot_target(state, player, *target, &[suit], None),
+                // Missed! cards only work as a response.
+                _ => Err(ActionError::WrongAction),
+            }
+        }
+        Action::ChuckDraw => {
+            if own.has(Character::ChuckWengam) && own.health > 1 {
+                Ok(())
+            } else {
+                Err(ActionError::WrongAction)
+            }
+        }
+        Action::JoseDelgado { card } => {
+            if !own.has(Character::JoseDelgado) || state.skill_uses.jose_delgado >= 2 {
+                return Err(ActionError::WrongAction);
+            }
+            if held_kind(state, player, *card)?.is_blue() {
+                Ok(())
+            } else {
+                Err(ActionError::InvalidCard)
+            }
+        }
+        Action::DocHolyday { cards, target } => {
+            if !own.has(Character::DocHolyday) || state.skill_uses.doc_holyday {
+                return Err(ActionError::WrongAction);
+            }
+            if cards[0] == cards[1] {
+                return Err(ActionError::InvalidDiscard);
+            }
+            for card in cards {
+                held_kind(state, player, *card)?;
+            }
+            let suits = [suit_of(cards[0])?, suit_of(cards[1])?];
+            shoot_target(
+                state,
+                player,
+                Some(*target),
+                &suits,
+                Some(own.weapon_range()),
+            )
         }
         Action::AffectCard {
             card,
@@ -349,19 +709,13 @@ pub(crate) fn validate(
             if kind == CardKind::Panic && effective_distance(state, player, *target)? > 1 {
                 return Err(ActionError::OutOfRange);
             }
-            let target_player = &state.players[target.0];
-            match selection {
-                CardSelection::Hand
-                    if target_player.hand.len() > usize::from(*target == player) =>
-                {
-                    Ok(())
-                }
-                CardSelection::InPlay(card) if target_player.in_play.contains(card) => Ok(()),
-                _ => Err(ActionError::InvalidTarget),
+            if apache_immune(state, player, *target, &[suit_of(*card)?]) {
+                return Err(ActionError::InvalidTarget);
             }
+            check_selection(state, player, *target, *selection, 1)
         }
         Action::EndTurn { discard } => {
-            let excess = own.hand.len().saturating_sub(own.health.max(0) as usize);
+            let excess = own.hand.len().saturating_sub(own.hand_limit());
             if discard.len() != excess {
                 return Err(ActionError::InvalidDiscard);
             }

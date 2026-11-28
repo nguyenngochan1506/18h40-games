@@ -17,10 +17,12 @@ export const sceneSeats = {
   5: [place(50, 85, 50, 1.12, .30, 'q3back'), place(14, 54.5, 19, 1, .29, 'side'), place(29, 34, 37.5, .90, .24, 'q3front'), place(71, 34, 62.5, .90, .24, 'q3front'), place(86, 54.5, 81, 1, .29, 'side')],
   6: [place(50, 85, 50, 1.12, .30, 'q3back'), place(19, 79, 26, 1.05, .30, 'q3back'), place(17, 49, 25.5, .98, .28, 'side'), place(50, 28, 50, .90, .22, 'front'), place(83, 49, 74.5, .98, .28, 'side'), place(81, 79, 74, 1.05, .30, 'q3back')],
   7: [place(50, 85, 50, 1.12, .30, 'q3back'), place(19, 79, 26, 1.05, .30, 'q3back'), place(14, 52, 25.5, .98, .28, 'side'), place(29, 34, 37.5, .90, .24, 'q3front'), place(71, 34, 62.5, .90, .24, 'q3front'), place(86, 52, 74.5, .98, .28, 'side'), place(81, 79, 74, 1.05, .30, 'q3back')],
+  // Eight reuses the seven-seat table art and adds the top-centre chair; the side-top seats move outward.
+  8: [place(50, 85, 50, 1.12, .30, 'q3back'), place(19, 79, 26, 1.05, .30, 'q3back'), place(14, 52, 25.5, .98, .28, 'side'), place(26, 35, 35, .90, .24, 'q3front'), place(50, 27, 50, .88, .22, 'front'), place(74, 35, 65, .90, .24, 'q3front'), place(86, 52, 74.5, .98, .28, 'side'), place(81, 79, 74, 1.05, .30, 'q3back')],
 };
 
 export function sceneSeatLayout(count: number, viewerIndex: number | null) {
-  if (!Number.isInteger(count) || count < 4 || count > 7) throw new RangeError('Expected 4 to 7 seats');
+  if (!Number.isInteger(count) || count < 4 || count > 8) throw new RangeError('Expected 4 to 8 seats');
   if (viewerIndex !== null && (!Number.isInteger(viewerIndex) || viewerIndex < 0 || viewerIndex >= count)) throw new RangeError('Invalid viewer seat');
   const seats = sceneSeats[count as keyof typeof sceneSeats];
   return Array.from({ length: count }, (_, index) => {

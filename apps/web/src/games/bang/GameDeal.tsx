@@ -3,7 +3,7 @@ import type { RefObject } from 'react';
 import { m, useReducedMotion } from 'motion/react';
 import type { CardId, PublicPlayer } from '../../generated/protocol';
 import type { FxBatch } from './fx/fx';
-import { assetUrl, backFiles, cardFiles } from './scene/assetMap';
+import { assetUrl, backFiles, cardArt } from './scene/assetMap';
 import { cardFace } from './cardCatalog';
 import { DEAL_DURATION, dealPlan, shouldDeal } from './tableMotion';
 
@@ -52,7 +52,7 @@ export default function GameDeal({ batch, players, you, hand, enabled, ownTurn, 
       transition={{ duration: DEAL_DURATION, delay: flight.delay, ease: 'easeOut', opacity: { duration: DEAL_DURATION, delay: flight.delay, times: [0, .1, .85, 1] } }}
       onAnimationComplete={index === flights.length - 1 ? () => setFlights([]) : undefined}>
       <img src={assetUrl(backFiles.card)} alt="" />
-      {face && <m.img src={assetUrl(cardFiles[face.kind])} alt="" className="deal-front" initial={{ opacity: 0, rotateY: 90 }} animate={{ opacity: 1, rotateY: 0 }} transition={{ duration: .1, delay: flight.delay + DEAL_DURATION - .1 }} />}
+      {face && <m.img src={assetUrl(cardArt(flight.card!, face.kind))} alt="" className="deal-front" initial={{ opacity: 0, rotateY: 90 }} animate={{ opacity: 1, rotateY: 0 }} transition={{ duration: .1, delay: flight.delay + DEAL_DURATION - .1 }} />}
     </m.div>;
   })}</div>;
 }

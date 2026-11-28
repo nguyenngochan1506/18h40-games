@@ -358,7 +358,7 @@ impl Room {
     }
 
     fn view(&self, you: &str) -> RoomView {
-        let (min_players, max_players) = module(self.game_kind).limits();
+        let (min_players, max_players) = module(self.game_kind).limits(&self.settings);
         RoomView {
             game: self.game_kind,
             settings: self.settings.clone(),
@@ -383,11 +383,13 @@ impl Room {
         }
     }
 
-    fn broadcast_game(&self) {
-        let game = self.game.as_ref().unwrap();
+    fn broadcast_game(&mut self) {
+        let game = self.game.as_mut().unwrap();
         for member in &self.members {
-            if let Some(peer) = &member.connection {
-                peer.send(game.update(&member.view.id));
+            if let Some(peer) = &member.connection
+                && let Some(message) = game.update(&member.view.id)
+            {
+                peer.send(message);
             }
         }
     }
@@ -463,7 +465,7 @@ impl Room {
                 let mut token = [0; 16];
                 getrandom::fill(&mut token).map_err(|_| ErrorCode::ServerBusy)?;
                 let role = if self.phase == Phase::Waiting
-                    && self.players() < module(self.game_kind).limits().1 as usize
+                    && self.players() < module(self.game_kind).limits(&self.settings).1 as usize
                 {
                     Role::Player
                 } else {
@@ -492,7 +494,7 @@ impl Room {
                     room_code: self.code.clone(),
                     token: encode_token(&token),
                     room: self.view(&id),
-                    game: self.game.as_ref().map(|game| game.snapshot(&id)),
+                    game: self.game.as_mut().map(|game| game.snapshot(&id)),
                     voice_enabled: self.voice.is_some(),
                 });
             }
@@ -519,7 +521,7 @@ impl Room {
                     room_code: self.code.clone(),
                     token: encode_token(&token),
                     room: self.view(&id),
-                    game: self.game.as_ref().map(|game| game.snapshot(&id)),
+                    game: self.game.as_mut().map(|game| game.snapshot(&id)),
                     voice_enabled: self.voice.is_some(),
                 });
             }
@@ -545,7 +547,9 @@ impl Room {
                         if self.members[index].view.role == Role::Player {
                             return Ok(true);
                         }
-                        if self.players() >= module(self.game_kind).limits().1 as usize {
+                        if self.players()
+                            >= module(self.game_kind).limits(&self.settings).1 as usize
+                        {
                             return Err(ErrorCode::NoFreeSeat);
                         }
                         self.members[index].view.role = Role::Player;
@@ -589,7 +593,9 @@ impl Room {
                             if self.phase != Phase::Waiting {
                                 return Err(ErrorCode::WrongPhase);
                             }
-                            if self.players() < module(self.game_kind).limits().0 as usize {
+                            if self.players()
+                                < module(self.game_kind).limits(&self.settings).0 as usize
+                            {
                                 return Err(ErrorCode::NotEnoughPlayers);
                             }
                             let seats = self

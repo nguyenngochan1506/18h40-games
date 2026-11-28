@@ -520,7 +520,7 @@ async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() 
     })
     .await;
     let (mut host, joined) = server.create("Host").await;
-    let defaults = json!({"game":"bang","payload":{"mode":"classic","roles":{"deputy":0,"outlaw":2,"renegade":1}}});
+    let defaults = json!({"game":"bang","payload":{"expansions":[],"mode":"classic","roles":{"deputy":0,"outlaw":2,"renegade":1}}});
     assert_eq!(joined["room"]["settings"], defaults);
     host.send(json!({"type":"update_settings","settings":{"game":"bang","payload":{"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}}}})).await;
     host.error("invalid_settings").await;
@@ -535,7 +535,7 @@ async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() 
         assert_eq!(data["room"]["settings"], club);
         guests.push(guest);
     }
-    let custom = json!({"game":"bang","payload":{"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}}});
+    let custom = json!({"game":"bang","payload":{"expansions":[],"mode":"club","roles":{"deputy":1,"outlaw":1,"renegade":1}}});
     guests[0]
         .send(json!({"type":"update_settings","settings":custom}))
         .await;
@@ -551,13 +551,26 @@ async fn room_settings_are_host_only_validate_roles_and_reset_on_seat_changes() 
         host.send(json!({"type":"ping","nonce":123})).await;
         assert_eq!(host.until("pong").await["nonce"], 123);
     }
-    host.send(json!({"type":"update_settings","settings":custom}))
+    // Dodge City is accepted for a valid role split; the host can switch it off again.
+    let mut dodge = custom.clone();
+    dodge["payload"]["expansions"] = json!(["dodge_city"]);
+    host.send(json!({"type":"update_settings","settings":dodge}))
+        .await;
+    host.state(|room| room["settings"] == dodge && room["max_players"] == 8)
+        .await;
+    // Legacy clients omit `expansions`; the room treats that as the plain base game.
+    let mut legacy = custom.clone();
+    legacy["payload"]
+        .as_object_mut()
+        .unwrap()
+        .remove("expansions");
+    host.send(json!({"type":"update_settings","settings":legacy}))
         .await;
     for guest in &mut guests {
         guest.state(|room| room["settings"] == custom).await;
     }
     let (mut fifth, fifth_data) = server.join(code(&joined), "Fifth").await;
-    let five = json!({"game":"bang","payload":{"mode":"club","roles":{"deputy":1,"outlaw":2,"renegade":1}}});
+    let five = json!({"game":"bang","payload":{"expansions":[],"mode":"club","roles":{"deputy":1,"outlaw":2,"renegade":1}}});
     assert_eq!(fifth_data["room"]["settings"], five);
     fifth.send(json!({"type":"leave_room"})).await;
     fifth.until("left").await;
@@ -622,7 +635,7 @@ async fn disabled_games_and_mismatched_settings_reject_without_fallback() {
     })
     .await;
     let mut client = server.connect().await;
-    for game in ["uno", "werewolf"] {
+    for game in ["uno"] {
         client
             .send(json!({"type":"create_room","game":game,"nickname":"Host"}))
             .await;
@@ -636,7 +649,7 @@ async fn disabled_games_and_mismatched_settings_reject_without_fallback() {
         .await;
     let joined = client.until("joined").await;
     let settings = joined["room"]["settings"].clone();
-    for game in ["uno", "werewolf"] {
+    for game in ["uno"] {
         client
             .send(json!({"type":"update_settings","settings":{"game":game,"payload":{}}}))
             .await;

@@ -4,7 +4,7 @@ import type { Member, RoomView } from '../../generated/protocol.ts';
 import { waitingSeats } from './waitingSeats.ts';
 
 const player = (id: string, online = true): Member => ({ id, nickname: `Cao bồi ${id}`, role: 'player', online });
-const room = (members: Member[]): RoomView => ({ code: 'ABCDE', game: 'bang', settings: { game: 'bang', payload: { mode: 'classic', roles: { deputy: 0, outlaw: 2, renegade: 1 } } }, phase: 'waiting', host: 'a', you: 'a', min_players: 4, max_players: 7, members });
+const room = (members: Member[]): RoomView => ({ code: 'ABCDE', game: 'bang', settings: { game: 'bang', payload: { mode: 'classic', roles: { deputy: 0, outlaw: 2, renegade: 1 }, expansions: [] } }, phase: 'waiting', host: 'a', you: 'a', min_players: 4, max_players: 7, members });
 
 // Independent fixture from the seven painted chair positions before the module move.
 const paintedChairs = [
@@ -58,7 +58,7 @@ test('join, leave and take-seat follow the server membership order without expos
 });
 
 test('the platform waiting skin supports capacities above seven without game geometry', () => {
-  const state = { ...room(Array.from({ length: 16 }, (_, i) => player(String(i)))), game: 'werewolf' as const, settings: { game: 'werewolf' as const, payload: {} }, min_players: 5, max_players: 16 };
+  const state = { ...room(Array.from({ length: 16 }, (_, i) => player(String(i)))), game: 'werewolf' as const, settings: { game: 'werewolf' as const, payload: { reveal_role_on_death: true, roles: { villager: 2, werewolf: 1, alpha_wolf: 0, minion: 0, sorcerer: 0, seer: 1, bodyguard: 1, witch: 0, hunter: 0, cupid: 0, lycan: 0, cursed: 0, diseased: 0, prince: 0, mayor: 0, tanner: 0 } } }, min_players: 5, max_players: 16 };
   const seats = waitingSeats(state);
   assert.equal(seats.length, 16);
   for (const { seat, actor } of seats) {
@@ -66,4 +66,14 @@ test('the platform waiting skin supports capacities above seven without game geo
     assert.ok(Number.isFinite(seat.y) && seat.y >= 0 && seat.y <= 100);
     assert.match(actor, /^\/platform\/seat\//);
   }
+});
+
+test('an eight-seat expansion room keeps the seven painted chairs and adds the top-centre chair from the server capacity', () => {
+  const members = Array.from({ length: 8 }, (_, i) => player(String(i)));
+  const seats = waitingSeats({ ...room(members), max_players: 8 });
+  assert.equal(seats.length, 8);
+  assert.deepEqual(seats.map(({ seat }) => [seat.x, seat.y]), [[50, 85], [19, 79], [14, 52], [26, 35], [50, 27], [74, 35], [86, 52], [81, 79]]);
+  assert.equal(new Set(seats.map(({ seat }) => `${seat.x},${seat.y}`)).size, 8);
+  // Seven players in an eight-seat room still use their own chairs, so nobody moves when the eighth joins.
+  assert.deepEqual(waitingSeats({ ...room(members.slice(0, 7)), max_players: 8 }).map(({ seat }) => seat.x), seats.slice(0, 7).map(({ seat }) => seat.x));
 });

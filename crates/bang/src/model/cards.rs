@@ -6,7 +6,13 @@ pub struct CardId(pub u8);
 
 impl CardId {
     pub fn card(self) -> Option<Card> {
-        DECK.get(usize::from(self.0)).copied()
+        let index = usize::from(self.0);
+        DECK.get(index).copied().or_else(|| {
+            index
+                .checked_sub(super::DODGE_CITY_FIRST_CARD)
+                .and_then(|i| super::DODGE_CITY_DECK.get(i))
+                .copied()
+        })
     }
 }
 
@@ -36,9 +42,34 @@ pub enum CardKind {
     Remington,
     RevCarabine,
     Winchester,
+    // Dodge City: equipment and instant cards.
+    Binocular,
+    Hideout,
+    Punch,
+    RagTime,
+    Brawl,
+    Dodge,
+    Springfield,
+    Tequila,
+    Whisky,
+    // Dodge City: green-border cards (placed in front, activated from the next turn).
+    Bible,
+    Canteen,
+    CanCan,
+    TenGallonHat,
+    Conestoga,
+    Derringer,
+    BuffaloRifle,
+    Howitzer,
+    Pepperbox,
+    IronPlate,
+    PonyExpress,
+    Knife,
+    Sombrero,
 }
 
 impl CardKind {
+    /// Kinds of the base 80-card deck.
     pub const ALL: [Self; 22] = [
         Self::Bang,
         Self::Missed,
@@ -66,6 +97,69 @@ impl CardKind {
 }
 
 impl CardKind {
+    /// Kinds that exist only in Dodge City.
+    pub const DODGE_CITY: [Self; 22] = [
+        Self::Binocular,
+        Self::Hideout,
+        Self::Punch,
+        Self::RagTime,
+        Self::Brawl,
+        Self::Dodge,
+        Self::Springfield,
+        Self::Tequila,
+        Self::Whisky,
+        Self::Bible,
+        Self::Canteen,
+        Self::CanCan,
+        Self::TenGallonHat,
+        Self::Conestoga,
+        Self::Derringer,
+        Self::BuffaloRifle,
+        Self::Howitzer,
+        Self::Pepperbox,
+        Self::IronPlate,
+        Self::PonyExpress,
+        Self::Knife,
+        Self::Sombrero,
+    ];
+
+    pub const fn is_green(self) -> bool {
+        matches!(
+            self,
+            Self::Bible
+                | Self::Canteen
+                | Self::CanCan
+                | Self::TenGallonHat
+                | Self::Conestoga
+                | Self::Derringer
+                | Self::BuffaloRifle
+                | Self::Howitzer
+                | Self::Pepperbox
+                | Self::IronPlate
+                | Self::PonyExpress
+                | Self::Knife
+                | Self::Sombrero
+        )
+    }
+
+    /// Green cards that can be discarded as a Missed! (the only ones usable off-turn).
+    pub const fn green_missed(self) -> bool {
+        matches!(
+            self,
+            Self::Bible | Self::TenGallonHat | Self::IronPlate | Self::Sombrero
+        )
+    }
+
+    /// Cards that take their target's card into the user's hand (the rest discard it).
+    pub const fn takes_card(self) -> bool {
+        matches!(self, Self::Panic | Self::Conestoga | Self::RagTime)
+    }
+
+    /// Blue-border cards (what José Delgado may discard); green cards are not blue.
+    pub const fn is_blue(self) -> bool {
+        self.is_equipment() && !self.is_green()
+    }
+
     pub const fn weapon_range(self) -> Option<u16> {
         match self {
             Self::Volcanic => Some(1),
@@ -79,9 +173,16 @@ impl CardKind {
 
     pub const fn is_equipment(self) -> bool {
         self.weapon_range().is_some()
+            || self.is_green()
             || matches!(
                 self,
-                Self::Barrel | Self::Dynamite | Self::Jail | Self::Mustang | Self::Scope
+                Self::Barrel
+                    | Self::Dynamite
+                    | Self::Jail
+                    | Self::Mustang
+                    | Self::Scope
+                    | Self::Binocular
+                    | Self::Hideout
             )
     }
 }
@@ -125,7 +226,7 @@ pub struct Card {
 }
 
 impl Card {
-    const fn new(kind: CardKind, suit: Suit, rank: Rank) -> Self {
+    pub(super) const fn new(kind: CardKind, suit: Suit, rank: Rank) -> Self {
         Self { kind, suit, rank }
     }
 }

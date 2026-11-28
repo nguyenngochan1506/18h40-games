@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GameBoardProps, GameClient } from '../types.ts';
 import { GameLifetime } from './GameScope';
 import RawBoard from './Board';
-import Settings from './Settings';
+import Settings from './Settings.tsx';
 import { initialBangState, receiveFrame, selectGameView } from './state.ts';
 import { usePreloadedImages } from '../../shared/SaloonScene';
 import { gameSceneImages } from './scene/sceneImages.ts';

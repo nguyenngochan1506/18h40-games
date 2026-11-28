@@ -8,7 +8,7 @@ impl GameModule for Module {
     fn enabled(&self) -> bool {
         false
     }
-    fn limits(&self) -> (u32, u32) {
+    fn limits(&self, _settings: &GameSettings) -> (u32, u32) {
         ::uno::PLAYER_LIMITS
     }
     fn default_settings(&self) -> GameSettings {
@@ -52,7 +52,7 @@ impl GameSession for Session {
     fn view(&self, _member: &str) -> GameView {
         todo!("Filter UNO views by authenticated recipient")
     }
-    fn update(&self, _member: &str) -> ServerMessage {
+    fn update(&mut self, _member: &str) -> Option<ServerMessage> {
         todo!("Render recipient-filtered UNO events and view, including setup at seq=0")
     }
     fn apply(

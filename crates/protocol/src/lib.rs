@@ -1,10 +1,11 @@
 pub mod bang;
 pub mod cats;
+pub mod werewolf;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const PROTOCOL_VERSION: u32 = 9;
+pub const PROTOCOL_VERSION: u32 = 10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -20,7 +21,7 @@ pub enum GameKind {
 pub enum GameSettings {
     Bang(::bang::GameConfig),
     Uno(uno::Settings),
-    Werewolf(werewolf::Settings),
+    Werewolf(::werewolf::Settings),
     Cats(::cats::Settings),
 }
 
@@ -29,21 +30,24 @@ pub enum GameSettings {
 pub enum GameAction {
     Bang(::bang::Action),
     Uno(uno::Action),
-    Werewolf(werewolf::Action),
+    Werewolf(::werewolf::Action),
     Cats(::cats::Action),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "game", content = "payload", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
 pub enum GameView {
     Bang(bang::BangView),
     Uno(uno::View),
-    Werewolf(werewolf::View),
+    Werewolf(werewolf::WerewolfView),
     Cats(cats::CatsView),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "game", rename_all = "snake_case")]
+// The BANG! view is the largest variant; not worth boxing for a once-per-message value.
+#[allow(clippy::large_enum_variant)]
 pub enum GameDelta {
     Bang {
         events: bang::BangEvents,
@@ -54,8 +58,8 @@ pub enum GameDelta {
         view: uno::View,
     },
     Werewolf {
-        events: werewolf::Events,
-        view: werewolf::View,
+        events: werewolf::WerewolfEvents,
+        view: werewolf::WerewolfView,
     },
     Cats {
         events: cats::CatsEvents,
@@ -461,11 +465,13 @@ mod tests {
             discard_top: None,
             winner: None,
             store_slots: 0,
+            loot_table: None,
         };
         let player = BangView::Player(::bang::PlayerView {
             you: ::bang::PlayerId(0),
             hand: vec![::bang::CardId(0)],
             choices: vec![],
+            skill_uses: None,
             table: table.clone(),
         });
         let public = BangView::Spectator(table);
@@ -619,21 +625,38 @@ mod tests {
         for (game, payload) in [
             ("bang", json!(::bang::GameConfig::default())),
             ("uno", json!({})),
-            ("werewolf", json!({})),
+            ("werewolf", json!(::werewolf::Settings::default())),
             ("cats", json!(::cats::Settings::default())),
         ] {
             let value = json!({"game":game,"payload":payload});
             let settings: GameSettings = serde_json::from_value(value.clone()).unwrap();
             assert_eq!(serde_json::to_value(settings).unwrap(), value);
         }
-        for game in ["uno", "werewolf"] {
-            let view = json!({"game":game,"payload":{}});
-            let decoded: GameView = serde_json::from_value(view.clone()).unwrap();
-            assert_eq!(serde_json::to_value(decoded).unwrap(), view);
-            let update = json!({"game":game,"events":{},"view":{}});
-            let decoded: GameDelta = serde_json::from_value(update.clone()).unwrap();
-            assert_eq!(serde_json::to_value(decoded).unwrap(), update);
-        }
+        let uno_view = json!({"game":"uno","payload":{}});
+        let decoded: GameView = serde_json::from_value(uno_view.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), uno_view);
+        let uno_update = json!({"game":"uno","events":{},"view":{}});
+        let decoded: GameDelta = serde_json::from_value(uno_update.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), uno_update);
+
+        let ww_spec = werewolf::WerewolfView::Spectator(::werewolf::SpectatorView {
+            players: vec![],
+            phase: ::werewolf::PublicPhase::GameOver,
+            day_number: 1,
+            role_counts: ::werewolf::RoleDeck::default(),
+            reveal_role_on_death: true,
+            winner: None,
+            winning_players: vec![],
+            awaited_count: 0,
+        });
+        let ww_view = json!({"game":"werewolf","payload":ww_spec});
+        let decoded: GameView = serde_json::from_value(ww_view.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), ww_view);
+        let ww_events = werewolf::WerewolfEvents::for_recipient(&[], None);
+        let ww_update = json!({"game":"werewolf","events":ww_events,"view":ww_spec});
+        let decoded: GameDelta = serde_json::from_value(ww_update.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), ww_update);
+
         let cats_view = CatsView::Spectator(::cats::SpectatorView {
             settings: ::cats::Settings::default(),
             players: vec![],

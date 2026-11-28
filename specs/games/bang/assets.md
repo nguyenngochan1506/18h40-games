@@ -24,7 +24,8 @@ Hệ quả cần nhớ: các repo này **không có giấy phép**, và art thu�
 **[Chốt]** Cách quản lý file:
 - Art nằm trong git tại `assets/bang/` (nguồn gốc: `bang-cards@dc7c29a`); không còn script tải (`pnpm assets` đã bỏ). Muốn đổi art thì thay file trực tiếp.
 - Một bảng ánh xạ `loại bài → file ảnh` do dự án tự giữ (ví dụ `BANG → main_deck/01_bang.webp`, `SCOPE → main_deck/01_mirino.webp`). Đổi art sau này chỉ cần sửa bảng này, không đụng luật.
-- Chỉ liệt kê file bộ gốc (whitelist), không gom cả `main_deck/` hay `character/` vì lẫn bản mở rộng.
+- Chỉ liệt kê file đã duyệt (whitelist), không gom cả `main_deck/` hay `character/`.
+- Bản mở rộng Dodge City: 49 file (`main_deck/03_*.webp` 34 mặt lá, `character/03_*.webp` 15 nhân vật, khoảng 1,7 MB) lấy từ `bang-cards@dc7c29a` ngày 2026-11-27; người dùng đã duyệt đưa art bản mở rộng vào git, cùng rủi ro bản quyền như bộ gốc. Lá Dodge City (id từ 80) dùng ảnh `03_*` kể cả lá trùng loại bộ gốc (BANG!, Beer...); chữ tiếng Ý trên ảnh giữ nguyên.
 
 **Ngoại lệ:** font. Hai file TTF trong `bangweb` (American Typewriter, Palatino Linotype) có hạn chế phân phối ghi ngay trong metadata, và có thể thiếu dấu tiếng Việt. Dùng font hệ thống hoặc font có giấy phép nhúng được và đủ dấu tiếng Việt.
 

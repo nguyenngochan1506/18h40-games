@@ -20,8 +20,8 @@ export function DecodedImage({ src, className, alt = '', loading, onError }: { s
   return <img ref={image} src={src} alt={alt} aria-hidden={alt ? undefined : true} loading={loading} onError={onError} decoding="async" draggable={false} className={`decoded-image ${className ?? ''}${decoded === src ? ' is-decoded' : ''}`} />;
 }
 
-export function SaloonBackdrop() {
-  return <div className="saloon-backdrop" aria-hidden="true"><DecodedImage src="/platform/saloon-bg.webp" /><div className="saloon-shade" /><div className="saloon-embers" /><div className="saloon-lamplight" /></div>;
+export function SaloonBackdrop({ src = '/platform/saloon-bg.webp' }: { src?: string }) {
+  return <div className="saloon-backdrop" aria-hidden="true"><DecodedImage src={src} /><div className="saloon-shade" /><div className="saloon-embers" /><div className="saloon-lamplight" /></div>;
 }
 
 export function SceneTransition({ children }: { children: ReactNode }) {

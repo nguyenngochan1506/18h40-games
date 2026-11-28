@@ -31,6 +31,6 @@ export const demoGame: GameSnapshot = {
 };
 
 export const demoRoom: RoomView = {
-  code: 'DEMO', game: 'bang', settings: { game: 'bang', payload: { mode: 'classic', roles: { deputy: 1, outlaw: 2, renegade: 1 } } }, phase: 'playing', host: '1', you: '1', min_players: 4, max_players: 7,
+  code: 'DEMO', game: 'bang', settings: { game: 'bang', payload: { mode: 'classic', roles: { deputy: 1, outlaw: 2, renegade: 1 }, expansions: [] } }, phase: 'playing', host: '1', you: '1', min_players: 4, max_players: 7,
   members: demoGame.seats.map((seat) => ({ id: seat.member_id, nickname: seat.nickname, role: 'player', online: seat.member_id !== '5' })),
 };

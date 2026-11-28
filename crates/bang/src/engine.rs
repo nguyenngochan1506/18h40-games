@@ -1,8 +1,8 @@
 use crate::state::{Defense, DrawContinuation};
 use crate::{
-    actions::{Action, ActionError, CardSelection, validate},
+    actions::{Action, ActionError, CardSelection, apache_immune, validate},
     events::{Event, EventKind, Visibility},
-    model::{CardId, CardKind, Character, DECK, PlayerId, Role, Suit},
+    model::{CardId, CardKind, Character, PlayerId, Role, Suit},
     rules,
     state::{AttackKind, GameState, PendingKind, Player, TurnState, TurnStep},
 };
@@ -17,10 +17,14 @@ pub fn setup<R: Rng + ?Sized>(
     rng: &mut R,
 ) -> Result<(GameState, Vec<Event>), ActionError> {
     use Role::*;
-    if !(4..=7).contains(&count) {
+    if !config.expansions_valid() {
+        return Err(ActionError::InvalidSettings);
+    }
+    let max_players = config.max_players();
+    if !(4..=max_players).contains(&count) {
         return Err(ActionError::InvalidPlayerCount);
     }
-    if !config.roles.valid_for(count) {
+    if !config.roles.valid_within(count, max_players) {
         return Err(ActionError::InvalidSettings);
     }
     let mut roles = vec![Sheriff];
@@ -32,7 +36,7 @@ pub fn setup<R: Rng + ?Sized>(
         roles.extend(std::iter::repeat_n(role, usize::from(count)));
     }
     roles.shuffle(rng);
-    let mut characters = Character::ALL;
+    let mut characters = config.characters();
     characters.shuffle(rng);
     let players: Vec<_> = roles
         .iter()
@@ -48,11 +52,14 @@ pub fn setup<R: Rng + ?Sized>(
                 hand: Vec::new(),
                 in_play: Vec::new(),
                 jail_turns_served: 0,
+                fresh_green: Vec::new(),
+                placed_green: Vec::new(),
+                copied: None,
             }
         })
         .collect();
     let sheriff = PlayerId(roles.iter().position(|role| *role == Sheriff).unwrap());
-    let mut draw_pile: Vec<_> = (0..DECK.len()).map(|id| CardId(id as u8)).collect();
+    let mut draw_pile = config.deck();
     draw_pile.shuffle(rng);
     let mut state = GameState {
         config,
@@ -67,6 +74,7 @@ pub fn setup<R: Rng + ?Sized>(
         },
         pending: Vec::new(),
         winner: None,
+        skill_uses: Default::default(),
         next_pending_id: 1,
         hidden_discards: Vec::new(),
     };
@@ -140,7 +148,7 @@ pub fn apply<R: Rng + ?Sized>(
             else {
                 unreachable!()
             };
-            if checks_left == 1 && state.players[target.0].character == Character::Jourdonnais {
+            if checks_left == 1 && state.players[target.0].has(Character::Jourdonnais) {
                 skills::activate(state, target, &mut events);
             }
             checks::begin(
@@ -180,20 +188,14 @@ pub fn apply<R: Rng + ?Sized>(
                 match kind {
                     CardKind::Bang => {
                         if state.turn.bangs_played > 0
-                            && state.players[player.0].character == Character::WillyTheKid
+                            && state.players[player.0].has(Character::WillyTheKid)
                         {
                             skills::activate(state, player, &mut events);
                         }
-                        skills::range_used(state, player, target.unwrap(), &mut events);
                         state.turn.bangs_played += 1;
-                        start_attack(
-                            state,
-                            player,
-                            target.unwrap(),
-                            AttackKind::Bang,
-                            &mut events,
-                        );
+                        shoot(state, player, target.unwrap(), true, &mut events);
                     }
+                    CardKind::Punch => shoot(state, player, target.unwrap(), false, &mut events),
                     CardKind::Beer => drink_beer(state, player, &mut events),
                     CardKind::Stagecoach => draw(state, player, 2, rng, &mut events),
                     CardKind::WellsFargo => draw(state, player, 3, rng, &mut events),
@@ -208,9 +210,15 @@ pub fn apply<R: Rng + ?Sized>(
                         initiator: player,
                         opponent: target.unwrap(),
                         next: target.unwrap(),
+                        initiator_bangs: 0,
+                        opponent_bangs: 0,
                     }),
                     CardKind::Gatling | CardKind::Indians => {
-                        let targets = turn_order(state, player, false);
+                        let mut targets = turn_order(state, player, false);
+                        if kind == CardKind::Indians {
+                            let suit = card.card().unwrap().suit;
+                            targets.retain(|&t| !apache_immune(state, player, t, &[suit]));
+                        }
                         state.push_pending(PendingKind::ResolveTargets {
                             source: player,
                             kind: if kind == CardKind::Gatling {
@@ -238,6 +246,163 @@ pub fn apply<R: Rng + ?Sized>(
                     _ => unreachable!("validated playable card"),
                 }
             }
+        }
+        Action::PlayWithDiscard {
+            card,
+            discard,
+            target,
+        } => {
+            let kind = card.card().unwrap().kind;
+            discard_from_hand(state, player, discard, &mut events);
+            play_card(state, player, card, target, &mut events);
+            match kind {
+                CardKind::Springfield => shoot(state, player, target.unwrap(), false, &mut events),
+                CardKind::Tequila => heal_by(state, target.unwrap(), 1, &mut events),
+                CardKind::Whisky => heal_by(state, player, 2, &mut events),
+                _ => unreachable!("validated playable card"),
+            }
+        }
+        Action::AffectWithDiscard {
+            card,
+            discard,
+            target,
+            selection,
+        } => {
+            discard_from_hand(state, player, discard, &mut events);
+            play_card(state, player, card, Some(target), &mut events);
+            affect_card(
+                state,
+                player,
+                target,
+                CardKind::RagTime,
+                selection,
+                rng,
+                &mut events,
+            );
+        }
+        Action::Brawl {
+            card,
+            discard,
+            mut picks,
+        } => {
+            discard_from_hand(state, player, discard, &mut events);
+            play_card(state, player, card, None, &mut events);
+            let order = turn_order(state, player, false);
+            picks.sort_by_key(|pick| order.iter().position(|id| *id == pick.target));
+            state.push_pending(PendingKind::ResolveBrawl {
+                source: player,
+                picks,
+                cursor: 0,
+            });
+        }
+        Action::ActivateGreen {
+            card,
+            target,
+            selection,
+        } => {
+            let kind = card.card().unwrap().kind;
+            spend_green(state, player, card, target, &mut events);
+            match kind {
+                CardKind::Bible => draw(state, player, 1, rng, &mut events),
+                CardKind::Canteen => heal_by(state, player, 1, &mut events),
+                CardKind::PonyExpress => draw(state, player, 3, rng, &mut events),
+                CardKind::CanCan | CardKind::Conestoga => affect_card(
+                    state,
+                    player,
+                    target.unwrap(),
+                    kind,
+                    selection.unwrap(),
+                    rng,
+                    &mut events,
+                ),
+                CardKind::Derringer => {
+                    draw(state, player, 1, rng, &mut events);
+                    shoot(state, player, target.unwrap(), false, &mut events);
+                }
+                CardKind::Knife | CardKind::Pepperbox | CardKind::BuffaloRifle => {
+                    shoot(state, player, target.unwrap(), false, &mut events)
+                }
+                CardKind::Howitzer => {
+                    let targets = turn_order(state, player, false);
+                    state.push_pending(PendingKind::ResolveTargets {
+                        source: player,
+                        kind: AttackKind::Gatling,
+                        targets,
+                        cursor: 0,
+                    });
+                }
+                _ => unreachable!("validated green card"),
+            }
+        }
+        Action::ChuckDraw => {
+            skills::activate(state, player, &mut events);
+            damage_player(state, player, None, None, 1, rng, &mut events);
+            draw(state, player, 2, rng, &mut events);
+        }
+        Action::JoseDelgado { card } => {
+            skills::activate(state, player, &mut events);
+            state.skill_uses.jose_delgado += 1;
+            discard_from_hand(state, player, card, &mut events);
+            draw(state, player, 2, rng, &mut events);
+        }
+        Action::DocHolyday { cards, target } => {
+            skills::activate(state, player, &mut events);
+            state.skill_uses.doc_holyday = true;
+            for card in cards {
+                discard_from_hand(state, player, card, &mut events);
+            }
+            shoot(state, player, target, false, &mut events);
+        }
+        Action::VultureTake { selection, .. } => {
+            let PendingKind::VultureSplit {
+                victim,
+                holders,
+                cursor,
+                pool,
+                hand_len,
+            } = &mut state.pending.last_mut().unwrap().kind
+            else {
+                unreachable!("validated vulture frame")
+            };
+            let (victim, holder) = (*victim, holders[*cursor % holders.len()]);
+            *cursor = (*cursor + 1) % holders.len();
+            let (card, from_hand) = match selection {
+                CardSelection::Hand => {
+                    *hand_len -= 1;
+                    (pool.remove(0), true)
+                }
+                CardSelection::InPlay(card) => {
+                    let index =
+                        *hand_len + pool[*hand_len..].iter().position(|c| *c == card).unwrap();
+                    (pool.remove(index), false)
+                }
+            };
+            let exhausted = pool.is_empty();
+            skills::activate(state, holder, &mut events);
+            if from_hand {
+                // Private to the one who took it, like any blind pick.
+                skills::receive(state, holder, vec![card], &mut events);
+            } else {
+                state.players[holder.0].hand.push(card);
+                events.push(Event::public(EventKind::TableCardTaken {
+                    player: holder,
+                    target: victim,
+                    card,
+                }));
+            }
+            if exhausted {
+                state.pending.pop();
+                finish_elimination(state, victim, rng, &mut events);
+            } else {
+                state.renew_pending_id();
+            }
+        }
+        Action::ChooseCopy { target, .. } => {
+            state.pending.pop();
+            let copied = state.players[target.0].character;
+            state.players[player.0].copied = Some(copied);
+            state.skill_uses.vera_copy = true;
+            events.push(Event::public(EventKind::CopyChosen { player, copied }));
         }
         Action::AffectCard {
             card,
@@ -277,12 +442,33 @@ pub fn apply<R: Rng + ?Sized>(
         }
         Action::Respond { card, .. } => {
             let frame = state.pending.last().unwrap().clone();
+            let expected = crate::actions::response_kind(&frame.kind).unwrap();
+            let mut extra_draws = 0;
             if let Some(card) = card {
-                if card.card().unwrap().kind != crate::actions::response_kind(&frame.kind).unwrap()
-                {
-                    skills::activate(state, player, &mut events);
+                let physical = card.card().unwrap().kind;
+                let from_table = state.players[player.0].in_play.contains(&card);
+                if from_table {
+                    spend_green(state, player, card, None, &mut events);
+                    // Bible: Missed! and draw a card.
+                    extra_draws += usize::from(physical == CardKind::Bible);
+                } else {
+                    let natural = physical == expected
+                        || (expected == CardKind::Missed && physical == CardKind::Dodge);
+                    if !natural {
+                        skills::activate(state, player, &mut events);
+                    }
+                    play_card(state, player, card, None, &mut events);
+                    // Dodge: Missed! and draw a card (not when it stands in for a BANG!).
+                    extra_draws +=
+                        usize::from(physical == CardKind::Dodge && expected == CardKind::Missed);
+                    // Molly Stark: voluntary answers off-turn; Duel answers are paid at its end.
+                    if !matches!(frame.kind, PendingKind::Duel { .. })
+                        && state.players[player.0].has(Character::MollyStark)
+                        && state.turn.player != player
+                    {
+                        extra_draws += 1;
+                    }
                 }
-                play_card(state, player, card, None, &mut events);
                 match frame.kind {
                     PendingKind::AttackResponse { remaining, .. } => {
                         if remaining <= 1 {
@@ -310,18 +496,27 @@ pub fn apply<R: Rng + ?Sized>(
                         opponent,
                         ..
                     } => {
-                        if let PendingKind::Duel { next, .. } =
-                            &mut state.pending.last_mut().unwrap().kind
+                        if let PendingKind::Duel {
+                            next,
+                            initiator_bangs,
+                            opponent_bangs,
+                            ..
+                        } = &mut state.pending.last_mut().unwrap().kind
                         {
-                            *next = if player == initiator {
-                                opponent
+                            if player == initiator {
+                                *initiator_bangs += 1;
+                                *next = opponent;
                             } else {
-                                initiator
-                            };
+                                *opponent_bangs += 1;
+                                *next = initiator;
+                            }
                         }
                         state.renew_pending_id();
                     }
                     _ => unreachable!("validated response frame"),
+                }
+                if extra_draws > 0 {
+                    draw(state, player, extra_draws, rng, &mut events);
                 }
             } else {
                 state.pending.pop();
@@ -349,6 +544,8 @@ pub fn apply<R: Rng + ?Sized>(
                     PendingKind::Duel {
                         initiator,
                         opponent,
+                        initiator_bangs,
+                        opponent_bangs,
                         ..
                     } => {
                         let source = if player == initiator {
@@ -369,6 +566,18 @@ pub fn apply<R: Rng + ?Sized>(
                             && let PendingKind::Dying { duel_initiator, .. } = &mut frame.kind
                         {
                             *duel_initiator = Some(initiator);
+                        }
+                        // Molly Stark: one card per BANG! she discarded, once the Duel is over.
+                        for (duelist, bangs) in
+                            [(initiator, initiator_bangs), (opponent, opponent_bangs)]
+                        {
+                            if bangs > 0
+                                && state.players[duelist.0].alive
+                                && state.players[duelist.0].has(Character::MollyStark)
+                            {
+                                skills::activate(state, duelist, &mut events);
+                                draw(state, duelist, usize::from(bangs), rng, &mut events);
+                            }
                         }
                     }
                     _ => unreachable!("validated response frame"),
@@ -415,6 +624,54 @@ fn play_card(
     }));
 }
 
+/// Discards an extra card from hand as part of a card's cost or a skill.
+fn discard_from_hand(
+    state: &mut GameState,
+    player: PlayerId,
+    card: CardId,
+    events: &mut Vec<Event>,
+) {
+    remove_from_hand(state, player, card);
+    state.discard(card);
+    events.push(Event::public(EventKind::CardDiscarded { player, card }));
+}
+
+/// A BANG! effect at one target. `bang_card` is true only for a card played as a BANG! (the
+/// only shot Slab the Killer doubles, FAQ Q04); the BANG! limit is the caller's business.
+fn shoot(
+    state: &mut GameState,
+    source: PlayerId,
+    target: PlayerId,
+    bang_card: bool,
+    events: &mut Vec<Event>,
+) {
+    skills::range_used(state, source, target, events);
+    start_attack(state, source, target, AttackKind::Bang, bang_card, events);
+}
+
+/// Discards a ready green card from in front of its owner to use its effect.
+fn spend_green(
+    state: &mut GameState,
+    player: PlayerId,
+    card: CardId,
+    target: Option<PlayerId>,
+    events: &mut Vec<Event>,
+) {
+    let index = state.players[player.0]
+        .in_play
+        .iter()
+        .position(|id| *id == card)
+        .unwrap();
+    state.players[player.0].in_play.remove(index);
+    clear_in_play_state(state, player, card);
+    state.discard(card);
+    events.push(Event::public(EventKind::GreenActivated {
+        player,
+        card,
+        target,
+    }));
+}
+
 fn equip_card(
     state: &mut GameState,
     source: PlayerId,
@@ -435,6 +692,10 @@ fn equip_card(
     }
     remove_from_hand(state, source, card);
     state.players[target.0].in_play.push(card);
+    if kind.is_green() {
+        state.players[target.0].fresh_green.push(card);
+        state.players[target.0].placed_green.push(card);
+    }
     if state.config.mode == crate::GameMode::Club && kind == CardKind::Dynamite {
         state.dynamite_round = Some(crate::DynamiteRound {
             card,
@@ -504,7 +765,7 @@ fn resolve_affected_card(
     from_hand: bool,
     events: &mut Vec<Event>,
 ) {
-    if kind == CardKind::Panic {
+    if kind.takes_card() {
         state.players[source.0].hand.push(card);
     } else {
         if from_hand {
@@ -530,7 +791,7 @@ fn resolve_affected_card(
             visibility: Visibility::Player(source),
             kind: detail.clone(),
         });
-        if target != source && kind == CardKind::CatBalou {
+        if target != source && !kind.takes_card() {
             events.push(Event {
                 visibility: Visibility::Player(target),
                 kind: detail,
@@ -547,9 +808,13 @@ fn resolve_affected_card(
 }
 
 fn heal(state: &mut GameState, player: PlayerId, events: &mut Vec<Event>) {
+    heal_by(state, player, 1, events);
+}
+
+fn heal_by(state: &mut GameState, player: PlayerId, amount: i16, events: &mut Vec<Event>) {
     let own = &mut state.players[player.0];
     let previous = own.health;
-    own.health = (own.health + 1).min(own.max_health);
+    own.health = (own.health + amount).min(own.max_health);
     if own.health != previous {
         events.push(Event::public(EventKind::HealthChanged {
             player,
@@ -562,7 +827,13 @@ fn heal(state: &mut GameState, player: PlayerId, events: &mut Vec<Event>) {
 
 fn drink_beer(state: &mut GameState, player: PlayerId, events: &mut Vec<Event>) {
     if state.players.iter().filter(|p| p.alive).count() > 2 {
-        heal(state, player, events);
+        let amount = if state.players[player.0].has(Character::TequilaJoe) {
+            skills::activate(state, player, events);
+            2
+        } else {
+            1
+        };
+        heal_by(state, player, amount, events);
     }
 }
 
@@ -607,6 +878,10 @@ fn discard_in_play(state: &mut GameState, player: PlayerId, card: CardId, events
 }
 
 fn clear_in_play_state(state: &mut GameState, player: PlayerId, card: CardId) {
+    state.players[player.0].fresh_green.retain(|id| *id != card);
+    state.players[player.0]
+        .placed_green
+        .retain(|id| *id != card);
     if card.card().unwrap().kind == CardKind::Jail {
         state.players[player.0].jail_turns_served = 0;
     }
@@ -660,12 +935,21 @@ fn clear_pending(state: &mut GameState, events: &mut Vec<Event>) {
             PendingKind::KeepCards { pool, .. } | PendingKind::ChooseDrawResult { pool, .. } => {
                 discard_private_pool(state, pool, events);
             }
+            PendingKind::VultureSplit {
+                mut pool, hand_len, ..
+            } => {
+                let table = pool.split_off(hand_len);
+                discard_private_pool(state, pool, events);
+                return_pool(state, table, events);
+            }
             PendingKind::PickHandSlot { .. }
             | PendingKind::DrawChoice { .. }
             | PendingKind::Check { .. }
             | PendingKind::AttackResponse { .. }
             | PendingKind::Dying { .. }
             | PendingKind::Duel { .. }
+            | PendingKind::ChooseCopy { .. }
+            | PendingKind::ResolveBrawl { .. }
             | PendingKind::ResolveTargets { .. } => {}
         }
     }
@@ -682,20 +966,23 @@ fn eliminate<R: Rng + ?Sized>(
     state.players[player.0].alive = false;
     let role = state.players[player.0].role;
     events.push(Event::public(EventKind::PlayerEliminated { player, role }));
-    let vulture = state
-        .players
-        .iter()
-        .position(|p| p.alive && p.character == Character::VultureSam)
-        .map(PlayerId);
-    let inherited = if vulture.is_some() {
-        let own = &mut state.players[player.0];
-        std::mem::take(&mut own.hand)
-            .into_iter()
-            .chain(std::mem::take(&mut own.in_play))
-            .collect::<Vec<_>>()
-    } else {
+    // Everyone with Vulture Sam's ability (Vera Custer may copy it), nearest clockwise first.
+    let count = state.players.len();
+    let holders: Vec<PlayerId> = (1..count)
+        .map(|offset| PlayerId((player.0 + offset) % count))
+        .filter(|id| state.players[id.0].alive && state.players[id.0].has(Character::VultureSam))
+        .collect();
+    let mut hand_len = 0;
+    let inherited = if holders.is_empty() {
         discard_all(state, player, events);
         Vec::new()
+    } else {
+        let own = &mut state.players[player.0];
+        let hand = std::mem::take(&mut own.hand);
+        hand_len = hand.len();
+        hand.into_iter()
+            .chain(std::mem::take(&mut own.in_play))
+            .collect::<Vec<_>>()
     };
     for &card in &inherited {
         clear_in_play_state(state, player, card);
@@ -715,16 +1002,59 @@ fn eliminate<R: Rng + ?Sized>(
             discard_all(state, source, events);
         }
     }
-    if let Some(vulture) = vulture
-        && !inherited.is_empty()
-    {
-        skills::activate(state, vulture, events);
-        events.push(Event::public(EventKind::CardsInherited {
-            player: vulture,
-            victim: player,
-            count: inherited.len(),
-        }));
-        skills::receive(state, vulture, inherited, events);
+    if !inherited.is_empty() {
+        if let [vulture] = holders[..] {
+            skills::activate(state, vulture, events);
+            events.push(Event::public(EventKind::CardsInherited {
+                player: vulture,
+                victim: player,
+                count: inherited.len(),
+            }));
+            skills::receive(state, vulture, inherited, events);
+        } else {
+            // FAQ Q3: Vera and Sam alternate, the nearer one first, each choosing a hand or table
+            // card. Only here is the hand shuffled (a lone Vulture takes it in order, no RNG).
+            // Greg/Herb and the win check wait until the split is done.
+            let mut inherited = inherited;
+            inherited[..hand_len].shuffle(rng);
+            state.push_pending(PendingKind::VultureSplit {
+                victim: player,
+                holders,
+                cursor: 0,
+                pool: inherited,
+                hand_len,
+            });
+            return;
+        }
+    }
+    finish_elimination(state, player, rng, events);
+}
+
+/// What follows an elimination once Vulture Sam's loot is settled: Greg Digger, Herb Hunter, then
+/// the win check (which stops any remaining targets of the card being resolved).
+fn finish_elimination<R: Rng + ?Sized>(
+    state: &mut GameState,
+    player: PlayerId,
+    rng: &mut R,
+    events: &mut Vec<Event>,
+) {
+    for index in 0..state.players.len() {
+        let holder = &state.players[index];
+        if index == player.0 || !holder.alive {
+            continue;
+        }
+        let (greg, herb) = (
+            holder.has(Character::GregDigger),
+            holder.has(Character::HerbHunter),
+        );
+        if greg {
+            skills::activate(state, PlayerId(index), events);
+            heal_by(state, PlayerId(index), 2, events);
+        }
+        if herb {
+            skills::activate(state, PlayerId(index), events);
+            draw(state, PlayerId(index), 2, rng, events);
+        }
     }
     if let Some(winner) = rules::winner(state) {
         state.winner = Some(winner);
@@ -776,17 +1106,20 @@ fn start_attack(
     source: PlayerId,
     target: PlayerId,
     kind: AttackKind,
+    bang_card: bool,
     events: &mut Vec<Event>,
 ) {
-    let slab =
-        kind == AttackKind::Bang && state.players[source.0].character == Character::SlabTheKiller;
+    let slab = bang_card && state.players[source.0].has(Character::SlabTheKiller);
     if slab {
         skills::activate(state, source, events);
     }
     let mut checks_left = 0;
     if kind != AttackKind::Indians {
-        checks_left = u8::from(state.players[target.0].has_in_play(CardKind::Barrel));
-        if state.players[target.0].character == Character::Jourdonnais {
+        checks_left = u8::from(
+            state.players[target.0].has_in_play(CardKind::Barrel)
+                && rules::table_active(state, target),
+        );
+        if state.players[target.0].has(Character::Jourdonnais) {
             checks_left += 1;
         }
     }
@@ -822,12 +1155,18 @@ fn next_living(state: &GameState, current: PlayerId) -> PlayerId {
 }
 
 fn next_turn(state: &mut GameState, events: &mut Vec<Event>) {
+    // Green Missed! cards placed this turn become available now that the turn is over.
+    state.players[state.turn.player.0].placed_green.clear();
     let player = next_living(state, state.turn.player);
     state.turn = TurnState {
         player,
         step: TurnStep::Dynamite,
         bangs_played: 0,
     };
+    state.skill_uses = Default::default();
+    // Green cards placed in an earlier turn become usable now.
+    state.players[player.0].fresh_green.clear();
+    state.players[player.0].placed_green.clear();
     events.push(Event::public(EventKind::TurnStarted { player }));
 }
 
@@ -903,7 +1242,73 @@ fn advance_until_input<R: Rng + ?Sized>(
                     {
                         *stored = cursor + 1;
                     }
-                    start_attack(state, source, targets[cursor], kind, events);
+                    start_attack(state, source, targets[cursor], kind, false, events);
+                    continue;
+                }
+                PendingKind::VultureSplit {
+                    victim,
+                    holders,
+                    mut cursor,
+                    pool,
+                    ..
+                } => {
+                    let living =
+                        |index: usize| state.players[holders[index % holders.len()].0].alive;
+                    let start = cursor;
+                    while cursor < start + holders.len() && !living(cursor) {
+                        cursor += 1;
+                    }
+                    if pool.is_empty() || cursor == start + holders.len() {
+                        state.pending.pop();
+                        discard_private_pool(state, pool, events);
+                        finish_elimination(state, victim, rng, events);
+                        continue;
+                    }
+                    if cursor != start {
+                        if let PendingKind::VultureSplit { cursor: stored, .. } =
+                            &mut state.pending.last_mut().unwrap().kind
+                        {
+                            *stored = cursor % holders.len();
+                        }
+                        state.renew_pending_id();
+                    }
+                }
+                PendingKind::ResolveBrawl {
+                    source,
+                    picks,
+                    cursor,
+                } => {
+                    if cursor >= picks.len() || !state.players[source.0].alive {
+                        state.pending.pop();
+                        continue;
+                    }
+                    if let PendingKind::ResolveBrawl { cursor: stored, .. } =
+                        &mut state.pending.last_mut().unwrap().kind
+                    {
+                        *stored = cursor + 1;
+                    }
+                    let pick = picks[cursor];
+                    let target = pick.target;
+                    if !state.players[target.0].alive {
+                        continue;
+                    }
+                    let present = match pick.selection {
+                        CardSelection::InPlay(card) => {
+                            state.players[target.0].in_play.contains(&card)
+                        }
+                        CardSelection::Hand => !state.players[target.0].hand.is_empty(),
+                    };
+                    if present {
+                        affect_card(
+                            state,
+                            source,
+                            target,
+                            CardKind::Brawl,
+                            pick.selection,
+                            rng,
+                            events,
+                        );
+                    }
                     continue;
                 }
                 PendingKind::GeneralStore {
@@ -1022,6 +1427,18 @@ pub fn default_action(state: &GameState) -> Option<(PlayerId, Action)> {
                     slot: 0,
                 }
             }
+            PendingKind::VultureSplit { pool, hand_len, .. } => Action::VultureTake {
+                pending_id,
+                selection: if *hand_len > 0 {
+                    CardSelection::Hand
+                } else {
+                    CardSelection::InPlay(pool[0])
+                },
+            },
+            PendingKind::ChooseCopy { player } => Action::ChooseCopy {
+                pending_id,
+                target: next_living(state, *player),
+            },
             PendingKind::DrawChoice { .. } => Action::ChooseDrawSource {
                 pending_id,
                 source: crate::actions::DrawSource::Deck,
@@ -1045,10 +1462,7 @@ pub fn default_action(state: &GameState) -> Option<(PlayerId, Action)> {
         }
     } else {
         let player = &state.players[decision.player.0];
-        let excess = player
-            .hand
-            .len()
-            .saturating_sub(player.health.max(0) as usize);
+        let excess = player.hand.len().saturating_sub(player.hand_limit());
         Action::EndTurn {
             discard: player.hand.iter().rev().take(excess).copied().collect(),
         }

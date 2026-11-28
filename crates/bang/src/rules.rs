@@ -69,6 +69,22 @@ pub(crate) fn winner(state: &GameState) -> Option<Winner> {
     }
 }
 
+/// Belle Star: during her turn every card in front of the other players is inactive.
+pub fn table_active(state: &GameState, owner: PlayerId) -> bool {
+    let turn = &state.players[state.turn.player.0];
+    owner == state.turn.player || !(turn.alive && turn.has(Character::BelleStar))
+}
+
+fn count_in_play(state: &GameState, owner: PlayerId, kinds: &[CardKind]) -> u8 {
+    if !table_active(state, owner) {
+        return 0;
+    }
+    kinds
+        .iter()
+        .filter(|kind| state.players[owner.0].has_in_play(**kind))
+        .count() as u8
+}
+
 pub fn effective_distance(
     state: &GameState,
     from: PlayerId,
@@ -84,10 +100,10 @@ pub fn effective_distance(
         from,
         to,
         DistanceModifiers {
-            target_mustang: u8::from(target.has_in_play(CardKind::Mustang)),
-            source_scope: u8::from(source.has_in_play(CardKind::Scope)),
-            target_paul: u8::from(from != to && target.character == Character::PaulRegret),
-            source_rose: u8::from(source.character == Character::RoseDoolan),
+            target_mustang: count_in_play(state, to, &[CardKind::Mustang, CardKind::Hideout]),
+            source_scope: count_in_play(state, from, &[CardKind::Scope, CardKind::Binocular]),
+            target_paul: u8::from(from != to && target.has(Character::PaulRegret)),
+            source_rose: u8::from(source.has(Character::RoseDoolan)),
         },
     )
 }

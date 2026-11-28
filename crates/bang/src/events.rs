@@ -113,6 +113,23 @@ pub enum EventKind {
         target: PlayerId,
         card: CardId,
     },
+    /// A green card was discarded from in front of its owner for its effect.
+    GreenActivated {
+        player: PlayerId,
+        card: CardId,
+        target: Option<PlayerId>,
+    },
+    /// Pat Brennan took a card from in front of a player instead of drawing.
+    TableCardTaken {
+        player: PlayerId,
+        target: PlayerId,
+        card: CardId,
+    },
+    /// Vera Custer now holds the ability of this character.
+    CopyChosen {
+        player: PlayerId,
+        copied: Character,
+    },
     DynamiteRoundEnded {
         player: PlayerId,
     },
