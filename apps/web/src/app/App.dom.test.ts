@@ -128,6 +128,7 @@ test('creating pushes a room URL and leaving replaces it with the lobby', async 
 });
 
 test('only a waiting host can request a new game and the room follows the server snapshot', async t => {
+  const { registry } = await vite.ssrLoadModule('/src/games/registry.ts');
   const fx = await mount(t, '/r/ABCDE', saved);
   const session = joined();
   assert.equal(session.type, 'joined');
@@ -135,9 +136,8 @@ test('only a waiting host can request a new game and the room follows the server
   const picker = '.waiting-game-switch';
   const initialSelect = fx.container.querySelector<HTMLSelectElement>(`${picker} select`);
   assert.ok(initialSelect);
-  assert.deepEqual([...initialSelect.options].map(option => option.value), ['', 'werewolf']);
+  assert.deepEqual([...initialSelect.options].map(option => option.value), ['', 'werewolf', 'cats']);
 
-  const { registry } = await vite.ssrLoadModule('/src/games/registry.ts');
   registry.uno.enabled = true;
   t.after(() => { registry.uno.enabled = false; });
   t.mock.method(registry.uno, 'load', async () => ({
@@ -156,7 +156,7 @@ test('only a waiting host can request a new game and the room follows the server
   const select = fx.container.querySelector<HTMLSelectElement>(`${picker} select`)!;
   const button = fx.container.querySelector<HTMLButtonElement>(`${picker} button`)!;
   assert.equal(button.disabled, true);
-  assert.deepEqual([...select.options].map(option => option.value), ['', 'uno', 'werewolf']);
+  assert.deepEqual([...select.options].map(option => option.value), ['', 'uno', 'werewolf', 'cats']);
   await act(() => { select.value = 'uno'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   assert.equal(button.disabled, false);
   await fx.click(`${picker} button`);

@@ -1,4 +1,5 @@
 pub mod bang;
+pub mod cats;
 pub mod werewolf;
 
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,7 @@ pub enum GameKind {
     Bang,
     Uno,
     Werewolf,
+    Cats,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -20,6 +22,7 @@ pub enum GameSettings {
     Bang(::bang::GameConfig),
     Uno(uno::Settings),
     Werewolf(::werewolf::Settings),
+    Cats(::cats::Settings),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -28,6 +31,7 @@ pub enum GameAction {
     Bang(::bang::Action),
     Uno(uno::Action),
     Werewolf(::werewolf::Action),
+    Cats(::cats::Action),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -37,6 +41,7 @@ pub enum GameView {
     Bang(bang::BangView),
     Uno(uno::View),
     Werewolf(werewolf::WerewolfView),
+    Cats(cats::CatsView),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -55,6 +60,10 @@ pub enum GameDelta {
     Werewolf {
         events: werewolf::WerewolfEvents,
         view: werewolf::WerewolfView,
+    },
+    Cats {
+        events: cats::CatsEvents,
+        view: cats::CatsView,
     },
 }
 
@@ -286,6 +295,7 @@ pub enum Role {
 mod tests {
     use super::*;
     use crate::bang::{BangEvents, BangView};
+    use crate::cats::CatsView;
     use serde_json::{Value, json};
 
     #[test]
@@ -614,7 +624,7 @@ mod tests {
     }
     #[test]
     fn all_game_envelopes_round_trip_and_require_their_tagged_payloads() {
-        for game in ["bang", "uno", "werewolf"] {
+        for game in ["bang", "uno", "werewolf", "cats"] {
             let create =
                 json!({"v":PROTOCOL_VERSION,"type":"create_room","game":game,"nickname":"Host"});
             let decoded: ClientMessage = serde_json::from_value(create.clone()).unwrap();
@@ -624,6 +634,7 @@ mod tests {
             ("bang", json!(::bang::GameConfig::default())),
             ("uno", json!({})),
             ("werewolf", json!(::werewolf::Settings::default())),
+            ("cats", json!(::cats::Settings::default())),
         ] {
             let value = json!({"game":game,"payload":payload});
             let settings: GameSettings = serde_json::from_value(value.clone()).unwrap();
@@ -653,19 +664,56 @@ mod tests {
         let ww_update = json!({"game":"werewolf","events":ww_events,"view":ww_spec});
         let decoded: GameDelta = serde_json::from_value(ww_update.clone()).unwrap();
         assert_eq!(serde_json::to_value(decoded).unwrap(), ww_update);
+
+        let cats_view = CatsView::Spectator(::cats::SpectatorView {
+            settings: ::cats::Settings::default(),
+            players: vec![],
+            turn: ::cats::TurnState {
+                player: ::cats::PlayerId(0),
+                turns_left: 1,
+                direction: 1,
+            },
+            deck_count: 0,
+            tower_stash_count: 0,
+            top_known: None,
+            imploding_face_up: false,
+            discard: vec![],
+            decision: None,
+            last_action: None,
+            winner: None,
+        });
+        let cats_update = GameDelta::Cats {
+            events: crate::cats::CatsEvents::for_recipient(&[], None),
+            view: cats_view.clone(),
+        };
+        let value = serde_json::to_value(&cats_update).unwrap();
+        assert_eq!(
+            serde_json::from_value::<GameDelta>(value.clone()).unwrap(),
+            cats_update
+        );
+        assert_eq!(value["game"], "cats");
+        assert!(serde_json::from_value::<GameDelta>(json!({"game":"cats"})).is_err());
+        assert!(
+            serde_json::from_value::<GameDelta>(json!({"game":"cats","events":[],"view":{}}))
+                .is_err()
+        );
+        let view = serde_json::to_value(GameView::Cats(cats_view)).unwrap();
+        assert_eq!(view["game"], "cats");
+        assert!(serde_json::from_value::<GameView>(json!({"game":"cats","payload":{}})).is_err());
         for bad in [
             json!({"payload":{}}),
             json!({"game":"unknown","payload":{}}),
             json!({"game":"bang"}),
             json!({"game":"uno","payload":null}),
             json!({"game":"werewolf","payload":42}),
+            json!({"game":"cats","payload":42}),
         ] {
             assert!(serde_json::from_value::<GameSettings>(bad.clone()).is_err());
             assert!(serde_json::from_value::<GameAction>(bad.clone()).is_err());
             assert!(serde_json::from_value::<GameView>(bad).is_err());
         }
         let bang_action = json!({"type":"end_turn","discard":[]});
-        for game in ["uno", "werewolf", "unknown"] {
+        for game in ["uno", "werewolf", "cats", "unknown"] {
             assert!(
                 serde_json::from_value::<GameAction>(json!({"game":game,"payload":bang_action}))
                     .is_err()
@@ -676,6 +724,7 @@ mod tests {
             json!({"game":"unknown","events":{},"view":{}}),
             json!({"game":"uno","view":{}}),
             json!({"game":"werewolf","events":{}}),
+            json!({"game":"cats","events":{},"view":{}}),
         ] {
             assert!(serde_json::from_value::<GameDelta>(bad).is_err());
         }

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { availableGames, games } from '../../games/registry.ts';
 
-test('catalog exposes BANG! and Ma Sói as playable and describes upcoming games in Vietnamese', () => {
-  assert.deepEqual(games.map(game => [game.id, game.status]), [['bang', 'available'], ['uno', 'soon'], ['werewolf', 'available']]);
+test('catalog exposes BANG!, Ma Sói and Mèo Nổ as playable and describes upcoming games in Vietnamese', () => {
+  assert.deepEqual(games.map(game => [game.id, game.status]), [['bang', 'available'], ['uno', 'soon'], ['werewolf', 'available'], ['cats', 'available']]);
   assert.deepEqual(Object.keys(availableGames), games.filter(game => game.status === 'available').map(game => game.id));
   assert.equal(availableGames.bang!.name, 'BANG!');
   assert.equal(availableGames.bang!.limits?.[0], 4);
@@ -11,5 +11,8 @@ test('catalog exposes BANG! and Ma Sói as playable and describes upcoming games
   assert.equal(availableGames.werewolf!.name, 'Ma Sói');
   assert.equal(availableGames.werewolf!.limits?.[0], 5);
   assert.equal(availableGames.werewolf!.limits?.[1], 16);
+  assert.equal(availableGames.cats!.name, 'Mèo Nổ');
+  assert.equal(availableGames.cats!.limits?.[0], 2);
+  assert.equal(availableGames.cats!.limits?.[1], 8);
   for (const game of games) assert.match(game.description, /[áàảãạăâđéèêíìóòôơúùưýỳ]/);
 });

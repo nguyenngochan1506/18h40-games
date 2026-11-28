@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { games, loadGame, registry } from './registry.ts';
 
-test('registry covers all three game kinds and keeps unfinished games disabled', async () => {
-  assert.deepEqual(games.map(game => game.id), ['bang', 'uno', 'werewolf']);
-  assert.deepEqual(games.map(game => game.enabled), [true, false, true]);
+test('registry covers every game kind and keeps unfinished games disabled', async () => {
+  assert.deepEqual(games.map(game => game.id), ['bang', 'uno', 'werewolf', 'cats']);
+  assert.deepEqual(games.map(game => game.enabled), [true, false, true, true]);
   assert.deepEqual(registry.bang.limits, [4, 7]);
   assert.deepEqual(registry.werewolf.limits, [5, 16]);
   assert.equal(registry.werewolf.status, 'available');
+  assert.deepEqual(registry.cats.limits, [2, 8]);
+  assert.equal(registry.cats.status, 'available');
+  assert.equal(registry.cats.enabled, true);
   for (const game of [registry.uno]) {
     assert.equal(game.status, 'soon');
     assert.equal(game.enabled, false);

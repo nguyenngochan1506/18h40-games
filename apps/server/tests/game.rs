@@ -1083,6 +1083,86 @@ async fn blind_hand_slots_authorize_actor_keep_maps_private_and_resume_or_timeou
 }
 
 #[tokio::test(start_paused = true)]
+async fn cats_can_start_and_complete_a_turn_over_websocket() {
+    let server = TestServer::new(Config {
+        game_seed: Some(23),
+        ..Config::default()
+    })
+    .await;
+    let mut host = server.connect().await;
+    host.send(json!({"type":"create_room","game":"cats","nickname":"Host"}))
+        .await;
+    let joined = host.until("joined").await;
+    let room_code = joined["room_code"].as_str().unwrap().to_owned();
+    let host_token = joined["token"].as_str().unwrap().to_owned();
+
+    // Host can toggle expansion settings while alone in the waiting room
+    host.send(json!({
+        "type": "update_settings",
+        "settings": {
+            "game": "cats",
+            "payload": { "imploding": false, "streaking": true, "barking": true }
+        }
+    }))
+    .await;
+    host.state(|room| room["settings"]["payload"]["imploding"] == false)
+        .await;
+
+    let (mut guest, _) = server.join(&room_code, "Guest").await;
+
+    host.send(json!({
+        "type": "update_settings",
+        "settings": {
+            "game": "cats",
+            "payload": { "imploding": true, "streaking": true, "barking": true }
+        }
+    }))
+    .await;
+    host.state(|room| room["settings"]["game"] == "cats").await;
+    guest.state(|room| room["settings"]["game"] == "cats").await;
+
+    host.send(json!({"type":"start_game"})).await;
+    let started = host.until("game_started").await;
+    let guest_started = guest.until("game_started").await;
+    assert_eq!(started["seq"], 0);
+    assert_eq!(started["view"]["game"], "cats");
+    assert_eq!(guest_started["view"]["game"], "cats");
+    assert!(started["view"]["payload"]["view"]["hand"].is_array());
+    assert!(
+        started["view"]["payload"]["view"]["table"]["settings"]["imploding"].as_bool()
+            == Some(true)
+    );
+
+    let turn = started["view"]["payload"]["view"]["table"]["decision"]["player"]
+        .as_u64()
+        .unwrap() as usize;
+    let actor = if turn == 0 { &mut host } else { &mut guest };
+    actor
+        .send(json!({"type":"game_action","action":{"game":"cats","payload":{"type":"draw"}}}))
+        .await;
+    let mut update = actor.until("game_update").await;
+    while update["seq"] == 0 {
+        update = actor.until("game_update").await;
+    }
+    assert_eq!(update["seq"], 1);
+    assert_eq!(update["update"]["game"], "cats");
+
+    // Rejoin preserves current snapshot seq
+    let mut rejoined = server.connect().await;
+    rejoined
+        .send(json!({"type":"rejoin_room","room_code":room_code,"token":host_token}))
+        .await;
+    let snap = rejoined.until("joined").await;
+    assert_eq!(snap["game"]["seq"], 1);
+    assert_eq!(snap["game"]["view"]["game"], "cats");
+
+    // Host can end game and return to waiting
+    rejoined.send(json!({"type":"end_game"})).await;
+    rejoined.state(|room| room["phase"] == "waiting").await;
+    guest.state(|room| room["phase"] == "waiting").await;
+}
+
+#[tokio::test(start_paused = true)]
 async fn mismatched_action_tags_preserve_the_bang_session() {
     let mut table = Table::new(4, 42).await;
     let (player, action) = bang::default_action(&table.state).unwrap();
