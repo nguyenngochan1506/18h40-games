@@ -448,3 +448,48 @@ test('trapped Bury and eliminated player spectator state display accurately', as
   assert.match(container.textContent ?? '', /Bạn đã nổ tung và bị loại/);
   assert.match(container.querySelector('.cats-standings')?.textContent ?? '', /Meow \(bạn\)/);
 });
+
+test('playing Bury clears future preview immediately while choosing bury position', async t => {
+  const { container, root } = await mount(t);
+  const sent: GameAction[] = [];
+  const baseView = playerView([], { player: 0, pending_id: null, kind: { type: 'turn' } });
+  if (baseView.game !== 'cats') throw new Error('Cats view expected');
+
+  const seeFutureFrame: GameBoardProps['sync']['frames'][number] = {
+    id: 1,
+    game: { seq: 1, seats, view: baseView },
+    update: {
+      game: 'cats',
+      events: [{ type: 'future_seen', player: 0, cards: [{ id: 12, kind: 'exploding' }, { id: 13, kind: 'skip' }] }],
+      view: baseView.payload,
+    },
+    reset: null,
+    setup: false,
+  };
+  await act(async () => root.render(createElement(Board, propsFor(baseView, sent, [], [seeFutureFrame]))));
+  assert.ok(container.querySelector('.cats-future-strip'));
+
+  // Opponent plays Bury -> pops top card and enters bury_card pending (no card_buried yet).
+  const buryPendingView = playerView([], { player: 1, pending_id: 22, kind: { type: 'bury_card', max_position: 19 } });
+  if (buryPendingView.game !== 'cats') throw new Error('Cats view expected');
+  const buryStartedFrame: GameBoardProps['sync']['frames'][number] = {
+    id: 2,
+    game: { seq: 2, seats, view: buryPendingView },
+    update: {
+      game: 'cats',
+      events: [
+        { type: 'card_played', player: 1, kind: 'bury' },
+        { type: 'decision_changed', decision: { player: 1, pending_id: 22, kind: { type: 'bury_card', max_position: 19 } } },
+      ],
+      view: buryPendingView.payload,
+    },
+    reset: null,
+    setup: false,
+  };
+  await act(async () => root.render(createElement(Board, propsFor(buryPendingView, sent, [], [buryStartedFrame]))));
+  assert.equal(
+    container.querySelector('.cats-future-strip'),
+    null,
+    'future preview must clear as soon as Bury takes the top card',
+  );
+});

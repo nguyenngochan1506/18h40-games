@@ -90,7 +90,7 @@ pub fn apply<R: Rng + ?Sized>(
         Action::PlayPair { cards } => play_pair(state, player, &cards, &mut events),
         Action::PlayTriple { cards } => play_triple(state, player, &cards, &mut events),
         Action::PlayFive { cards } => play_five(state, player, &cards, &mut events),
-        Action::Nope { pending_id } => nope(state, player, pending_id, &mut events),
+        Action::Nope { pending_id } => nope(state, player, pending_id, rng, &mut events),
         Action::Defuse { position, .. } => defuse(state, player, position, &mut events),
         Action::InsertImploding { position, .. } => {
             insert_imploding(state, player, position, &mut events)
@@ -100,7 +100,7 @@ pub fn apply<R: Rng + ?Sized>(
         Action::FavourTarget { target, .. } => {
             favour_target(state, player, target, rng, &mut events)
         }
-        Action::FavourCard { card, .. } => favour_card(state, player, card, &mut events),
+        Action::FavourCard { card, .. } => favour_card(state, player, card, rng, &mut events),
         Action::RandomTarget { target, .. } => {
             random_target(state, player, target, rng, &mut events)
         }
@@ -566,6 +566,20 @@ fn lift_curse(state: &mut State, player: PlayerId, events: &mut Vec<Event>) {
     }
 }
 
+/// Adds `card` to `recipient`'s hand. If `recipient` is cursed (playing blind),
+/// shuffles their hand so the newly received card cannot be pinpointed by slot.
+fn receive_card_respecting_curse<R: Rng + ?Sized>(
+    state: &mut State,
+    recipient: PlayerId,
+    card: CardId,
+    rng: &mut R,
+) {
+    state.players[recipient.0].hand.push(card);
+    if state.players[recipient.0].cursed {
+        state.players[recipient.0].hand.shuffle(rng);
+    }
+}
+
 /// If `victim` wears the Tower of Power crown and still has Stash cards,
 /// redirects any steal attempt to draw blindly from the Stash instead of `victim`'s hand.
 fn steal_from_tower_stash<R: Rng + ?Sized>(
@@ -581,9 +595,11 @@ fn steal_from_tower_stash<R: Rng + ?Sized>(
     let Some(card) = deck::take_random(&mut state.tower_stash, rng) else {
         return false;
     };
-    state.players[actor.0].hand.push(card);
+    receive_card_respecting_curse(state, actor, card, rng);
     events.push(Event::public(EventKind::TowerBlocked { victim, actor }));
-    if let Some(view) = CardView::new(card) {
+    if !state.players[actor.0].cursed
+        && let Some(view) = CardView::new(card)
+    {
         events.push(Event::private(
             actor,
             EventKind::CardReceived {
@@ -783,8 +799,10 @@ fn draw_from_deck<R: Rng + ?Sized>(
                 }
                 if kind == CardKind::Exploding {
                     if can_streak_protect(state, trap.owner) {
-                        state.players[trap.owner.0].hand.push(card);
-                        if let Some(view) = CardView::new(card) {
+                        receive_card_respecting_curse(state, trap.owner, card, rng);
+                        if !state.players[trap.owner.0].cursed
+                            && let Some(view) = CardView::new(card)
+                        {
                             events.push(Event::private(
                                 trap.owner,
                                 EventKind::CardReceived {
@@ -801,16 +819,18 @@ fn draw_from_deck<R: Rng + ?Sized>(
                     }
                     return;
                 }
-                state.players[trap.owner.0].hand.push(card);
+                receive_card_respecting_curse(state, trap.owner, card, rng);
                 if let Some(view) = CardView::new(card) {
-                    events.push(Event::private(
-                        trap.owner,
-                        EventKind::CardReceived {
-                            player: trap.owner,
-                            from: player,
-                            card: view,
-                        },
-                    ));
+                    if !state.players[trap.owner.0].cursed {
+                        events.push(Event::private(
+                            trap.owner,
+                            EventKind::CardReceived {
+                                player: trap.owner,
+                                from: player,
+                                card: view,
+                            },
+                        ));
+                    }
                     events.push(Event::private(
                         player,
                         EventKind::CardGiven {
@@ -920,7 +940,10 @@ fn eliminate(state: &mut State, player: PlayerId, lethal_card: CardId, events: &
     }
 
     for card in hand {
-        if matches!(card.kind(), Some(CardKind::Exploding | CardKind::Imploding)) {
+        if matches!(
+            card.kind(),
+            Some(CardKind::Exploding | CardKind::Imploding | CardKind::Streaking)
+        ) {
             state.removed.push(card);
         } else {
             state.discard(card);
@@ -1039,7 +1062,7 @@ fn choose_blind_card<R: Rng + ?Sized>(
 ) {
     let card = state.players[player.0].hand[slot];
     match state.pending.last().map(|frame| &frame.kind) {
-        Some(PendingKind::FavourCard { .. }) => favour_card(state, player, card, events),
+        Some(PendingKind::FavourCard { .. }) => favour_card(state, player, card, rng, events),
         Some(PendingKind::GiveToDeck { .. }) => put_card_in_deck(state, player, card, rng, events),
         _ => unreachable!("validated blind choice pending"),
     }
@@ -1248,29 +1271,9 @@ fn play_card<R: Rng + ?Sized>(
                 finish_turn(state, events);
                 return;
             };
-            if drawn.kind() == Some(CardKind::Imploding) {
-                if state.imploding_face_up {
-                    events.push(Event::public(EventKind::ImplodingDrawn {
-                        player,
-                        face_up: true,
-                    }));
-                    state.face_up.remove(&drawn);
-                    eliminate(state, player, drawn, events);
-                } else {
-                    state.imploding_face_up = true;
-                    state.face_up.insert(drawn);
-                    events.push(Event::public(EventKind::ImplodingDrawn {
-                        player,
-                        face_up: false,
-                    }));
-                    state.push_pending(PendingKind::InsertImploding {
-                        player,
-                        card: drawn,
-                        end_turn: true,
-                    });
-                }
-                return;
-            }
+            // Official Barking Kittens rule: burying an Imploding Kitten keeps its
+            // current face-up/face-down orientation without flipping or exploding it.
+            // Burying an Exploding Kitten still triggers Defuse unless protected by Streaking.
             if drawn.kind() == Some(CardKind::Exploding) && !can_streak_protect(state, player) {
                 trigger_exploding(state, player, drawn, true, events);
                 return;
@@ -1466,24 +1469,34 @@ fn favour_target<R: Rng + ?Sized>(
     }
 }
 
-fn favour_card(state: &mut State, player: PlayerId, card: CardId, events: &mut Vec<Event>) {
+fn favour_card<R: Rng + ?Sized>(
+    state: &mut State,
+    player: PlayerId,
+    card: CardId,
+    rng: &mut R,
+    events: &mut Vec<Event>,
+) {
     let frame = state.pending.pop().expect("validated pending");
     let PendingKind::FavourCard { actor, target } = frame.kind else {
         unreachable!()
     };
     debug_assert_eq!(target, player);
     state.last_action = None;
-    state.give_card(target, actor, card);
+    if state.remove_from_hand(target, card) {
+        receive_card_respecting_curse(state, actor, card, rng);
+    }
     events.push(Event::public(EventKind::FavourCompleted { actor, target }));
     if let Some(view) = CardView::new(card) {
-        events.push(Event::private(
-            actor,
-            EventKind::CardReceived {
-                player: actor,
-                from: target,
-                card: view,
-            },
-        ));
+        if !state.players[actor.0].cursed {
+            events.push(Event::private(
+                actor,
+                EventKind::CardReceived {
+                    player: actor,
+                    from: target,
+                    card: view,
+                },
+            ));
+        }
         events.push(Event::private(
             target,
             EventKind::CardGiven {
@@ -1790,10 +1803,67 @@ fn put_card_in_deck<R: Rng + ?Sized>(
     check_unprotected_exploding(state, player, events);
 }
 
-fn nope(
+/// After a Nope restores an earlier timeline (while keeping all spent Nope cards
+/// in discard), re-validates any restored pending frame whose target may now have
+/// an empty hand (e.g. target spent their last card on Nope during Favour or
+/// Garbage Collection / Potluck).
+fn reconcile_restored_pending<R: Rng + ?Sized>(
+    state: &mut State,
+    rng: &mut R,
+    events: &mut Vec<Event>,
+) {
+    loop {
+        match state.pending.last().map(|frame| &frame.kind) {
+            Some(PendingKind::FavourCard { actor, target }) => {
+                let (actor, target) = (*actor, *target);
+                if !state.is_active(target) || state.players[target.0].hand.is_empty() {
+                    state.pending.pop();
+                    events.push(Event::public(EventKind::FavourSkipped { actor, target }));
+                    continue;
+                }
+                break;
+            }
+            Some(PendingKind::GiveToDeck { .. }) => {
+                let mut frame = state.pending.pop().expect("checked pending");
+                let PendingKind::GiveToDeck {
+                    mut queue,
+                    shuffle_after,
+                } = frame.kind
+                else {
+                    unreachable!()
+                };
+                let before_len = queue.len();
+                queue.retain(|id| state.is_active(*id) && !state.players[id.0].hand.is_empty());
+                if queue.is_empty() {
+                    if shuffle_after {
+                        state.clear_non_imploding_face_up();
+                        state.deck.shuffle(rng);
+                        events.push(Event::public(EventKind::DeckShuffled {
+                            count: state.deck.len(),
+                        }));
+                    }
+                    continue;
+                }
+                if queue.len() != before_len {
+                    frame.id = state.new_id();
+                }
+                frame.kind = PendingKind::GiveToDeck {
+                    queue,
+                    shuffle_after,
+                };
+                state.pending.push(frame);
+                break;
+            }
+            _ => break,
+        }
+    }
+}
+
+fn nope<R: Rng + ?Sized>(
     state: &mut State,
     player: PlayerId,
     pending_id: crate::state::PendingId,
+    rng: &mut R,
     events: &mut Vec<Event>,
 ) {
     let target = state.last_action.take().expect("validated nope window");
@@ -1826,6 +1896,8 @@ fn nope(
         action_id,
         actor: earlier_actor,
     }));
+
+    reconcile_restored_pending(state, rng, events);
 
     let id = state.new_id();
     state.last_action = Some(LastAction {
@@ -1893,7 +1965,7 @@ fn bury_card(state: &mut State, player: PlayerId, position: usize, events: &mut 
     debug_assert_eq!(owner, player);
     state.last_action = None;
     deck::insert_from_top(&mut state.deck, card, position);
-    events.push(Event::public(EventKind::CardBuried { player, position }));
+    events.push(Event::public(EventKind::CardBuried { player }));
     lift_curse(state, player, events);
     finish_turn(state, events);
 }
@@ -1926,15 +1998,16 @@ pub fn default_action(state: &State) -> Option<(PlayerId, Action)> {
                 target: state.first_other_active(player)?,
             },
             PendingKind::FavourCard { target, .. } => {
+                let hand = &state.players[target.0].hand;
                 if state.players[target.0].cursed {
-                    Action::ChooseBlindCard {
+                    (!hand.is_empty()).then_some(Action::ChooseBlindCard {
                         pending_id: frame.id,
                         slot: 0,
-                    }
+                    })?
                 } else {
                     Action::FavourCard {
                         pending_id: frame.id,
-                        card: *state.players[target.0].hand.first()?,
+                        card: *hand.first()?,
                     }
                 }
             }
@@ -1965,15 +2038,16 @@ pub fn default_action(state: &State) -> Option<(PlayerId, Action)> {
             },
             PendingKind::GiveToDeck { queue, .. } => {
                 let first = *queue.first()?;
+                let hand = &state.players[first.0].hand;
                 if state.players[first.0].cursed {
-                    Action::ChooseBlindCard {
+                    (!hand.is_empty()).then_some(Action::ChooseBlindCard {
                         pending_id: frame.id,
                         slot: 0,
-                    }
+                    })?
                 } else {
                     Action::PutCardInDeck {
                         pending_id: frame.id,
-                        card: *state.players[first.0].hand.first()?,
+                        card: *hand.first()?,
                     }
                 }
             }

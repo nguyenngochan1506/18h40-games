@@ -37,16 +37,16 @@ Tài liệu này là nguồn luật của game `cats` trong `18h40-games`. Mọi
 - **Alter the Future (3x / 5x)**: xem kín và sắp xếp lại thứ tự 3 hoặc 5 lá trên cùng.
 - **Alter the Future (3x) NOW**: giống Đổi Tương Lai 3x nhưng được phép đánh **bất cứ lúc nào** khi đang ở pha lượt (kể cả ngoài lượt của mình); có thể bị Nope.
 - **Share the Future (3x)**: xem, sắp xếp lại 3 lá trên cùng rồi cho người kế tiếp xem thứ tự mới.
-- **Bury**: rút lá đỉnh xem kín rồi chèn lại vào bất kỳ vị trí nào `[0, deck_count]` của bộ rút (nếu rút phải `Imploding` đang ngửa vẫn bị loại ngay).
+- **Bury**: rút lá đỉnh xem kín rồi chèn kín lại vào bất kỳ vị trí nào `[0, deck_count]` của bộ rút mà không công khai vị trí cho cả bàn (giữ nguyên trạng thái úp/ngửa của `Imploding`, không lật và không kích nổ `Imploding`; nếu rút phải `Exploding` mà không có `Streaking` bảo vệ thì vẫn phải `Defuse` hoặc nổ).
 - **Garbage Collection**: lần lượt từng người còn sống (bắt đầu từ người đánh) chọn 1 lá trên tay bỏ vào bộ rút, sau đó xáo bộ rút.
 - **Potluck**: lần lượt từng người còn sống (bắt đầu từ người đánh) đặt 1 lá trên tay lên đỉnh bộ rút.
 - **Catomic Bomb**: rút toàn bộ `Exploding` khỏi bộ rút, xáo phần còn lại, đặt tất cả `Exploding` **ngửa** lên đỉnh bộ rút và kết thúc lượt không rút.
 - **Mark (Đánh Dấu)**: chọn 1 đối thủ; lật ngửa ngẫu nhiên 1 lá chưa đánh dấu trên tay họ cho tất cả mọi người cùng thấy cho đến khi lá đó rời tay.
-- **Curse of the Cat Butt (Lời Nguyền Mông Mèo)**: chọn 1 đối thủ; tay bài của họ bị úp và xáo (mù hoàn toàn — server không gửi danh tính lá trên tay họ). Khi bị nguyền, họ chỉ có thể rút bài hoặc đánh mù 1 ô bài úp (`PlayBlind`): nếu là lá hành động đánh lẻ hợp lệ thì kích hoạt bình thường, ngược lại lá đó bị bỏ phí vào chồng bỏ. Lời nguyền tự giải sau khi rút bài thành công.
+- **Curse of the Cat Butt (Lời Nguyền Mông Mèo)**: chọn 1 đối thủ; tay bài của họ bị úp và xáo (mù hoàn toàn — server không gửi danh tính lá trên tay họ). Mọi lá bài họ nhận thêm trong lúc đang bị nguyền (ví dụ qua `Favour`, `TowerOfPower` Stash hoặc `IllTakeThat`) đều được xáo kín vào tay bài mà không lộ danh tính hay vị trí ô úp. Khi bị nguyền, họ chỉ có thể rút bài hoặc đánh mù 1 ô bài úp (`PlayBlind`): nếu là lá hành động đánh lẻ hợp lệ thì kích hoạt bình thường, ngược lại lá đó bị bỏ phí vào chồng bỏ. Lời nguyền tự giải sau khi rút bài thành công.
 - **Imploding Kitten**:
   - Lần đầu rút (úp): không nổ, lật ngửa và chèn vào vị trí bất kỳ `[0, deck_count]` của bộ rút (không thể Nope).
   - Lần sau rút (ngửa): **loại ngay lập tức**, không thể `Defuse`, không được `Streaking` bảo vệ, không thể Nope.
-- **Streaking Kitten**: lá thụ động; khi cầm trên tay cho phép giữ kín tối đa **1 lá `Exploding`** trên tay mà không nổ. Nếu mất `Streaking` hoặc cầm từ 2 `Exploding` trở lên, `Exploding` không được bảo vệ lập tức kích hoạt `Defuse` hoặc loại người đó.
+- **Streaking Kitten**: lá thụ động; khi cầm trên tay cho phép giữ kín tối đa **1 lá `Exploding`** trên tay mà không nổ. Nếu mất `Streaking` hoặc cầm từ 2 `Exploding` trở lên, `Exploding` không được bảo vệ lập tức kích hoạt `Defuse` hoặc loại người đó. Khi người giữ `Streaking` bị loại, `Streaking` cũng rời khỏi ván (`removed`) và không vào chồng bỏ nên không thể lấy lại bằng combo 5 lá hay xáo lại vào bộ rút.
 - **Barking Kitten (Mèo Sủa — luật chính thức mới)**: không thể Nope.
   - Nếu có người khác đang đặt `BarkingKitten` ngửa trước mặt hoặc đang cầm lá thứ hai trên tay: cả 2 lá vào chồng bỏ và người đó phải tự động bỏ 1 `Defuse` (nếu không có thì nổ và bị loại ngay).
   - Nếu bạn giữ cả 2 lá `BarkingKitten`: bỏ cả 2 lá và chọn bất kỳ đối thủ nào buộc phải `Defuse` hoặc nổ.

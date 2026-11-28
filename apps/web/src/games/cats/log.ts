@@ -267,9 +267,11 @@ export function formatCatsEvent(
 
 const DECK_MUTATING_EVENTS = new Set<CatsEventKind['type']>([
   'cards_drawn',
+  'card_drawn',
   'deck_shuffled',
   'deck_reshuffled',
   'deck_swapped',
+  'deck_empty',
   'future_altered',
   'defused',
   'imploding_placed',
@@ -281,6 +283,13 @@ const DECK_MUTATING_EVENTS = new Set<CatsEventKind['type']>([
   'ill_take_that_triggered',
   'action_undone',
 ]);
+
+function isDeckMutatingEvent(event: CatsEventKind): boolean {
+  return (
+    DECK_MUTATING_EVENTS.has(event.type) ||
+    (event.type === 'card_played' && event.kind === 'bury')
+  );
+}
 
 export function receiveCatsFrame(
   current: CatsClientState,
@@ -301,7 +310,7 @@ export function receiveCatsFrame(
   if (seenFuture) {
     futurePreview = seenFuture.cards;
     futureSeq += 1;
-  } else if (events.some(event => DECK_MUTATING_EVENTS.has(event.type))) {
+  } else if (events.some(isDeckMutatingEvent)) {
     futurePreview = null;
   }
 

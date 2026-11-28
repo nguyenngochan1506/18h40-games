@@ -188,3 +188,55 @@ async fn a_v9_client_gets_a_readable_version_error_and_cannot_enter_or_play() {
     .await
     .expect("WebSocket integration test timed out");
 }
+
+// A deployed v10 client predates Cats and rejects frames whose `v` is not 10, so the
+// server must reject v10 messages with `unsupported_version` echoing `v: 10`.
+#[tokio::test]
+async fn a_v10_client_gets_a_readable_version_error_and_cannot_enter_or_play() {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, server::app(server::Config::default()))
+                .await
+                .unwrap()
+        });
+        let (mut socket, _) = connect_async(format!("ws://{address}/ws")).await.unwrap();
+        for old in [
+            r#"{"v":10,"type":"create_room","nickname":"Old","game":"bang"}"#,
+            r#"{"v":10,"type":"create_room","nickname":"Old","game":"cats"}"#,
+            r#"{"v":10,"type":"join_room","room_code":"ABCDE","nickname":"Old"}"#,
+            r#"{"v":10,"type":"rejoin_room","room_code":"ABCDE","token":"00000000000000000000000000000000"}"#,
+            r#"{"v":10,"type":"game_action","action":{"game":"cats","payload":{"type":"draw"}}}"#,
+        ] {
+            socket.send(Message::Text(old.into())).await.unwrap();
+            let reply = socket.next().await.unwrap().unwrap().into_text().unwrap();
+            let reply: Value = serde_json::from_str(&reply).unwrap();
+            assert_eq!(reply["type"], "error");
+            assert_eq!(reply["code"], "unsupported_version");
+            assert_eq!(reply["v"], 10);
+            socket
+                .send(Message::Text(
+                    json!({"v":PROTOCOL_VERSION,"type":"ping","nonce":6}).to_string().into(),
+                ))
+                .await
+                .unwrap();
+            let pong = socket.next().await.unwrap().unwrap().into_text().unwrap();
+            assert_eq!(
+                serde_json::from_str::<ServerMessage>(&pong).unwrap(),
+                ServerMessage::Pong { v: PROTOCOL_VERSION, nonce: 6 }
+            );
+        }
+        socket
+            .send(Message::Text(
+                json!({"v":PROTOCOL_VERSION,"type":"leave_room"}).to_string().into(),
+            ))
+            .await
+            .unwrap();
+        let reply = socket.next().await.unwrap().unwrap().into_text().unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&reply).unwrap()["code"], "not_in_room");
+        server.abort();
+    })
+    .await
+    .expect("WebSocket integration test timed out");
+}

@@ -80,7 +80,6 @@ pub enum EventKind {
     },
     CardBuried {
         player: PlayerId,
-        position: usize,
     },
     CardPutInDeck {
         player: PlayerId,

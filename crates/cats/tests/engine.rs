@@ -1176,3 +1176,487 @@ fn card_views_keep_card_and_kind_together() {
     let view = CardView::new(CardId::new(CardKind::SeeFuture, 0)).unwrap();
     assert_eq!(view.kind, CardKind::SeeFuture);
 }
+
+#[test]
+fn nope_countering_nope_skips_favour_when_target_spent_last_card() {
+    let mut rng = seeded(901);
+    let (mut state, _) = setup(2, Settings::base_only(), &mut rng).unwrap();
+    let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+    let (actor, target) = starting_turn(&state);
+
+    let favour = extract(&mut state, CardKind::Favour);
+    let actor_nope = extract(&mut state, CardKind::Nope);
+    let target_nope = extract(&mut state, CardKind::Nope);
+
+    // Move all of target's other cards into deck so target holds ONLY the single Nope.
+    let target_extra = std::mem::take(&mut state.players[target.0].hand);
+    state.deck.splice(0..0, target_extra);
+    state.players[target.0].hand.push(target_nope);
+    state.players[actor.0].hand.push(favour);
+    state.players[actor.0].hand.push(actor_nope);
+
+    // 1. Actor plays Favour and targets B -> FavourCard pending on B.
+    apply(
+        &mut state,
+        actor,
+        Action::PlayCard { card: favour },
+        &mut rng,
+    )
+    .unwrap();
+    let pid = decision(&state).unwrap().pending_id.unwrap();
+    apply(
+        &mut state,
+        actor,
+        Action::FavourTarget {
+            pending_id: pid,
+            target,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert!(matches!(
+        decision(&state).unwrap().kind,
+        cats::state::DecisionKind::FavourCard { actor: a } if a == actor
+    ));
+
+    // 2. B Nopes with their last card.
+    let favour_action_id = state.last_action().unwrap().id;
+    apply(
+        &mut state,
+        target,
+        Action::Nope {
+            pending_id: favour_action_id,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert!(state.players[target.0].hand.is_empty());
+
+    // 3. A counters with Nope (Yup!) -> must NOT deadlock on empty-hand FavourCard.
+    let nope_action_id = state.last_action().unwrap().id;
+    let events = apply(
+        &mut state,
+        actor,
+        Action::Nope {
+            pending_id: nope_action_id,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert!(events.iter().any(|e| matches!(
+        e.kind,
+        cats::EventKind::FavourSkipped { actor: a, target: t } if a == actor && t == target
+    )));
+    assert!(state.pending.is_empty());
+    assert_eq!(decision(&state).unwrap().player, actor);
+    assert_eq!(
+        decision(&state).unwrap().kind,
+        cats::state::DecisionKind::Turn
+    );
+    assert_eq!(default_action(&state), Some((actor, Action::Draw)));
+
+    // 4. Actor can draw and continue the game normally.
+    let safe = extract(&mut state, CardKind::CatTaco);
+    state.deck.push(safe);
+    apply(&mut state, actor, Action::Draw, &mut rng).unwrap();
+    assert_eq!(state.turn.player, target);
+    assert_card_conservation(&state, &initial);
+}
+
+#[test]
+fn nope_countering_nope_prunes_empty_hands_in_give_to_deck() {
+    let mut rng = seeded(902);
+    let (mut state, _) = setup(
+        2,
+        Settings {
+            imploding: false,
+            streaking: true,
+            barking: false,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+    let (actor, target) = starting_turn(&state);
+
+    let gc = extract(&mut state, CardKind::GarbageCollection);
+    let actor_nope = extract(&mut state, CardKind::Nope);
+    let target_nope = extract(&mut state, CardKind::Nope);
+
+    let a_extra = std::mem::take(&mut state.players[actor.0].hand);
+    let t_extra = std::mem::take(&mut state.players[target.0].hand);
+    state.deck.splice(0..0, a_extra);
+    state.deck.splice(0..0, t_extra);
+    state.players[actor.0].hand.extend([gc, actor_nope]);
+    state.players[target.0].hand.push(target_nope);
+
+    // Actor plays Garbage Collection -> GiveToDeck [actor, target].
+    apply(&mut state, actor, Action::PlayCard { card: gc }, &mut rng).unwrap();
+    let gc_action_id = state.last_action().unwrap().id;
+
+    // Target Nopes with last card; actor counters with last card.
+    apply(
+        &mut state,
+        target,
+        Action::Nope {
+            pending_id: gc_action_id,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    let nope_action_id = state.last_action().unwrap().id;
+    let events = apply(
+        &mut state,
+        actor,
+        Action::Nope {
+            pending_id: nope_action_id,
+        },
+        &mut rng,
+    )
+    .unwrap();
+
+    // Both hands are empty, so GiveToDeck resolves immediately with DeckShuffled.
+    assert!(state.pending.is_empty());
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e.kind, cats::EventKind::DeckShuffled { .. }))
+    );
+    assert_eq!(default_action(&state), Some((actor, Action::Draw)));
+    assert_card_conservation(&state, &initial);
+}
+
+#[test]
+fn streaking_removed_on_elimination_cannot_be_recovered_by_five_combo_or_reshuffle() {
+    let mut rng = seeded(903);
+    let settings = Settings {
+        imploding: false,
+        streaking: true,
+        barking: false,
+    };
+    let (mut state, _) = setup(4, settings, &mut rng).unwrap();
+    let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+    let p0 = state.turn.player;
+    let p1 = state.next_active(p0).unwrap();
+
+    // Strip Defuse from p0 so drawing a second Exploding eliminates p0 while holding Streaking.
+    let p0_defuses: Vec<CardId> = state.players[p0.0]
+        .hand
+        .iter()
+        .copied()
+        .filter(|c| c.kind() == Some(CardKind::Defuse))
+        .collect();
+    state.players[p0.0]
+        .hand
+        .retain(|c| c.kind() != Some(CardKind::Defuse));
+    state.deck.splice(0..0, p0_defuses);
+
+    let streaking = extract(&mut state, CardKind::Streaking);
+    let bomb1 = extract(&mut state, CardKind::Exploding);
+    let bomb2 = extract(&mut state, CardKind::Exploding);
+    state.players[p0.0].hand.extend([streaking, bomb1]);
+    state.deck.push(bomb2);
+
+    apply(&mut state, p0, Action::Draw, &mut rng).unwrap();
+    assert!(state.players[p0.0].eliminated);
+    assert!(
+        state.removed.contains(&streaking),
+        "Streaking Kitten must move to removed when its holder is eliminated"
+    );
+    assert!(
+        !state.discard.contains(&streaking),
+        "Streaking Kitten must never enter discard on elimination"
+    );
+
+    // 1. Five-cat combo cannot recover Streaking from discard.
+    let five = [
+        extract(&mut state, CardKind::CatTaco),
+        extract(&mut state, CardKind::CatRainbow),
+        extract(&mut state, CardKind::CatBeard),
+        extract(&mut state, CardKind::CatPotato),
+        extract(&mut state, CardKind::CatCattermelon),
+    ];
+    state.players[p1.0].hand.extend(five);
+    apply(
+        &mut state,
+        p1,
+        Action::PlayFive {
+            cards: five.to_vec(),
+        },
+        &mut rng,
+    )
+    .unwrap();
+    let pid = decision(&state).unwrap().pending_id.unwrap();
+    assert!(
+        apply(
+            &mut state,
+            p1,
+            Action::TakeDiscard {
+                pending_id: pid,
+                card: Some(streaking),
+            },
+            &mut rng,
+        )
+        .is_err()
+    );
+    apply(
+        &mut state,
+        p1,
+        Action::TakeDiscard {
+            pending_id: pid,
+            card: None,
+        },
+        &mut rng,
+    )
+    .unwrap();
+
+    // 2. Discard reshuffle must NOT bring Streaking back into the draw pile.
+    let remaining_explodings: Vec<CardId> = state
+        .deck
+        .iter()
+        .copied()
+        .filter(|c| c.kind() == Some(CardKind::Exploding))
+        .collect();
+    assert_eq!(remaining_explodings.len(), 2);
+    // Drain deck to discard so the next draw triggers DeckReshuffled.
+    let drained = std::mem::take(&mut state.deck);
+    for card in drained {
+        if card.kind() == Some(CardKind::Exploding) {
+            // Keep Explodings aside briefly, then reinsert after reshuffle check.
+        } else {
+            state.discard.push(card);
+        }
+    }
+    let reshuffle_events = apply(&mut state, p1, Action::Draw, &mut rng).unwrap();
+    assert!(
+        reshuffle_events
+            .iter()
+            .any(|e| matches!(e.kind, cats::EventKind::DeckReshuffled { .. }))
+    );
+    assert!(!state.deck.contains(&streaking));
+    assert!(state.removed.contains(&streaking));
+
+    // Put the 2 remaining Explodings back in deck and verify default actions finish the game!
+    state.deck.extend(remaining_explodings);
+    assert_card_conservation(&state, &initial);
+    for _ in 0..300 {
+        if state.winner.is_some() {
+            break;
+        }
+        let (who, action) = default_action(&state).expect("active game has default action");
+        apply(&mut state, who, action, &mut rng).unwrap();
+    }
+    assert!(
+        state.winner.is_some(),
+        "streaking-only 4-player game must still reach a winner"
+    );
+    assert_card_conservation(&state, &initial);
+}
+
+#[test]
+fn cursed_player_receiving_favour_card_gets_shuffled_blind_hand_without_identity_leak() {
+    let mut non_last_positions = 0;
+    for seed in 910..935 {
+        let mut rng = seeded(seed);
+        let (mut state, _) = setup(
+            2,
+            Settings {
+                imploding: false,
+                streaking: true,
+                barking: false,
+            },
+            &mut rng,
+        )
+        .unwrap();
+        let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+        let (actor, target) = starting_turn(&state);
+
+        let favour = extract(&mut state, CardKind::Favour);
+        let shuffle = extract(&mut state, CardKind::Shuffle);
+        state.players[actor.0].hand.push(favour);
+        state.players[actor.0].cursed = true;
+        state.players[target.0].hand.push(shuffle);
+
+        let favour_slot = state.players[actor.0]
+            .hand
+            .iter()
+            .position(|c| *c == favour)
+            .unwrap();
+        apply(
+            &mut state,
+            actor,
+            Action::PlayBlind { slot: favour_slot },
+            &mut rng,
+        )
+        .unwrap();
+        let pid = decision(&state).unwrap().pending_id.unwrap();
+        apply(
+            &mut state,
+            actor,
+            Action::FavourTarget {
+                pending_id: pid,
+                target,
+            },
+            &mut rng,
+        )
+        .unwrap();
+        let pid = decision(&state).unwrap().pending_id.unwrap();
+        let events = apply(
+            &mut state,
+            target,
+            Action::FavourCard {
+                pending_id: pid,
+                card: shuffle,
+            },
+            &mut rng,
+        )
+        .unwrap();
+
+        // Private CardReceived must NOT leak card identity to the cursed recipient.
+        assert!(
+            !filter_events(&events, Some(actor))
+                .iter()
+                .any(|e| matches!(e.kind, cats::EventKind::CardReceived { .. }))
+        );
+        assert!(view(&state, actor).cursed);
+        assert!(view(&state, actor).hand.is_empty());
+
+        let pos = state.players[actor.0]
+            .hand
+            .iter()
+            .position(|c| *c == shuffle)
+            .expect("actor received shuffle");
+        if pos != state.players[actor.0].hand.len() - 1 {
+            non_last_positions += 1;
+        }
+        assert_card_conservation(&state, &initial);
+    }
+    assert!(
+        non_last_positions > 0,
+        "cursed hand must be shuffled so received card is not pinned to the last slot"
+    );
+}
+
+#[test]
+fn bury_hides_position_publicly_and_preserves_imploding_orientation() {
+    let mut rng = seeded(904);
+    let (mut state, _) = setup(3, Settings::default(), &mut rng).unwrap();
+    let initial: BTreeSet<CardId> = live_cards(&state).into_iter().collect();
+    let (p0, p1) = starting_turn(&state);
+
+    // 1. Burying a normal card emits CardBuried without leaking position in serialized JSON.
+    let bury_normal = extract(&mut state, CardKind::Bury);
+    let taco = extract(&mut state, CardKind::CatTaco);
+    state.players[p0.0].hand.push(bury_normal);
+    state.deck.push(taco);
+    apply(
+        &mut state,
+        p0,
+        Action::PlayCard { card: bury_normal },
+        &mut rng,
+    )
+    .unwrap();
+    let pid = decision(&state).unwrap().pending_id.unwrap();
+    let bury_events = apply(
+        &mut state,
+        p0,
+        Action::BuryCard {
+            pending_id: pid,
+            position: 2,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    let buried_event = bury_events
+        .iter()
+        .find(|e| matches!(e.kind, cats::EventKind::CardBuried { .. }))
+        .expect("CardBuried event emitted");
+    let serialized = serde_json::to_value(&buried_event.kind).unwrap();
+    assert_eq!(serialized["type"], "card_buried");
+    assert!(
+        serialized.get("position").is_none(),
+        "CardBuried must not expose buried position publicly"
+    );
+
+    // 2. Burying a face-down Imploding keeps it face-down (does NOT flip or open InsertImploding).
+    let bury_fd = extract(&mut state, CardKind::Bury);
+    let imploding = extract(&mut state, CardKind::Imploding);
+    state.players[p1.0].hand.push(bury_fd);
+    state.deck.push(imploding);
+    assert!(!state.imploding_face_up);
+
+    apply(&mut state, p1, Action::PlayCard { card: bury_fd }, &mut rng).unwrap();
+    assert!(!state.imploding_face_up);
+    let dec = decision(&state).unwrap();
+    assert_eq!(dec.player, p1);
+    assert!(matches!(
+        dec.kind,
+        cats::state::DecisionKind::BuryCard { .. }
+    ));
+    apply(
+        &mut state,
+        p1,
+        Action::BuryCard {
+            pending_id: dec.pending_id.unwrap(),
+            position: 0,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert!(!state.imploding_face_up);
+    assert_eq!(spectator_view(&state).top_known, None);
+    assert_eq!(state.deck.last(), Some(&imploding));
+
+    // Next player draws it normally -> now it flips face-up!
+    let p2 = state.turn.player;
+    apply(&mut state, p2, Action::Draw, &mut rng).unwrap();
+    assert!(state.imploding_face_up);
+    let dec = decision(&state).unwrap();
+    assert!(matches!(
+        dec.kind,
+        cats::state::DecisionKind::InsertImploding { .. }
+    ));
+    apply(
+        &mut state,
+        p2,
+        Action::InsertImploding {
+            pending_id: dec.pending_id.unwrap(),
+            position: 0,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert_eq!(spectator_view(&state).top_known, Some(CardKind::Imploding));
+
+    // 3. Burying a face-up Imploding does NOT eliminate the actor and keeps it face-up!
+    let next = state.turn.player;
+    let bury_fu = extract(&mut state, CardKind::Bury);
+    state.players[next.0].hand.push(bury_fu);
+    apply(
+        &mut state,
+        next,
+        Action::PlayCard { card: bury_fu },
+        &mut rng,
+    )
+    .unwrap();
+    assert!(!state.players[next.0].eliminated);
+    let dec = decision(&state).unwrap();
+    assert_eq!(dec.player, next);
+    assert!(matches!(
+        dec.kind,
+        cats::state::DecisionKind::BuryCard { .. }
+    ));
+    apply(
+        &mut state,
+        next,
+        Action::BuryCard {
+            pending_id: dec.pending_id.unwrap(),
+            position: 0,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    assert!(state.imploding_face_up);
+    assert_eq!(spectator_view(&state).top_known, Some(CardKind::Imploding));
+    assert_card_conservation(&state, &initial);
+}

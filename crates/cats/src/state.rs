@@ -226,8 +226,9 @@ pub struct State {
     /// The last element is the top of the deck.
     pub deck: Vec<CardId>,
     pub discard: Vec<CardId>,
-    /// Exploding/Imploding/Barking lethal cards that eliminated a player. Kept for
-    /// CardId accounting and never offered to five-cat combos.
+    /// Exploding/Imploding/Barking lethal cards and Streaking Kittens from
+    /// eliminated players. Kept for CardId accounting and never offered to
+    /// five-cat combos or reshuffled back into the draw pile.
     pub removed: Vec<CardId>,
     /// Face-down Tower of Power stash cards (6 cards dealt at setup when barking is enabled).
     pub tower_stash: Vec<CardId>,
@@ -426,12 +427,6 @@ impl State {
     pub(crate) fn discard(&mut self, card: CardId) {
         self.face_up.remove(&card);
         self.discard.push(card);
-    }
-
-    pub(crate) fn give_card(&mut self, from: PlayerId, to: PlayerId, card: CardId) {
-        if self.remove_from_hand(from, card) {
-            self.players[to.0].hand.push(card);
-        }
     }
 
     pub(crate) fn clear_non_imploding_face_up(&mut self) {
